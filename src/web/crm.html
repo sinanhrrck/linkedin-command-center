@@ -840,6 +840,7 @@ function renderDrafts() {
       if (btn.disabled) return;
       btn.disabled = true;
       btn.textContent = "sendet … (bis 2 Min)";
+      // Mehrere Klicks sind erlaubt: der Server reiht sie hintereinander ein.
       try {
         const r = await postDraft({ id, action: "send", text: ta.value });
         if (r && r.ok) {

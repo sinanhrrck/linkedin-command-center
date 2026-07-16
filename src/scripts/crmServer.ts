@@ -19,6 +19,31 @@ const HTML_PATH = join(__dirname, "..", "web", "crm.html");
 const PROJECT_ROOT = join(__dirname, "..", "..");
 const PORT = Number(process.env.CRM_PORT ?? 4321);
 
+/**
+ * SENDE-WARTESCHLANGE. Klickt Sinan mehrere "Senden"-Knöpfe, kommen mehrere HTTP-Requests
+ * gleichzeitig an. Ohne Serialisierung wäre das gefährlich:
+ *  1. `session.newPage()` liefert IMMER dieselbe Seite (`ctx.pages()[0]`) – zwei parallele
+ *     Versände würden denselben Tab gleichzeitig navigieren und ineinander tippen.
+ *     Ergebnis: Nachricht an die falsche Person.
+ *  2. Der Governor hält seinen 20-75s-Abstand nur INNERHALB eines Durchlaufs. Parallele
+ *     Sends warten jeder für sich und feuern dann fast gleichzeitig – die Taktung, die den
+ *     Account schützt, wäre ausgehebelt (derselbe Bug wie bei den überlappenden Cron-Ticks).
+ * Deshalb hängt jeder Versand hinten an eine Promise-Kette. Auch nach einem Fehler läuft
+ * die Kette weiter, sonst blockiert ein kaputter Entwurf alle folgenden.
+ */
+let sendeKette: Promise<unknown> = Promise.resolve();
+let inWarteschlange = 0;
+
+function nacheinander<T>(fn: () => Promise<T>): Promise<T> {
+  inWarteschlange++;
+  const naechster = sendeKette.then(fn, fn);
+  sendeKette = naechster.then(
+    () => inWarteschlange--,
+    () => inWarteschlange--,
+  );
+  return naechster;
+}
+
 /** Läuft der Engine-Loop? (Heartbeat < 150s alt) */
 function engineAlive(): boolean {
   const hb = getState("engine_heartbeat");
@@ -52,7 +77,8 @@ const server = createServer((req, res) => {
           if (typeof text === "string" && text.trim()) {
             db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), Number(id));
           }
-          sendDraft(Number(id))
+          // Reiht sich ein: mehrere Klicks sind erlaubt, laufen aber garantiert nacheinander.
+          nacheinander(() => sendDraft(Number(id)))
             .then((r) => {
               res
                 .writeHead(r.ok ? 200 : 409, { "Content-Type": "application/json" })
