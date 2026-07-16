@@ -7,6 +7,21 @@ import { governor } from "./safetyGovernor.js";
 let context: BrowserContext | null = null;
 
 /**
+ * Lebt der Kontext noch? Playwright wirft beim Zugriff auf einen toten Kontext erst
+ * beim nächsten Befehl – deshalb hier vorher prüfen, statt den Fehler zu kassieren.
+ */
+function kontextLebt(ctx: BrowserContext): boolean {
+  try {
+    const b = ctx.browser();
+    if (b && !b.isConnected()) return false; // Browser-Prozess ist weg
+    ctx.pages(); // wirft, wenn der Kontext geschlossen wurde
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * STEALTH: gleicht die Spuren aus, die headless-Chrome sonst verraten. Live gemessen
  * (2026-07-16) waren die Lücken gegenüber echtem Chrome: `navigator.plugins` leer,
  * `navigator.mimeTypes` leer und `window.chrome` fehlt. Der UA wird separat über
@@ -47,6 +62,15 @@ export const LIVE_SHOT_PATH = join(process.cwd(), ".live", "screen.jpg");
  * @param opts.visible true = Fenster sichtbar lassen (nur fürs manuelle Login nötig).
  */
 export async function getContext(opts: { visible?: boolean } = {}): Promise<BrowserContext> {
+  // SELBSTHEILUNG: Stirbt der Browser (Absturz, pkill, Rechner-Schlaf), zeigte die Variable
+  // trotzdem weiter auf ihn. getContext() gab dann die Leiche zurück und JEDER Versand
+  // scheiterte mit "Target page, context or browser has been closed" – dauerhaft, bis der
+  // Prozess neu startete. Real passiert 2026-07-16 beim Senden-Knopf im Dashboard.
+  // Deshalb: tote Kontexte erkennen und neu starten statt ewig weiterreichen.
+  if (context && !kontextLebt(context)) {
+    console.warn("[session] Browser war weg – starte neu.");
+    context = null;
+  }
   if (context) return context;
   // "embedded" = headless: es existiert KEIN Fenster, also kann auch keins aufpoppen.
   // Die Seite siehst du stattdessen als Live-Ansicht im Dashboard (saveLiveShot).
@@ -66,6 +90,12 @@ export async function getContext(opts: { visible?: boolean } = {}): Promise<Brow
     ],
   });
   await context.addInitScript(STEALTH);
+  // Zweites Netz: Playwright meldet selbst, wenn der Kontext stirbt. Dann sofort die
+  // Referenz löschen, damit der nächste getContext() sauber neu startet.
+  context.on("close", () => {
+    console.warn("[session] Browser-Kontext geschlossen – nächster Zugriff startet neu.");
+    context = null;
+  });
   return context;
 }
 
