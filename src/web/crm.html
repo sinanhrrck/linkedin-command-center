@@ -313,9 +313,38 @@
     box-shadow: 0 4px 14px -4px rgba(139,123,255,.5); transition: .18s var(--ease);
   }
   .draft-card .dc-send:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px -4px rgba(139,123,255,.65); }
-  .draft-card .dc-send:disabled { opacity: .55; cursor: default; box-shadow: none; transform: none; }
+  .draft-card .dc-send:disabled { cursor: default; transform: none; }
   .draft-card .dc-send.ok { background: var(--green); }
   .draft-card .dc-send.bad { background: var(--red); }
+
+  /* Ladezustand: der Versand dauert bis zu 2 Minuten (Governor-Pause + menschliches Tippen).
+     Ein bloss ausgegrauter Knopf sieht kaputt aus, nicht beschaeftigt – deshalb Bewegung:
+     rotierender Ring + wandernder Schimmer. Solange sich etwas bewegt, weiss Sinan, dass
+     gearbeitet wird und klickt nicht nochmal. */
+  .draft-card .dc-send.busy {
+    position: relative; overflow: hidden; opacity: 1;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    box-shadow: 0 4px 14px -4px rgba(139,123,255,.4);
+  }
+  .draft-card .dc-send.busy::before {
+    content: ""; width: 13px; height: 13px; flex: none; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.32); border-top-color: #fff;
+    animation: spin .7s linear infinite;
+  }
+  /* Schimmer laeuft ueber den Knopf – zeigt "es passiert etwas", auch wenn der Ring klein ist. */
+  .draft-card .dc-send.busy::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent);
+    transform: translateX(-100%);
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
+
+  /* Wartet auf einen Platz in der Warteschlange: ruhiger als "sendet gerade". */
+  .draft-card .dc-send.queued { background: var(--panel-2); border: 1px solid var(--line-strong); color: var(--ink-dim); box-shadow: none; animation: breathe 1.8s ease-in-out infinite; }
+  /* Die ganze Karte hebt sich ab, solange sie dran ist. */
+  .draft-card.sending { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 10px 30px -12px rgba(139,123,255,.5); }
   .draft-card .dc-discard { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); background: none; border: 1px solid var(--line-strong); padding: 7px 11px; border-radius: 6px; cursor: pointer; }
   .draft-card .dc-discard:hover { color: var(--red); border-color: var(--red); }
   .draft-saved { font-family: var(--mono); font-size: 9.5px; color: var(--green); opacity: 0; transition: opacity .2s; }
@@ -828,6 +857,7 @@ function renderDrafts() {
     const id = Number(card.dataset.id);
     const ta = card.querySelector("textarea");
     const saved = card.querySelector(".draft-saved");
+    card._ta = ta;
     ta.addEventListener("blur", async () => {
       await postDraft({ id, action: "save", text: ta.value });
       saved.classList.add("show"); setTimeout(() => saved.classList.remove("show"), 1500);
@@ -839,10 +869,17 @@ function renderDrafts() {
       const btn = e.currentTarget;
       if (btn.disabled) return;
       btn.disabled = true;
-      btn.textContent = "sendet … (bis 2 Min)";
-      // Mehrere Klicks sind erlaubt: der Server reiht sie hintereinander ein.
+      // Der Server arbeitet die Sends der Reihe nach ab (Promise-Kette im crmServer) und der
+      // Browser feuert in Klick-Reihenfolge. Deshalb kann die Anzeige EHRLICH unterscheiden,
+      // was gerade laeuft und was noch wartet – statt bei allen "sendet" zu behaupten.
+      warteschlange.push({ btn, card });
+      zeigeWarteschlange();
       try {
         const r = await postDraft({ id, action: "send", text: ta.value });
+        // Erst diesen Knopf aus dem Ladezustand holen – zeigeWarteschlange() fasst ihn
+        // gleich nicht mehr an, sonst dreht der Spinner ewig weiter.
+        fertig(btn, card);
+        zeigeWarteschlange();
         if (r && r.ok) {
           btn.textContent = "gesendet ✓";
           btn.classList.add("ok");
@@ -857,6 +894,9 @@ function renderDrafts() {
           setTimeout(() => { btn.textContent = "Senden"; btn.classList.remove("bad"); }, 4000);
         }
       } catch (err) {
+        // Auch im Fehlerfall raus aus der Schlange, sonst blockiert er die Anzeige der anderen.
+        fertig(btn, card);
+        zeigeWarteschlange();
         btn.textContent = "Fehler";
         btn.disabled = false;
         setTimeout(() => (btn.textContent = "Senden"), 3000);
@@ -868,6 +908,40 @@ function renderDrafts() {
     });
   });
 }
+/**
+ * Spiegel der Server-Warteschlange. Der crmServer haengt jeden Versand hinten an eine
+ * Promise-Kette; der Browser feuert in Klick-Reihenfolge. Diese Liste bildet also exakt ab,
+ * was der Server tut: das erste Element laeuft gerade, der Rest wartet.
+ * Ohne das wuerde bei jedem Knopf "sendet …" stehen, obwohl nur einer wirklich dran ist –
+ * und das waere wieder eine Behauptung statt der Wahrheit.
+ */
+const warteschlange = [];
+
+/** Diesen Eintrag aus der Schlange nehmen und den Ladezustand vom Knopf entfernen. */
+function fertig(btn, card) {
+  const i = warteschlange.findIndex((e) => e.btn === btn);
+  if (i > -1) warteschlange.splice(i, 1);
+  btn.classList.remove("busy", "queued");
+  card.classList.remove("sending");
+  btn.title = "";
+}
+
+function zeigeWarteschlange() {
+  warteschlange.forEach((e, i) => {
+    e.btn.classList.remove("busy", "queued");
+    e.card.classList.toggle("sending", i === 0);
+    if (i === 0) {
+      e.btn.classList.add("busy");
+      e.btn.textContent = "sendet …";
+      e.btn.title = "Läuft gerade. Der Governor hält 20-75s Abstand, dazu Tippen: bis zu 2 Minuten.";
+    } else {
+      e.btn.classList.add("queued");
+      e.btn.textContent = `wartet · Platz ${i}`;
+      e.btn.title = `${i} Versand/Versände davor. Wird automatisch gesendet, sobald er dran ist.`;
+    }
+  });
+}
+
 // Gibt die Server-Antwort ZURUECK – der Senden-Knopf muss wissen, ob es geklappt hat.
 // (Vorher wurde sie verschluckt; dann haette der Knopf immer "nicht gesendet" gezeigt.)
 async function postDraft(payload) {
