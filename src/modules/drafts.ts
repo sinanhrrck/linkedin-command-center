@@ -51,7 +51,10 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
     )
     .get(c.profile_url);
   if (exists) return false;
-  const text = await firstMessage(c).catch(() => "");
+  const text = await firstMessage(c).catch((e: Error) => {
+    console.error(`[first] ⚠ KI-Fehler (Entwurf) fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
+    return "";
+  });
   if (!text) return false;
   const info = db
     .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('first',?,?,?,?)")
@@ -123,8 +126,17 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
     await createFirstMessageDraft(c);
     return;
   }
-  const text = await firstMessage(c).catch(() => "");
-  if (!text) return;
+  // KI-Ausfall NICHT verschlucken: sonst sieht es fuer den Nutzer so aus, als tue der Bot
+  // nichts. Real passiert 2026-07-16: Gemini lieferte 503, der Bot ging wortlos weiter.
+  // Der Kontakt bleibt 'accepted' und wird beim naechsten stuendlichen Lauf neu versucht.
+  const text = await firstMessage(c).catch((e: Error) => {
+    console.error(`[first] ⚠ KI konnte keinen Text schreiben fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
+    return "";
+  });
+  if (!text) {
+    console.info(`[first] ${c.full_name} bleibt offen, naechster Versuch in max. 1 Stunde.`);
+    return;
+  }
   try {
     await sendMessage(c.profile_url, text); // setzt Status 'messaged' bei Erfolg
     console.info(`[first] ✅ Erstnachricht auto-gesendet an ${c.full_name}`);

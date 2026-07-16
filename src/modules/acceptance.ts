@@ -68,7 +68,10 @@ export async function checkAcceptances(): Promise<number> {
         // Bei Annahme sofort eine personalisierte Erstnachricht als Entwurf erzeugen
         // (Freigabe im Dashboard). Das ist der Ergebnis-Hebel: Vernetzung → Gespräch.
         const contact = db.prepare("SELECT * FROM contacts WHERE profile_url=?").get(c.profile_url) as Contact | undefined;
-        if (contact) await deliverFirstMessage(contact).catch(() => {});
+        if (contact)
+          await deliverFirstMessage(contact).catch((e: Error) =>
+            console.error(`[acceptance] ⚠ Erstnachricht fehlgeschlagen: ${e.message?.slice(0, 90)}`),
+          );
       }
     }
   }
@@ -85,8 +88,15 @@ export async function checkAcceptances(): Promise<number> {
     .all() as Contact[];
   let backfilled = 0;
   for (const c of missing) {
-    await deliverFirstMessage(c).catch(() => {});
-    backfilled++;
+    // Nur als "nachgeholt" zaehlen, was auch wirklich lief – sonst meldet das Log Arbeit,
+    // die nie stattfand (siehe Versand-Falschmeldungen 2026-07-16).
+    const ok = await deliverFirstMessage(c)
+      .then(() => true)
+      .catch((e: Error) => {
+        console.error(`[acceptance] ⚠ Erstnachricht fehlgeschlagen fuer ${c.full_name}: ${e.message?.slice(0, 90)}`);
+        return false;
+      });
+    if (ok) backfilled++;
   }
 
   console.info(
