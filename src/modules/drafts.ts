@@ -1,5 +1,5 @@
 import { db, getMode } from "../db/index.js";
-import { generate } from "../core/gemini.js";
+import { generateText } from "../core/textLlm.js";
 import { fetchThreads, type ThreadContext } from "./inbox.js";
 import { sendThreadReply, sendMessage } from "./outreach.js";
 import { firstMessage, followupMessage } from "./personalize.js";
@@ -36,7 +36,7 @@ ${transcript}
 
 Schreibe Sinans nächste Antwort an ${ctx.participant}. Gehe konkret auf die letzte Nachricht ein.
 Gib NUR den Nachrichtentext aus, ohne Anführungszeichen, ohne Signatur.`;
-  return saubern(await generate(prompt));
+  return saubern(await generateText(prompt));
 }
 
 /**

@@ -175,6 +175,38 @@ export function startTelegram() {
       .catch(() => {});
   });
 
+  /**
+   * KI-Umschaltung melden. Sinans ausdrücklicher Wunsch: er will WISSEN, wann sein bezahltes
+   * Guthaben angefasst wird, bevor es passiert. Das Event wird in core/textLlm.ts synchron
+   * gefeuert, BEVOR Claude angefragt wird. Höchstens 1 Meldung pro Stunde (kein Spam).
+   */
+  events.on("llm:fallback", (d: { grund: string; modell: string }) => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api
+      .sendMessage(
+        config.telegram.chatId,
+        `💸 *Wechsle auf Claude (kostenpflichtig)*\n\n` +
+          `Gemini ist ausgefallen: \`${d.grund}\`\n` +
+          `Ab jetzt schreibt \`${d.modell}\` die Nachrichten. Das kostet echtes Geld ` +
+          `(grob 1 bis 2 Cent pro Nachricht).\n\n` +
+          `Sobald Gemini wieder läuft, wechsle ich automatisch zurück und melde mich.\n` +
+          `Kein Geld ausgeben? Dann \`/pause\` senden oder \`LLM_FALLBACK=false\` in die .env.`,
+        { parse_mode: "Markdown" },
+      )
+      .catch(() => {});
+  });
+
+  // Entwarnung: Gemini ist zurück, es fließt wieder kein Geld.
+  events.on("llm:zurueck", (d: { minuten: number }) => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api
+      .sendMessage(
+        config.telegram.chatId,
+        `✅ Gemini läuft wieder (war ${d.minuten} Min. weg). Zurück auf gratis, dein Guthaben wird nicht mehr angefasst.`,
+      )
+      .catch(() => {});
+  });
+
   // Autopilot-Handoff: KI hat einen Termin klargemacht → Kontakt sofort pushen.
   events.on("lead:booked", (l: { participant: string; contact: string | null; threadUrl: string }) => {
     if (!bot || !config.telegram.chatId) return;

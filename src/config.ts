@@ -36,6 +36,10 @@ export const config = {
     // Welcher Anbieter treibt den Autopilot? "claude" = bezahlt (Produktion, Standard),
     // "gemini" = gratis erzwingen (spart Geld, aber 20/Tag-Limit reicht nur für Testläufe).
     autopilotProvider: (process.env.LLM_AUTOPILOT_PROVIDER ?? "claude") as "claude" | "gemini",
+    // Notnagel: faellt Gemini aus (503/Tageslimit), uebernimmt Claude – ABER nur mit
+    // vorheriger Telegram-Meldung (core/textLlm.ts). Auf false = Bot steht lieber still,
+    // als Geld auszugeben. Grund: Gemini war am 2026-07-16 stundenlang mit 503 down.
+    fallbackToClaude: process.env.LLM_FALLBACK !== "false",
   },
 
   /**

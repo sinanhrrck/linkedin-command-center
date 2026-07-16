@@ -1,4 +1,4 @@
-import { generate } from "../core/gemini.js";
+import { generateText } from "../core/textLlm.js";
 import { generateClaude, claudeAvailable } from "../core/claude.js";
 import { config } from "../config.js";
 import type { Contact } from "./crm.js";
@@ -14,7 +14,7 @@ async function generateAutopilot(prompt: string): Promise<string> {
   if (config.llm.autopilotProvider === "claude" && claudeAvailable()) {
     return generateClaude(prompt);
   }
-  return generate(prompt);
+  return generateText(prompt);
 }
 
 /** Beschreibt den Lead für den Prompt (inkl. Jobbezeichnung, falls erfasst). */
@@ -32,7 +32,7 @@ export async function connectionNote(c: Contact): Promise<string> {
 ${promptKontext()}
 ${personZeile(c)}
 Nimm EINEN konkreten Bezug zur Person (z.B. ihre Rolle/Ausbildung). Gib NUR die Notiz aus, ohne Anführungszeichen.`;
-  return saubern(await generate(prompt)).slice(0, 200);
+  return saubern(await generateText(prompt)).slice(0, 200);
 }
 
 /** Erstnachricht nach angenommener Vernetzung an einen Azubi (persönlich, mit Bezug). */
@@ -43,7 +43,7 @@ Winkel dieser Nachricht: ${ERSTNACHRICHT_ANGLE}
 ${personZeile(c)}
 Nimm konkret Bezug auf die Ausbildung/Bank der Person und ende mit EINER echten Frage danach,
 wie es für sie nach der Ausbildung weitergehen soll. Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
-  return saubern(await generate(prompt));
+  return saubern(await generateText(prompt));
 }
 
 export type ConverseStep = {
@@ -97,5 +97,5 @@ Kontext: Sinan hatte der Person schon geschrieben, aber noch keine Antwort bekom
 KEIN Druck, kein Vorwurf, locker und sympathisch. Knüpf leicht an das Thema an (Ausbildung/
 Weg nach der Ausbildung) und mach es der Person leicht zu antworten. Gib NUR die Nachricht aus,
 ohne Anführungszeichen.`;
-  return saubern(await generate(prompt));
+  return saubern(await generateText(prompt));
 }
