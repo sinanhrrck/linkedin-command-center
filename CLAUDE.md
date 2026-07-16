@@ -188,6 +188,17 @@ Nachricht an Marc Westphal (Entwurf 9) kam nachweislich an. `sendMessage` drück
 Ben verpufften. Gemessen: der Senden-Knopf existiert, ist bei leerem Feld `disabled` und wird nach
 dem Tippen `enabled`. IMMER den Button klicken, Enter höchstens als Fallback.
 
+## Nach Code-Änderungen BEIDE Prozesse neu starten
+Engine (`index.ts`) und Dashboard (`crmServer.ts`) sind getrennte Node-Prozesse und laden
+Module beim Start. Eine Code-Änderung wirkt erst nach Neustart. Hat 2026-07-16 zweimal
+Verwirrung gestiftet: (1) `/api/live.jpg` gab 404, weil der laufende crmServer die Route noch
+nicht kannte; (2) das Dashboard zeigte stundenlang "Akzeptanzrate 24% (n=21)" aus der alten,
+kaputten Formel, während der Code längst korrekt "STANDBY (n=0)" berechnete – der Prozess lief
+seit vor dem Fix. Beim Debuggen von "die Anzeige stimmt nicht" IMMER zuerst prüfen, ob der
+Prozess älter ist als die Datei (`ps -p <pid> -o lstart=` vs `stat -f '%Sm' <datei>`).
+Neustart: `POST /api/engine {"action":"stop"}` + `{"action":"start"}` bzw. crmServer killen
+und `npm run crm`.
+
 ## Bekannte Watchouts
 - **UI-SELEKTOREN BRECHEN.** Gebündelt in `outreach.ts`/`leads.ts`/`inbox.ts` (SEL-Konstanten).
   Stand 2026-07-15 alle live verifiziert. WICHTIG: Der "Vernetzen"-Button des Hauptprofils ist
