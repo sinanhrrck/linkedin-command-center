@@ -4,7 +4,7 @@ import { readFileSync, openSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
-import { getDraft, setDraftStatus } from "../modules/drafts.js";
+import { getDraft, setDraftStatus, sendDraft } from "../modules/drafts.js";
 import { deleteContact } from "../modules/crm.js";
 import { db, getState, setState, setMode, type Mode } from "../db/index.js";
 import { LIVE_SHOT_PATH } from "../core/session.js";
@@ -28,7 +28,10 @@ function engineAlive(): boolean {
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
 
-  // Entwurf editieren/verwerfen. Sendet NICHT – Versand bleibt bewusst per CLI (npm run send).
+  // Entwurf editieren, verwerfen ODER senden. Der Versand lief früher bewusst nur per CLI
+  // (`npm run send -- <id>`), weil dem Sendeweg nicht zu trauen war. Seit er verifiziert ist
+  // (outreach.tippenUndSenden: Feld leer + Text im Verlauf) geht er auch hier – wie in Telegram.
+  // sendDraft läuft über den Governor, es gibt also keinen Bypass.
   if (url.pathname === "/api/draft" && req.method === "POST") {
     let body = "";
     req.on("data", (c) => (body += c));
@@ -44,6 +47,24 @@ const server = createServer((req, res) => {
           db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), Number(id));
         } else if (action === "discard") {
           setDraftStatus(Number(id), "discarded");
+        } else if (action === "send") {
+          // Vorher speichern, falls im Feld editiert wurde – sonst geht der alte Text raus.
+          if (typeof text === "string" && text.trim()) {
+            db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), Number(id));
+          }
+          sendDraft(Number(id))
+            .then((r) => {
+              res
+                .writeHead(r.ok ? 200 : 409, { "Content-Type": "application/json" })
+                .end(JSON.stringify(r));
+            })
+            .catch((e) => {
+              // Ehrlich bleiben: Fehler durchreichen statt Erfolg vorgaukeln.
+              res
+                .writeHead(500, { "Content-Type": "application/json" })
+                .end(JSON.stringify({ ok: false, reason: String(e?.message ?? e).slice(0, 160) }));
+            });
+          return; // Antwort kommt asynchron
         } else {
           res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
           return;

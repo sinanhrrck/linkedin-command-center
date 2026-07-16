@@ -305,12 +305,17 @@
   }
   .draft-card textarea:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(75,198,201,.13); }
   .draft-card .dc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .draft-card .dc-cmd {
-    font-family: var(--mono); font-size: 10.5px; color: var(--cyan); background: var(--bg); border: 1px solid var(--line-strong);
-    padding: 6px 9px; border-radius: 6px; cursor: pointer; letter-spacing: .02em; flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* Senden = die Hauptaktion der Karte, also auch optisch die Hauptaktion. */
+  .draft-card .dc-send {
+    font-family: var(--disp); font-size: 12px; font-weight: 600; letter-spacing: .02em;
+    color: #fff; background: var(--grad); border: none;
+    padding: 9px 16px; border-radius: 7px; cursor: pointer; flex: 1;
+    box-shadow: 0 4px 14px -4px rgba(139,123,255,.5); transition: .18s var(--ease);
   }
-  .draft-card .dc-cmd:hover { border-color: var(--cyan); }
-  .draft-card .dc-cmd.copied { color: var(--green); border-color: var(--green); }
+  .draft-card .dc-send:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px -4px rgba(139,123,255,.65); }
+  .draft-card .dc-send:disabled { opacity: .55; cursor: default; box-shadow: none; transform: none; }
+  .draft-card .dc-send.ok { background: var(--green); }
+  .draft-card .dc-send.bad { background: var(--red); }
   .draft-card .dc-discard { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); background: none; border: 1px solid var(--line-strong); padding: 7px 11px; border-radius: 6px; cursor: pointer; }
   .draft-card .dc-discard:hover { color: var(--red); border-color: var(--red); }
   .draft-saved { font-family: var(--mono); font-size: 9.5px; color: var(--green); opacity: 0; transition: opacity .2s; }
@@ -814,7 +819,7 @@ function renderDrafts() {
       ${d.incoming ? `<div class="dc-in">Auf: „${esc(d.incoming.slice(0, 140))}"</div>` : (d.kind === "first" ? `<div class="dc-in" style="color:var(--green)">✅ ${esc(d.participant || "")} hat deine Vernetzungsanfrage angenommen</div>` : d.kind === "followup" ? `<div class="dc-in">Noch keine Antwort auf deine Erstnachricht</div>` : "")}
       <textarea spellcheck="false">${esc(d.draft)}</textarea>
       <div class="dc-foot">
-        <button class="dc-cmd" title="Sende-Befehl kopieren">npm run send -- ${d.id}</button>
+        <button class="dc-send" title="Jetzt über LinkedIn senden (governor-gedrosselt)">Senden</button>
         <span class="draft-saved">gespeichert ✓</span>
         <button class="dc-discard">Verwerfen</button>
       </div>
@@ -827,12 +832,34 @@ function renderDrafts() {
       await postDraft({ id, action: "save", text: ta.value });
       saved.classList.add("show"); setTimeout(() => saved.classList.remove("show"), 1500);
     });
-    card.querySelector(".dc-cmd").addEventListener("click", (e) => {
+    // Echter Versand. Dauert bewusst lange: der Governor haelt 20-75s Abstand vor jeder
+    // Aktion, dazu Seitenaufbau und menschliches Tippen. Deshalb Knopf sperren + Status zeigen,
+    // sonst klickt man dreimal und schickt dreimal.
+    card.querySelector(".dc-send").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
-      navigator.clipboard.writeText(`npm run send -- ${id}`).then(() => {
-        const orig = btn.textContent; btn.classList.add("copied"); btn.textContent = "kopiert ✓";
-        setTimeout(() => { btn.classList.remove("copied"); btn.textContent = orig; }, 1400);
-      });
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = "sendet … (bis 2 Min)";
+      try {
+        const r = await postDraft({ id, action: "send", text: ta.value });
+        if (r && r.ok) {
+          btn.textContent = "gesendet ✓";
+          btn.classList.add("ok");
+          setTimeout(load, 1200);
+        } else {
+          // Ehrlich anzeigen statt Erfolg vorgaukeln – der Entwurf bleibt stehen.
+          btn.textContent = "nicht gesendet";
+          btn.classList.add("bad");
+          btn.title = (r && r.reason) || "unbekannter Grund";
+          alert("Nicht gesendet: " + ((r && r.reason) || "unbekannter Grund") + "\n\nDer Entwurf bleibt stehen, du kannst es erneut versuchen.");
+          btn.disabled = false;
+          setTimeout(() => { btn.textContent = "Senden"; btn.classList.remove("bad"); }, 4000);
+        }
+      } catch (err) {
+        btn.textContent = "Fehler";
+        btn.disabled = false;
+        setTimeout(() => (btn.textContent = "Senden"), 3000);
+      }
     });
     card.querySelector(".dc-discard").addEventListener("click", async () => {
       if (!confirm("Entwurf verwerfen?")) return;
@@ -840,9 +867,16 @@ function renderDrafts() {
     });
   });
 }
+// Gibt die Server-Antwort ZURUECK – der Senden-Knopf muss wissen, ob es geklappt hat.
+// (Vorher wurde sie verschluckt; dann haette der Knopf immer "nicht gesendet" gezeigt.)
 async function postDraft(payload) {
-  try { await fetch("/api/draft", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); }
-  catch (e) { console.error(e); }
+  try {
+    const r = await fetch("/api/draft", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    return await r.json().catch(() => ({ ok: r.ok }));
+  } catch (e) {
+    console.error(e);
+    return { ok: false, reason: String(e) };
+  }
 }
 
 function renderRows() {
