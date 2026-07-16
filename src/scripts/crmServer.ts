@@ -1,0 +1,186 @@
+import { createServer } from "node:http";
+import { spawn, execFile } from "node:child_process";
+import { readFileSync, openSync, rmSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { getDashboardData } from "../modules/dashboard.js";
+import { getDraft, setDraftStatus } from "../modules/drafts.js";
+import { deleteContact } from "../modules/crm.js";
+import { db, getState, setState, setMode, type Mode } from "../db/index.js";
+import { LIVE_SHOT_PATH } from "../core/session.js";
+
+/**
+ * Lokales CRM-Cockpit. Nutzung: npm run crm
+ * Startet einen kleinen HTTP-Server (kein Framework), der das Dashboard ausliefert
+ * und den Zustand als JSON bereitstellt. Rein lesend – kein Senden, kein Governor-Bypass.
+ */
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const HTML_PATH = join(__dirname, "..", "web", "crm.html");
+const PROJECT_ROOT = join(__dirname, "..", "..");
+const PORT = Number(process.env.CRM_PORT ?? 4321);
+
+/** Läuft der Engine-Loop? (Heartbeat < 150s alt) */
+function engineAlive(): boolean {
+  const hb = getState("engine_heartbeat");
+  return hb ? Date.now() - new Date(hb).getTime() < 150_000 : false;
+}
+
+const server = createServer((req, res) => {
+  const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+
+  // Entwurf editieren/verwerfen. Sendet NICHT – Versand bleibt bewusst per CLI (npm run send).
+  if (url.pathname === "/api/draft" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { id, action, text } = JSON.parse(body || "{}");
+        const d = getDraft(Number(id));
+        if (!d) {
+          res.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "not found" }));
+          return;
+        }
+        if (action === "save" && typeof text === "string") {
+          db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), Number(id));
+        } else if (action === "discard") {
+          setDraftStatus(Number(id), "discarded");
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // Automatik-Modus umschalten (manual | semi | full).
+  if (url.pathname === "/api/mode" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { mode } = JSON.parse(body || "{}");
+        if (!["manual", "semi", "full"].includes(mode)) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad mode" }));
+          return;
+        }
+        setMode(mode as Mode);
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, mode }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // Engine (Loop) starten/stoppen – ersetzt "npm run dev" im Terminal.
+  if (url.pathname === "/api/engine" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { action } = JSON.parse(body || "{}");
+        if (action === "start") {
+          if (engineAlive()) {
+            res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, already: true }));
+            return;
+          }
+          // Loop-Ausgabe in engine.log schreiben (statt still) – fürs Debuggen.
+          const logFd = openSync(join(PROJECT_ROOT, "engine.log"), "a");
+          // Auf macOS via `caffeinate -i` starten: hält den Mac wach, solange der Loop läuft
+          // (verhindert Idle-Sleep → Bot stirbt nicht). Beim Stoppen schläft der Mac wieder normal.
+          const isMac = process.platform === "darwin";
+          const cmd = isMac ? "caffeinate" : "npx";
+          const args = isMac ? ["-i", "npx", "tsx", "src/index.ts"] : ["tsx", "src/index.ts"];
+          const child = spawn(cmd, args, {
+            cwd: PROJECT_ROOT,
+            detached: true,
+            stdio: ["ignore", logFd, logFd],
+            env: process.env,
+          });
+          child.unref();
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, pid: child.pid }));
+        } else if (action === "stop") {
+          // Robust: Loop-Prozess per Muster killen (egal wie gestartet), Lock aufräumen.
+          execFile("pkill", ["-f", "tsx src/index.ts"], () => {
+            try {
+              rmSync(join(PROJECT_ROOT, ".session", "SingletonLock"), { force: true });
+            } catch {
+              /* egal */
+            }
+          });
+          setState("engine_heartbeat", ""); // sofort als offline markieren
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
+        }
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // Kontakt aus dem CRM entfernen.
+  if (url.pathname === "/api/contact" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { id, action } = JSON.parse(body || "{}");
+        if (action !== "delete") {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
+          return;
+        }
+        const ok = deleteContact(Number(id));
+        res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // Live-Ansicht: letzter Schnappschuss des versteckten Browsers (von der Engine geschrieben).
+  // Getrennte Prozesse → Umweg über Datei. 404, solange die Engine noch keinen geschrieben hat.
+  if (url.pathname === "/api/live.jpg") {
+    try {
+      const img = readFileSync(LIVE_SHOT_PATH);
+      res
+        .writeHead(200, { "Content-Type": "image/jpeg", "Cache-Control": "no-store" })
+        .end(img);
+    } catch {
+      res.writeHead(404, { "Content-Type": "text/plain" }).end("noch kein Bild");
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/state") {
+    try {
+      const data = JSON.stringify(getDashboardData());
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }).end(data);
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" }).end(
+        JSON.stringify({ error: String(e) }),
+      );
+    }
+    return;
+  }
+
+  if (url.pathname === "/" || url.pathname === "/index.html") {
+    // In dev bei jedem Request frisch lesen, damit Design-Änderungen sofort greifen.
+    const html = readFileSync(HTML_PATH, "utf-8");
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(html);
+    return;
+  }
+
+  res.writeHead(404, { "Content-Type": "text/plain" }).end("Nicht gefunden");
+});
+
+server.listen(PORT, () => {
+  console.info(`\n  CRM-Cockpit läuft →  http://localhost:${PORT}\n`);
+  console.info("  Beenden mit STRG+C.\n");
+});

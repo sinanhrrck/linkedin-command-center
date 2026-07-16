@@ -1,0 +1,37 @@
+{
+  "name": "linkedin-command-center",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lokales All-in-One LinkedIn-Tool: Posting, Outreach, Inbox, CRM, Analytics",
+  "scripts": {
+    "auth": "tsx src/scripts/linkedinAuth.ts",
+    "urn": "tsx src/scripts/getPersonUrn.ts",
+    "login": "tsx src/scripts/login.ts",
+    "scrape": "tsx src/scripts/scrape.ts",
+    "source": "tsx src/scripts/source.ts",
+    "accept": "tsx src/scripts/checkAcceptances.ts",
+    "crm": "tsx src/scripts/crmServer.ts",
+    "drafts": "tsx src/scripts/genDrafts.ts",
+    "send": "tsx src/scripts/sendDraft.ts",
+    "post": "tsx src/scripts/postNow.ts",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
+    "@google/generative-ai": "^0.21.0",
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "grammy": "^1.30.0",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.47.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.7.0",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

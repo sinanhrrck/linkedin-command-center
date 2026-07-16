@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sinan.commandcenter.dashboard</string>
+  <!-- Startet das CRM-Dashboard automatisch beim Login (localhost:4321).
+       Den Bot/Outreach startest du weiterhin bewusst per Button im Dashboard. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd /Users/sinanharrack/Downloads/linkedin-command-center &amp;&amp; exec /usr/local/bin/npm run crm</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/sinanharrack/Downloads/linkedin-command-center/dashboard.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/sinanharrack/Downloads/linkedin-command-center/dashboard.log</string>
+</dict>
+</plist>

@@ -1,0 +1,12 @@
+node_modules/
+.session/
+.env
+data.db
+data.db-*
+engine.log
+dashboard.log
+dist/
+
+# Live-Ansicht (Screenshots fürs Dashboard)
+.live/
+.DS_Store
