@@ -226,8 +226,10 @@ export function startTelegram() {
     }) => {
       if (!bot || !config.telegram.chatId || !e.draft) return;
       const kopf =
-        e.intent === "objection"
+        e.intent === "absage"
           ? `🟠 *${e.participant} winkt ab*`
+          : e.intent === "einwand"
+          ? `⚠️ *${e.participant} hat einen Einwand*`
           : `🎯 *${e.participant} will reden!*`;
       const text =
         `${kopf}\n\n` +
@@ -236,7 +238,7 @@ export function startTelegram() {
         (e.contact ? `📞 *Kontakt:* ${e.contact}\n\n` : "") +
         `*Vorschlag der KI*\n_${e.draft.draft}_\n\n` +
         `💬 [Chat öffnen](${e.threadUrl})\n\n` +
-        (e.intent === "objection"
+        (e.intent === "absage"
           ? `Ein Nein verdient einen würdigen Abschluss. Senden, anpassen oder einfach ruhen lassen?`
           : `Du entscheidest.`);
       bot.api

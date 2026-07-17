@@ -240,7 +240,7 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
     // sonst verfälscht es die Pipeline und Sinan ruft die Falschen an.
     const echtesInteresse = ["meeting", "chance", "positive"].includes(step.intent);
     if (echtesInteresse && markRepliedByName(t.participant)) replies++;
-    if (step.intent === "objection") markDeclinedByName(t.participant);
+    if (step.intent === "absage") markDeclinedByName(t.participant);
 
     const info = db
       .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('message',?,?,?,?)")
@@ -250,7 +250,7 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
 
     // Heikle Fälle (Absage/Einwand) NICHT als normalen Entwurf durchwinken, sondern mit
     // Kontext an Sinan eskalieren: Zusammenfassung, Vorschlag, Strategie. Er entscheidet.
-    if (step.intent === "objection" || step.intent === "meeting" || step.intent === "chance") {
+    if (["absage", "einwand", "meeting", "chance"].includes(step.intent)) {
       events.emit("lead:eskalation", {
         draft: d,
         participant: t.participant,

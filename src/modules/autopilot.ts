@@ -4,7 +4,7 @@ import { fetchThreads } from "./inbox.js";
 import { converseStep } from "./personalize.js";
 import { sendThreadReply } from "./outreach.js";
 import { queueReplyDraft, getDraft } from "./drafts.js";
-import { markRepliedByName } from "./crm.js";
+import { markRepliedByName, markDeclinedByName } from "./crm.js";
 import { governor, GovernorBlocked } from "../core/safetyGovernor.js";
 import { events } from "../core/events.js";
 
@@ -44,8 +44,28 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
 
     const step = await converseStep(t.messages, t.participant).catch(() => null);
 
-    // KI unsicher / Einwand / Nachrichten-Limit erreicht → an den Menschen eskalieren
-    if (!step || step.intent === "objection" || conv.auto_count >= config.autopilot.maxMessagesPerThread) {
+    /**
+     * ABSAGE = ein Abschied. Da gibt es nichts zu retten und nichts zu entscheiden – der
+     * würdige Schlusssatz geht autonom raus. Vorher landete das zusammen mit echten Einwänden
+     * unter "objection" bei Sinan und war reine Klickarbeit ohne Wert.
+     * Der Thread wird geschlossen, der Bot fasst ihn nie wieder an.
+     */
+    if (step && step.intent === "absage") {
+      try {
+        if (step.reply) await sendThreadReply(t.threadUrl, step.reply);
+        markDeclinedByName(t.participant);
+        db.prepare("UPDATE conversations SET status='closed', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
+        console.info(`[autopilot] ${t.participant} hat abgewunken → Abschied gesendet, Thread zu.`);
+      } catch (e) {
+        if (!(e instanceof GovernorBlocked)) throw e;
+      }
+      continue;
+    }
+
+    // KI unsicher / echter EINWAND / Nachrichten-Limit → an den Menschen eskalieren.
+    // Ein Einwand ist NICHT das Ende: die Person ist noch da, aber ein falscher Satz
+    // verbrennt sie. Genau dafür gibt es Sinan.
+    if (!step || step.intent === "einwand" || conv.auto_count >= config.autopilot.maxMessagesPerThread) {
       queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step?.reply || "");
       db.prepare("UPDATE conversations SET status='escalated', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
       res.escalated++;
