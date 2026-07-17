@@ -35,6 +35,20 @@ try {
 try {
   db.exec("ALTER TABLE lead_sources ADD COLUMN zielgruppe TEXT"); // azubi | student -> Fokus-Steuerung
 } catch {
+  /* Spalte existiert schon */
+}
+try {
+  // Der ehrlichste Qualitaetsmassstab: schickt Sinan den KI-Vorschlag unveraendert raus, war er
+  // gut. Schreibt er ihn um, zeigt genau diese Aenderung, was der KI fehlt. Das Original wird
+  // deshalb NIE ueberschrieben - nach einer Woche laesst sich objektiv entscheiden, ob der Bot
+  // den Tuer-Moment allein fahren darf.
+  db.exec("ALTER TABLE drafts ADD COLUMN ki_original TEXT");
+} catch {
+  /* Spalte existiert schon */
+}
+try {
+  db.exec("ALTER TABLE drafts ADD COLUMN intent TEXT"); // Einordnung der KI (chance/einwand/...)
+} catch {
   /* Spalte existiert bereits */
 }
 

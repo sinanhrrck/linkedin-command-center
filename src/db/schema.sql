@@ -41,7 +41,9 @@ CREATE TABLE IF NOT EXISTS drafts (
   thread_url   TEXT,                            -- Konversations-/Ziel-URL (Idempotenz-Key)
   participant  TEXT,                            -- Name des Gegenübers
   incoming     TEXT,                            -- letzter eingehender Text (Kontext)
-  draft        TEXT NOT NULL,                   -- generierter Entwurf
+  draft        TEXT NOT NULL,                   -- aktueller Text (ggf. von Sinan editiert)
+  ki_original  TEXT,                            -- was die KI URSPRUENGLICH vorschlug (nie ueberschrieben)
+  intent       TEXT,                            -- chance | einwand | meeting | ... (Einordnung der KI)
   status       TEXT NOT NULL DEFAULT 'pending', -- pending | approved | sent | discarded
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   sent_at      TEXT

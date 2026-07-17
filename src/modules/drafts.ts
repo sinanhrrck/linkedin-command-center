@@ -57,8 +57,8 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
   });
   if (!text) return false;
   const info = db
-    .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('first',?,?,?,?)")
-    .run(c.profile_url, c.full_name ?? null, "", text);
+    .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('first',?,?,?,?,?,'first')")
+    .run(c.profile_url, c.full_name ?? null, "", text, text);
   events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
   return true;
 }
@@ -109,11 +109,13 @@ export async function generateFollowups(days = 4, limit = 5): Promise<number> {
  * Legt einen Thread-Antwort-Entwurf zur Freigabe an (z.B. Autopilot-Eskalation).
  * Idempotent: nur ein offener Draft pro Thread.
  */
-export function queueReplyDraft(threadUrl: string, participant: string, incoming: string, text: string) {
+export function queueReplyDraft(threadUrl: string, participant: string, incoming: string, text: string, intent?: string) {
   if (hasOpenDraft(threadUrl)) return;
+  // ki_original bleibt fuer immer stehen: der Vergleich mit dem, was Sinan am Ende wirklich
+  // sendet, ist der ehrlichste Qualitaetsmassstab fuer die KI.
   const info = db
-    .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('message',?,?,?,?)")
-    .run(threadUrl, participant, incoming, text);
+    .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('message',?,?,?,?,?,?)")
+    .run(threadUrl, participant, incoming, text, text, intent ?? null);
   events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
 }
 
@@ -243,8 +245,8 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
     if (step.intent === "absage") markDeclinedByName(t.participant);
 
     const info = db
-      .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('message',?,?,?,?)")
-      .run(t.threadUrl, t.participant, t.lastIncoming, step.reply);
+      .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('message',?,?,?,?,?,?)")
+      .run(t.threadUrl, t.participant, t.lastIncoming, step.reply, step.reply, step.intent);
     const d = getDraft(Number(info.lastInsertRowid));
     created++;
 

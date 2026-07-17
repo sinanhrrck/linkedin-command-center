@@ -66,7 +66,7 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
     // Ein Einwand ist NICHT das Ende: die Person ist noch da, aber ein falscher Satz
     // verbrennt sie. Genau dafür gibt es Sinan.
     if (!step || step.intent === "einwand" || conv.auto_count >= config.autopilot.maxMessagesPerThread) {
-      queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step?.reply || "");
+      queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step?.reply || "", step?.intent ?? "unklar");
       db.prepare("UPDATE conversations SET status='escalated', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
       res.escalated++;
       continue;
@@ -82,7 +82,7 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
      * bevor er überhaupt bei Sinan ankam. Die Chance war dann meist durch.
      */
     if (step.intent === "chance") {
-      queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step.reply);
+      queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step.reply, "chance");
       db.prepare("UPDATE conversations SET status='escalated', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
       events.emit("lead:chance", {
         participant: t.participant,
