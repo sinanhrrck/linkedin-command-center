@@ -62,6 +62,22 @@ export function countContacts(): number {
 }
 
 /** Markiert einen gemessagten Kontakt als 'replied' (Hot Lead), matcht per Name. */
+/**
+ * Höfliche Absage: Person hat geantwortet, aber abgewunken ("hab schon einen Plan",
+ * "danke der Nachfrage"). Status 'closed' statt 'replied' – damit taucht sie NICHT in den
+ * Hot Leads auf. Vorher zählte jede Antwort als heißer Lead, auch ein klares Nein; das
+ * verfälscht die Pipeline und Sinan würde die Falschen priorisieren.
+ * `replied_at` wird trotzdem gesetzt: sie HAT geantwortet, das gehört in die Historie.
+ */
+export function markDeclinedByName(fullName: string): boolean {
+  const res = db
+    .prepare(
+      "UPDATE contacts SET status='closed', replied_at=COALESCE(replied_at, datetime('now')) WHERE full_name = ? AND status IN ('messaged','replied')",
+    )
+    .run(fullName);
+  return res.changes > 0;
+}
+
 export function markRepliedByName(fullName: string): boolean {
   const res = db
     .prepare(

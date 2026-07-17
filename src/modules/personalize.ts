@@ -50,6 +50,10 @@ export type ConverseStep = {
   intent: "meeting" | "positive" | "objection" | "neutral";
   contact: string | null; // Telefonnummer/E-Mail, falls die Person sie genannt hat
   reply: string; // Sinans nächste Nachricht
+  /** 1-2 Sätze: worum ging es im Gespräch? Für die Telegram-Eskalation. */
+  zusammenfassung: string;
+  /** Warum dieser intent + wie Sinan damit umgehen sollte. Der Rat, nicht nur die Einordnung. */
+  strategie: string;
 };
 
 /**
@@ -68,18 +72,25 @@ Bisheriger Verlauf:
 ${transcript}
 
 Analysiere die LETZTE Nachricht der Person und antworte AUSSCHLIESSLICH mit JSON (kein Text drumherum):
-{"intent":"meeting|positive|objection|neutral","contact":"Telefonnummer oder E-Mail der Person falls im Verlauf genannt, sonst null","reply":"Sinans nächste Nachricht"}
+{"intent":"meeting|positive|objection|neutral","contact":"Telefonnummer oder E-Mail der Person falls im Verlauf genannt, sonst null","reply":"Sinans nächste Nachricht","zusammenfassung":"1-2 Sätze: worum ging es, was will die Person","strategie":"2-3 Sätze: warum dieser intent und wie Sinan konkret damit umgehen sollte"}
 Regeln für intent:
 - "meeting": Person sagt Ja zu Telefonat/Termin ODER nennt ihre Nummer.
-- "objection": Einwand, Absage, kritische/heikle Rückfrage die Fingerspitzengefühl braucht.
+- "objection": Einwand, Absage ODER höfliches Abwinken. Achte auf Schluss-Signale wie
+  "danke der Nachfrage", "viel Erfolg", "hab schon einen Plan", "bin versorgt" – das ist ein
+  Nein, auch wenn es freundlich klingt. Lieber einmal zu oft "objection" als aufdringlich sein.
 - "positive": interessiert, aber noch kein Termin.
 - "neutral": Smalltalk/neutral.
-Die "reply" folgt den Stil-Regeln oben.`;
+Die "reply" folgt den Stil-Regeln oben. Bei "objection" ist die "reply" ein WÜRDIGER ABSCHLUSS:
+das Nein respektieren, keine Nachfass-Frage, keine versteckte zweite Chance, Tür freundlich
+offen lassen. Niemals gegen ein Nein anargumentieren.
+Die "strategie" ist Sinans Handlungsempfehlung in Klartext, nicht die Wiederholung des intents.`;
   try {
     const raw = await generateAutopilot(prompt);
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(json) as ConverseStep;
     parsed.reply = saubern(parsed.reply || "");
+    parsed.zusammenfassung = (parsed.zusammenfassung || "").trim();
+    parsed.strategie = (parsed.strategie || "").trim();
     if (!["meeting", "positive", "objection", "neutral"].includes(parsed.intent)) parsed.intent = "neutral";
     parsed.contact = parsed.contact && String(parsed.contact).toLowerCase() !== "null" ? String(parsed.contact) : null;
     return parsed;

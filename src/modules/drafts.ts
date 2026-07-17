@@ -2,9 +2,9 @@ import { db, getMode } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { fetchThreads, type ThreadContext } from "./inbox.js";
 import { sendThreadReply, sendMessage } from "./outreach.js";
-import { firstMessage, followupMessage } from "./personalize.js";
+import { firstMessage, followupMessage , converseStep } from "./personalize.js";
 import { GovernorBlocked } from "../core/safetyGovernor.js";
-import { markRepliedByName, messagedAwaitingFollowup, type Contact } from "./crm.js";
+import { markRepliedByName, markDeclinedByName, messagedAwaitingFollowup, type Contact } from "./crm.js";
 import { promptKontext, saubern } from "../context.js";
 import { events } from "../core/events.js";
 
@@ -220,22 +220,49 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
     const last = t.messages[t.messages.length - 1];
     const needsReply = last ? (last.sender ? last.sender === t.participant : t.unread) : false;
     if (!needsReply) continue;
-    // Antwort-Erkennung: hat ein angeschriebener Kontakt (status 'messaged') geantwortet?
-    // → Hot Lead. markRepliedByName wirkt nur bei genau solchen Kontakten.
-    if (markRepliedByName(t.participant)) replies++;
     if (hasOpenDraft(t.threadUrl, t.lastIncoming)) continue;
 
-    const draft = await replyDraft(t).catch((e) => {
-      console.error(`[drafts] Gemini-Fehler bei ${t.participant}:`, e?.message || e);
-      return "";
+    /**
+     * EIN KI-Aufruf liefert Einordnung + Antwort + Zusammenfassung + Strategie.
+     * Vorher lief hier ein stumpfes "schreib halt eine Antwort" und JEDE Antwort galt als
+     * Hot Lead – auch ein höfliches Nein ("danke der Nachfrage, viel Erfolg"). Real passiert
+     * bei Maximilian Müller: als Hot Lead gezählt UND eine Nachfass-Frage entworfen, obwohl
+     * er das Gespräch klar geschlossen hatte. Die Intelligenz dafür lag ungenutzt im
+     * Autopilot herum. Kostet keinen Aufruf extra.
+     */
+    const step = await converseStep(t.messages, t.participant).catch((e) => {
+      console.error(`[drafts] ⚠ KI-Fehler bei ${t.participant}: ${String(e?.message ?? e).slice(0, 80)}`);
+      return null;
     });
-    if (!draft) continue;
+    if (!step || !step.reply) continue;
+
+    // Hot Lead NUR bei echtem Interesse. Ein höfliches Abwinken ist KEIN heißer Lead –
+    // sonst verfälscht es die Pipeline und Sinan ruft die Falschen an.
+    const echtesInteresse = step.intent === "meeting" || step.intent === "positive";
+    if (echtesInteresse && markRepliedByName(t.participant)) replies++;
+    if (step.intent === "objection") markDeclinedByName(t.participant);
 
     const info = db
       .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('message',?,?,?,?)")
-      .run(t.threadUrl, t.participant, t.lastIncoming, draft);
-    events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
+      .run(t.threadUrl, t.participant, t.lastIncoming, step.reply);
+    const d = getDraft(Number(info.lastInsertRowid));
     created++;
+
+    // Heikle Fälle (Absage/Einwand) NICHT als normalen Entwurf durchwinken, sondern mit
+    // Kontext an Sinan eskalieren: Zusammenfassung, Vorschlag, Strategie. Er entscheidet.
+    if (step.intent === "objection" || step.intent === "meeting") {
+      events.emit("lead:eskalation", {
+        draft: d,
+        participant: t.participant,
+        intent: step.intent,
+        zusammenfassung: step.zusammenfassung,
+        strategie: step.strategie,
+        threadUrl: t.threadUrl,
+        contact: step.contact,
+      });
+    } else {
+      events.emit("draft:new", d);
+    }
   }
   console.info(`[drafts] ${created} neue Entwürfe, ${replies} Hot Lead(s) (Antwort erkannt)`);
   return created;

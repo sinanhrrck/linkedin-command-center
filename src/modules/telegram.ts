@@ -207,6 +207,48 @@ export function startTelegram() {
       .catch(() => {});
   });
 
+  /**
+   * ESKALATION mit Kontext. Sinans Wunsch: bei heiklen Fällen nicht nur "hier ist ein
+   * Entwurf", sondern das ganze Bild – worum ging es, was schlägt die KI vor, wie gehen wir
+   * damit um. Die Daten kommen aus EINEM converseStep-Aufruf (kostet nichts extra).
+   * Ausgelöst bei "objection" (höfliche Absage/Einwand) und "meeting" (Termin-Signal).
+   */
+  events.on(
+    "lead:eskalation",
+    (e: {
+      draft: Draft;
+      participant: string;
+      intent: string;
+      zusammenfassung: string;
+      strategie: string;
+      threadUrl: string;
+      contact: string | null;
+    }) => {
+      if (!bot || !config.telegram.chatId || !e.draft) return;
+      const kopf =
+        e.intent === "objection"
+          ? `🟠 *${e.participant} winkt ab*`
+          : `🎯 *${e.participant} will reden!*`;
+      const text =
+        `${kopf}\n\n` +
+        `*Worum ging es*\n${e.zusammenfassung || "—"}\n\n` +
+        `*Wie wir damit umgehen*\n${e.strategie || "—"}\n\n` +
+        (e.contact ? `📞 *Kontakt:* ${e.contact}\n\n` : "") +
+        `*Vorschlag der KI*\n_${e.draft.draft}_\n\n` +
+        `💬 [Chat öffnen](${e.threadUrl})\n\n` +
+        (e.intent === "objection"
+          ? `Ein Nein verdient einen würdigen Abschluss. Senden, anpassen oder einfach ruhen lassen?`
+          : `Du entscheidest.`);
+      bot.api
+        .sendMessage(config.telegram.chatId, text, {
+          parse_mode: "Markdown",
+          reply_markup: draftKeyboard(e.draft.id),
+          link_preview_options: { is_disabled: true },
+        })
+        .catch(() => {});
+    },
+  );
+
   // Autopilot-Handoff: KI hat einen Termin klargemacht → Kontakt sofort pushen.
   events.on("lead:booked", (l: { participant: string; contact: string | null; threadUrl: string }) => {
     if (!bot || !config.telegram.chatId) return;
