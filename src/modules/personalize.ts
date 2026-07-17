@@ -67,8 +67,11 @@ export async function converseStep(messages: { sender: string; text: string }[],
   const transcript = messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
   const prompt = `Du bist Sinan und führst einen LinkedIn-Chat mit ${participant}.
 ${promptKontext()}
-Übergeordnetes Ziel: die Person mehrwert-first zu einem kurzen, lockeren Kennenlern-Telefonat
-bewegen – niemals aufdringlich, echtes Interesse.
+Ziel DIESER Antwort: das Gespräch am Leben halten und die Person besser kennenlernen. NICHT auf
+ein Telefonat hinarbeiten. Ein Gespräch entsteht durch echtes Interesse, nicht durch Steuern.
+Ein Telefonat kommt NUR zur Sprache, wenn die Person von sich aus Interesse an Sinans Thema
+zeigt oder danach fragt. Bis dahin ist jede Nachricht schlicht ein guter Gesprächsbeitrag.
+Frag nach dem WARUM hinter dem, was sie erzählt, nicht nach ihrem Job.
 
 Bisheriger Verlauf:
 ${transcript}

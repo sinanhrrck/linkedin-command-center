@@ -249,6 +249,30 @@ export function startTelegram() {
     },
   );
 
+  /**
+   * Der Autopilot hat AUTONOM gesendet. Sinan sieht die Nachricht damit sofort und kann sie
+   * notfalls auf LinkedIn loeschen. Vorher gab es dafuer keinerlei Sichtbarkeit: der Bot
+   * schrieb in seinem Namen und niemand wusste was.
+   */
+  events.on(
+    "autopilot:gesendet",
+    (e: { draft: Draft; participant: string; intent: string; zusammenfassung: string; threadUrl: string; nachrichtNr: number }) => {
+      if (!bot || !config.telegram.chatId || !e.draft) return;
+      bot.api
+        .sendMessage(
+          config.telegram.chatId,
+          `🤖 *Autopilot hat geantwortet* (Nachricht ${e.nachrichtNr} in diesem Chat)\n\n` +
+            `An: *${e.participant}*\n` +
+            `Lage: _${e.zusammenfassung || e.intent}_\n\n` +
+            `*Das ging raus:*\n${e.draft.draft}\n\n` +
+            `💬 [Chat oeffnen](${e.threadUrl})\n` +
+            `_Passt nicht? Auf LinkedIn loeschen (geht ein paar Minuten lang)._`,
+          { parse_mode: "Markdown", link_preview_options: { is_disabled: true } },
+        )
+        .catch(() => {});
+    },
+  );
+
   // Autopilot-Handoff: KI hat einen Termin klargemacht → Kontakt sofort pushen.
   events.on("lead:booked", (l: { participant: string; contact: string | null; threadUrl: string }) => {
     if (!bot || !config.telegram.chatId) return;

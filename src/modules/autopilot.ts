@@ -3,7 +3,7 @@ import { db, getMode } from "../db/index.js";
 import { fetchThreads } from "./inbox.js";
 import { converseStep } from "./personalize.js";
 import { sendThreadReply } from "./outreach.js";
-import { queueReplyDraft } from "./drafts.js";
+import { queueReplyDraft, getDraft } from "./drafts.js";
 import { markRepliedByName } from "./crm.js";
 import { governor, GovernorBlocked } from "../core/safetyGovernor.js";
 import { events } from "../core/events.js";
@@ -17,10 +17,12 @@ import { events } from "../core/events.js";
  */
 type Conv = { thread_url: string; participant: string; auto_count: number; status: string; contact: string | null };
 
-function getConv(threadUrl: string): Conv {
+function getConv(threadUrl: string, participant = ""): Conv {
+  // participant wurde bisher IMMER leer gespeichert – die Tabelle war damit fuer die
+  // Nachschau wertlos ("wem hat der Bot was geschrieben?" liess sich nicht beantworten).
   db.prepare(
-    "INSERT INTO conversations(thread_url, participant) VALUES(?,?) ON CONFLICT(thread_url) DO NOTHING",
-  ).run(threadUrl, "");
+    "INSERT INTO conversations(thread_url, participant) VALUES(?,?) ON CONFLICT(thread_url) DO UPDATE SET participant=COALESCE(NULLIF(excluded.participant,''), conversations.participant)",
+  ).run(threadUrl, participant);
   return db.prepare("SELECT * FROM conversations WHERE thread_url=?").get(threadUrl) as Conv;
 }
 
@@ -35,7 +37,7 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
     const theirTurn = last ? (last.sender ? last.sender === t.participant : t.unread) : false;
     if (!theirTurn) continue;
 
-    const conv = getConv(t.threadUrl);
+    const conv = getConv(t.threadUrl, t.participant);
     if (conv.status !== "active") continue; // schon gebucht oder eskaliert → Finger weg
 
     markRepliedByName(t.participant); // Hot Lead
@@ -64,6 +66,28 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
       await sendThreadReply(t.threadUrl, step.reply);
       db.prepare("UPDATE conversations SET auto_count=auto_count+1, updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
       res.replied++;
+
+      /**
+       * PROTOKOLL + PUSH. Vorher speicherte der Autopilot NICHT, was er verschickt hat –
+       * es gab keinerlei Nachschau. Real passiert 2026-07-17: der Bot fragte eine Azubi nach
+       * ihren privaten Finanzen; Sinan sah es nur, weil er zufaellig im Chat war, und musste
+       * die Nachricht loeschen. Ein Bot, der autonom in fremdem Namen schreibt, MUSS
+       * nachvollziehbar sein. Als Draft mit status='sent' abgelegt (gleiche Tabelle wie alles
+       * andere, im Dashboard nachlesbar) + sofortiger Telegram-Push.
+       */
+      const info = db
+        .prepare(
+          "INSERT INTO drafts(kind, thread_url, participant, incoming, draft, status, sent_at) VALUES('message',?,?,?,?,'sent',datetime('now'))",
+        )
+        .run(t.threadUrl, t.participant, t.lastIncoming, step.reply);
+      events.emit("autopilot:gesendet", {
+        draft: getDraft(Number(info.lastInsertRowid)),
+        participant: t.participant,
+        intent: step.intent,
+        zusammenfassung: step.zusammenfassung,
+        threadUrl: t.threadUrl,
+        nachrichtNr: conv.auto_count + 1,
+      });
     } catch (e) {
       if (!(e instanceof GovernorBlocked)) throw e; // Limit/Checkpoint → still überspringen
     }

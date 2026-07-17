@@ -68,6 +68,30 @@ export const ZIEL =
   "beiläufig erwähnen und die Tür für ein späteres Gespräch sanft offen halten.";
 
 /**
+ * TABU-THEMEN. Harte Sperre, die KEIN Gesprächsziel aushebeln darf.
+ *
+ * Warum das existiert: Am 2026-07-17 hat der Autopilot eine Azubi (Chidera, 2. Nachricht im
+ * Gespräch) gefragt, wie sie ihre Finanzen privat regelt. Sinan musste die Nachricht löschen.
+ * Ursache war ein Zielkonflikt im Prompt: context sagte "nicht pitchen", der Autopilot-Prompt
+ * sagte "bewege die Person zu einem Telefonat". Die KI wählte das messbare Ziel und kürzte ab.
+ * Solche Konflikte löst eine KI immer zugunsten des konkreten Ziels – deshalb muss die Grenze
+ * als absolutes Verbot dastehen, nicht als Haltung.
+ */
+export const TABUS =
+  "ABSOLUTE TABUS – diese Grenzen gelten IMMER und werden von KEINEM Gesprächsziel aufgehoben:\n" +
+  "- NIEMALS nach Geld, Finanzen, Absicherung, Vorsorge, Versicherungen, Gehalt oder Sparen " +
+  "fragen. Auch nicht beiläufig, auch nicht als 'nur aus Interesse'. Diese Themen darf " +
+  "AUSSCHLIESSLICH die andere Person von sich aus aufmachen. Tut sie es nicht, kommen sie nicht vor.\n" +
+  "- NIEMALS eine Dienstleistung, Beratung, ein Angebot oder einen Termin anbieten, solange die " +
+  "Person kein Interesse signalisiert hat. Kein 'falls du mal Fragen hast', kein 'ich helfe da öfter'.\n" +
+  "- NIEMALS den Plan der Person als vollständig abnicken ('du bist ja versorgt', 'klingt nach " +
+  "einem starken Ziel'). Das beendet das Gespräch. Stattdessen neugierig bleiben.\n" +
+  "- Es geht um den MENSCHEN, nicht um seinen Job: frag nach dem WARUM und der Motivation " +
+  "hinter seinen Entscheidungen, nicht nach Tätigkeiten ('Beraten oder Zahlen?').\n" +
+  "Sinans Maßstab: Wenn die Nachricht auch nur entfernt nach Vertrieb klingt, ist sie falsch. " +
+  "Ein Gespräch ist ein Gespräch, kein Trichter.";
+
+/**
  * Harte Stil-Regeln. Quelle: Nutzer-Vorgaben + seine AECdisc-Analyse. Die Kapitel
  * "Was Gesprächspartner vermeiden sollten" (kühl/verklemmt, von oben herab, Distanz,
  * pessimistisch, ausweichend/vage, Fragen nur der Form halber) sind hier gespiegelt:
@@ -148,6 +172,7 @@ export function promptKontext(): string {
     : "";
   return `Über Sinan: ${PERSONA}
 Ziel der Nachricht: ${ZIEL}
+${TABUS}
 Stil-Regeln:
 ${regeln}
 ${beispiele}`;
