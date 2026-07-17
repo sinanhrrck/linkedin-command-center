@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sinan.commandcenter.engine</string>
+
+  <!-- Startet den Bot-Loop automatisch beim Login. Grund: der Bot schoepft sein Tageslimit
+       jedes Mal voll aus, WENN er laeuft - er war nur meistens aus (15.07.: 21h Luecke).
+       caffeinate -i haelt den Mac wach, solange der Loop laeuft. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/sinanharrack/.commandcenter/engine-start.sh</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- BEWUSST KEIN KeepAlive: Der Stop-Knopf im Dashboard killt den Prozess (pkill).
+       Mit KeepAlive wuerde launchd ihn sofort neu starten und der Stop-Knopf waere kaputt.
+       Sinan hat den Bot heute zweimal ueber diesen Knopf gestoppt - der muss funktionieren.
+       Abstuerze faengt stattdessen die Selbstheilung in core/session.ts ab. -->
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/sinanharrack/.commandcenter/launchagent.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/sinanharrack/.commandcenter/launchagent.log</string>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/sinanharrack/Downloads/linkedin-command-center</string>
+</dict>
+</plist>

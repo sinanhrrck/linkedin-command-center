@@ -1,31 +1,51 @@
 # Auto-Start & Dauerbetrieb (macOS)
 
-Damit das Dashboard beim Login automatisch startet und der Bot nicht durch Ruhezustand stirbt.
+## Warum das der groesste Hebel ist
+Der Bot schoepft sein Tageslimit voll aus, WENN er laeuft. Er war nur meistens aus:
+15.07. = 10 Anfragen dann 21h Luecke, 16.07. = 11, 17.07. = 12 (je ~2h Laufzeit).
+Von 100 moeglichen Anfragen/Woche wurden 33 genutzt. Nicht das Tempo fehlt, die Laufzeit.
 
-## Sleep-Schutz (schon eingebaut)
-Der Loop wird beim „Bot starten" automatisch mit `caffeinate -i` gestartet – der Mac schläft
-nicht ein, solange der Bot läuft. Beim Stoppen schläft er wieder normal.
-Hinweis: `caffeinate -i` verhindert **Idle-Sleep**. Bei **zugeklapptem Deckel** schläft der Mac
-trotzdem, außer er hängt am Strom + externem Monitor (Clamshell) oder du stellst in
-Systemeinstellungen → Batterie den Ruhezustand entsprechend.
+## Der Engine-LaunchAgent (startet den Bot beim Login)
 
-## Auto-Start des Dashboards beim Login (optional, du installierst es selbst)
+**FALLE (live gemessen 2026-07-17): Das Startskript darf NICHT in ~/Downloads liegen.**
+macOS schuetzt Downloads/Desktop/Documents per TCC. launchd darf von dort nichts ausfuehren
+und der Job stirbt mit `Exit 78: EX_CONFIG` – ohne jede Fehlermeldung, still.
+Deshalb liegt das Skript in `~/.commandcenter/engine-start.sh` (ungeschuetzt). Das PROJEKT
+selbst darf in ~/Downloads bleiben: nur das Ausfuehren von dort ist blockiert, der laufende
+Prozess kommt an DB und Session heran.
 
 Installieren:
 ```bash
-cp deploy/com.sinan.commandcenter.dashboard.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.sinan.commandcenter.dashboard.plist
-```
-Danach läuft das Dashboard nach jedem Login automatisch auf http://localhost:4321.
-Den Bot/Outreach startest du weiterhin bewusst per „Bot starten"-Button.
-
-Wieder entfernen:
-```bash
-launchctl unload ~/Library/LaunchAgents/com.sinan.commandcenter.dashboard.plist
-rm ~/Library/LaunchAgents/com.sinan.commandcenter.dashboard.plist
+mkdir -p ~/.commandcenter
+cp deploy/engine-start.sh ~/.commandcenter/
+chmod +x ~/.commandcenter/engine-start.sh
+cp deploy/com.sinan.commandcenter.engine.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.sinan.commandcenter.engine.plist
 ```
 
-Prüfen, ob es läuft:
+Pruefen:
 ```bash
-launchctl list | grep commandcenter
+launchctl print gui/$(id -u)/com.sinan.commandcenter.engine | grep -E "state|pid|last exit"
+# state = running  + pid = ... -> laeuft
+# last exit code = 78: EX_CONFIG -> TCC blockt (Skript liegt in einem geschuetzten Ordner)
+tail -f ~/.commandcenter/launchagent.log
 ```
+
+Abschalten:
+```bash
+launchctl unload ~/Library/LaunchAgents/com.sinan.commandcenter.engine.plist
+```
+
+## Bewusst KEIN KeepAlive
+launchd wuerde den Prozess nach jedem Kill sofort neu starten – der Stop-Knopf im Dashboard
+(`pkill`) waere damit kaputt. Sinan nutzt den Knopf. Abstuerze faengt stattdessen die
+Selbstheilung in `core/session.ts` ab (toter Browser -> neu starten).
+
+## Sleep-Schutz
+`caffeinate -i` (im Startskript) haelt den Mac wach, solange der Loop laeuft. Bei
+ZUGEKLAPPTEM Deckel schlaeft er trotzdem – ausser am Strom mit externem Monitor.
+Nicht schlimm: die Arbeitszeit ist ohnehin auf 9-19 Uhr begrenzt.
+
+## Dashboard-Autostart (optional)
+`com.sinan.commandcenter.dashboard.plist` startet nur das Cockpit (localhost:4321),
+nicht den Bot. Gleiche TCC-Falle beachten.
