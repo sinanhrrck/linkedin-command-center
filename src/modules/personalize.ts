@@ -41,8 +41,10 @@ export async function firstMessage(c: Contact): Promise<string> {
 ${promptKontext()}
 Winkel dieser Nachricht: ${ERSTNACHRICHT_ANGLE}
 ${personZeile(c)}
-Nimm konkret Bezug auf die Ausbildung/Bank der Person und ende mit EINER echten Frage danach,
-wie es für sie nach der Ausbildung weitergehen soll. Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
+Nimm konkret Bezug auf DAS, was in der Headline der Person steht (ihre echte Ausbildung, ihr
+echtes Studium, ihr echter Betrieb). Erfinde nichts dazu und unterstelle keine Branche.
+Ende mit EINER echten Frage danach, wie es für sie nach der Ausbildung bzw. dem Studium
+weitergehen soll. Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
   return saubern(await generateText(prompt));
 }
 

@@ -27,9 +27,14 @@ export const PERSONA =
  * Persönlicher Bezug + echtes Interesse an ihrem weiteren Weg.
  */
 export const ERSTNACHRICHT_ANGLE =
-  "Stelle einen persönlichen Bezug her: Sinan hat selbst seine Ausbildung bei einer Bank " +
-  "gemacht. Ziel der Nachricht ist herauszufinden, ob die Person schon einen Plan hat, wie es " +
-  "für sie NACH der Ausbildung weitergeht. Echtes Interesse, kein Pitch, keine Werbung für Fin.Co.";
+  "Die Brücke ist NICHT die Branche, sondern die Lebenslage: Sinan war selbst Azubi (bei einer " +
+  "Bank) und kennt das Gefühl, motiviert zu sein aber ohne echten Plan für die Zeit danach. " +
+  "Genau da holt er die Person ab. Ziel: herausfinden, ob sie schon einen Plan hat, wie es NACH " +
+  "der Ausbildung bzw. dem Studium weitergeht. Echtes Interesse, kein Pitch, keine Werbung für Fin.Co. " +
+  "WICHTIG: Nimm Bezug auf die ECHTE Ausbildung/das echte Studium der Person aus ihrer Headline. " +
+  "Unterstelle NIEMALS eine Bank – die Zielgruppe sind kaufmännische Azubis und Studenten aller " +
+  "Branchen. Sinans eigene Bankausbildung nur erwähnen, wenn sie zur Person passt; sonst reicht " +
+  "'ich hab selbst als Azubi angefangen'.";
 
 /** Was eine Nachricht erreichen soll (Mehrwert-first / Mentoring). */
 export const ZIEL =
