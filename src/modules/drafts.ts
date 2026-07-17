@@ -150,10 +150,27 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
 }
 
 /** Existiert schon ein offener (noch nicht gesendeter) Draft für diesen Thread? */
-function hasOpenDraft(threadUrl: string): boolean {
+/**
+ * Schon bearbeitet? Zwei Fälle zählen:
+ *  1. Es liegt ein offener Entwurf für den Thread (pending/approved) – nicht doppelt schreiben.
+ *  2. Für GENAU DIESE eingegangene Nachricht wurde schon mal ein Entwurf VERWORFEN – dann
+ *     will Sinan darauf nicht antworten, also nicht ungefragt einen neuen erzeugen.
+ *
+ * Punkt 2 war ein Loch: 'discarded' fehlte in der Prüfung. Bei 2 Läufen/Tag nur nervig, ab
+ * stündlicher Prüfung ein Ärgernis mit Kosten – jeder weggeworfene Entwurf käme stündlich
+ * zurück und verbrennt jedes Mal einen KI-Aufruf. Der Vergleich läuft über `incoming`:
+ * schreibt die Person etwas NEUES, entsteht wieder ein Entwurf. Genau so soll es sein.
+ */
+function hasOpenDraft(threadUrl: string, incoming?: string): boolean {
   return !!db
-    .prepare("SELECT 1 FROM drafts WHERE thread_url=? AND status IN ('pending','approved') LIMIT 1")
-    .get(threadUrl);
+    .prepare(
+      `SELECT 1 FROM drafts
+        WHERE thread_url = ?
+          AND ( status IN ('pending','approved')
+                OR (status = 'discarded' AND incoming IS ?) )
+        LIMIT 1`,
+    )
+    .get(threadUrl, incoming ?? null);
 }
 
 export function pendingDrafts(): Draft[] {
@@ -206,7 +223,7 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
     // Antwort-Erkennung: hat ein angeschriebener Kontakt (status 'messaged') geantwortet?
     // → Hot Lead. markRepliedByName wirkt nur bei genau solchen Kontakten.
     if (markRepliedByName(t.participant)) replies++;
-    if (hasOpenDraft(t.threadUrl)) continue;
+    if (hasOpenDraft(t.threadUrl, t.lastIncoming)) continue;
 
     const draft = await replyDraft(t).catch((e) => {
       console.error(`[drafts] Gemini-Fehler bei ${t.participant}:`, e?.message || e);

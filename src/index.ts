@@ -57,6 +57,11 @@ cron.schedule("* * * * *", async () => {
 setTimeout(async () => {
   await einzeln("acceptance", () => checkAcceptances());
   await einzeln("outreach", () => outreachTick());
+  // Auch das Postfach sofort prüfen: wer den Bot mittags startet, soll nicht bis zur
+  // nächsten Viertelstunde warten, um zu sehen, dass er arbeitet.
+  await einzeln("drafts", async () => {
+    if (getMode() !== "full") await generateInboxDrafts(8);
+  });
 }, 4000);
 
 // Fällige Posts veröffentlichen (offizielle API, kein Governor nötig)
@@ -92,12 +97,20 @@ cron.schedule("0 10,16 * * *", () => einzeln("feed", () => feedTick()));
 
 // DM-Entwürfe 2x täglich generieren (rein lesend + Gemini, SENDET NICHT).
 // Neue Entwürfe erscheinen als 'pending' im Dashboard zur Freigabe.
-// Bewusst nur 2x täglich: NICHT aus Vorsicht, sondern wegen des Gemini-Free-Limits
-// (~20 Aufrufe/Tag). Öfter würde das Kontingent sprengen und die Erstnachrichten verhungern lassen.
-cron.schedule("30 9,15 * * *", () =>
+/**
+ * Postfach ALLE 15 MINUTEN prüfen, solange der Bot läuft (vorher nur 2x täglich um 9:30/15:30 –
+ * wer den Bot um 11:36 startete, sah bis 15:30 nichts passieren).
+ *
+ * Warum das trotz Gemini-Limit (~20/Tag) geht: Threads lesen kostet KEINEN KI-Aufruf. Die KI
+ * läuft nur, wenn wirklich eine neue, unbeantwortete Nachricht da ist – und `hasOpenDraft`
+ * überspringt Chats, für die schon ein Entwurf offen ist oder für die dieselbe Nachricht
+ * bereits verworfen wurde. Die Kosten hängen also an der Zahl NEUER Nachrichten, nicht am Takt.
+ * Ist das Gratis-Kontingent leer, springt Claude ein und meldet sich vorher (core/textLlm.ts).
+ */
+cron.schedule("*/15 9-19 * * *", () =>
   einzeln("drafts", async () => {
     // Im Vollautomatik-Modus übernimmt der Autopilot die Antworten – dann keine Entwürfe.
-    if (getMode() !== "full") await generateInboxDrafts(6);
+    if (getMode() !== "full") await generateInboxDrafts(8);
   }),
 );
 
