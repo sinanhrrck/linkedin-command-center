@@ -273,6 +273,34 @@ export function startTelegram() {
     },
   );
 
+  /**
+   * DIE TUER GEHT AUF. Vertrieblich der wichtigste Push: die Person zeigt Unsicherheit oder
+   * Bedarf. Der Bot hat NICHT gesendet, sondern Sinans Antwort vorbereitet - er entscheidet.
+   */
+  events.on(
+    "lead:chance",
+    (e: { participant: string; zusammenfassung: string; strategie: string; vorschlag: string; threadUrl: string }) => {
+      if (!bot || !config.telegram.chatId) return;
+      const d = pendingDrafts().find((x) => x.thread_url === e.threadUrl);
+      bot.api
+        .sendMessage(
+          config.telegram.chatId,
+          `🚪 *DIE TUER GEHT AUF: ${e.participant}*\n\n` +
+            `*Was passiert ist*\n${e.zusammenfassung || "—"}\n\n` +
+            `*Warum das dein Moment ist*\n${e.strategie || "—"}\n\n` +
+            `*Vorgeschlagene Antwort*\n_${e.vorschlag}_\n\n` +
+            `💬 [Chat oeffnen](${e.threadUrl})\n` +
+            `Der Bot haelt hier bewusst an. Ab jetzt du.`,
+          {
+            parse_mode: "Markdown",
+            link_preview_options: { is_disabled: true },
+            ...(d ? { reply_markup: draftKeyboard(d.id) } : {}),
+          },
+        )
+        .catch(() => {});
+    },
+  );
+
   // Autopilot-Handoff: KI hat einen Termin klargemacht → Kontakt sofort pushen.
   events.on("lead:booked", (l: { participant: string; contact: string | null; threadUrl: string }) => {
     if (!bot || !config.telegram.chatId) return;

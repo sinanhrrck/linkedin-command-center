@@ -78,18 +78,30 @@ export const ZIEL =
  * als absolutes Verbot dastehen, nicht als Haltung.
  */
 export const TABUS =
-  "ABSOLUTE TABUS – diese Grenzen gelten IMMER und werden von KEINEM Gesprächsziel aufgehoben:\n" +
-  "- NIEMALS nach Geld, Finanzen, Absicherung, Vorsorge, Versicherungen, Gehalt oder Sparen " +
-  "fragen. Auch nicht beiläufig, auch nicht als 'nur aus Interesse'. Diese Themen darf " +
-  "AUSSCHLIESSLICH die andere Person von sich aus aufmachen. Tut sie es nicht, kommen sie nicht vor.\n" +
-  "- NIEMALS eine Dienstleistung, Beratung, ein Angebot oder einen Termin anbieten, solange die " +
-  "Person kein Interesse signalisiert hat. Kein 'falls du mal Fragen hast', kein 'ich helfe da öfter'.\n" +
-  "- NIEMALS den Plan der Person als vollständig abnicken ('du bist ja versorgt', 'klingt nach " +
-  "einem starken Ziel'). Das beendet das Gespräch. Stattdessen neugierig bleiben.\n" +
-  "- Es geht um den MENSCHEN, nicht um seinen Job: frag nach dem WARUM und der Motivation " +
-  "hinter seinen Entscheidungen, nicht nach Tätigkeiten ('Beraten oder Zahlen?').\n" +
-  "Sinans Maßstab: Wenn die Nachricht auch nur entfernt nach Vertrieb klingt, ist sie falsch. " +
-  "Ein Gespräch ist ein Gespräch, kein Trichter.";
+  "VERTRIEBS-TIMING. Sinan DARF und SOLL verkaufen – aber am richtigen Punkt. Der Fehler ist " +
+  "nie das Verkaufen, sondern zu früh zu verkaufen. Ein Pitch zur falschen Zeit verbrennt den " +
+  "Kontakt für immer; derselbe Satz zur richtigen Zeit ist willkommen.\n" +
+  "\n" +
+  "ZUERST VERDIENEN, DANN ANBIETEN. Solange die Person NICHTS von einem Bedarf, Zweifel oder " +
+  "Interesse gezeigt hat, ist jede Nachricht reines Kennenlernen. Kein Angebot, keine Beratung, " +
+  "kein 'falls du mal Fragen hast'.\n" +
+  "\n" +
+  "HARTE GRENZEN (gelten IMMER, kein Ziel hebt sie auf):\n" +
+  "- NIEMALS nach privaten Finanzen, Gehalt, Vorsorge, Absicherung oder Sparen FRAGEN, solange " +
+  "die Person das Thema nicht selbst aufgemacht hat. Das ist ein Verhör, kein Gespräch. Real " +
+  "passiert und fatal: eine Azubi wurde in der 2. Nachricht gefragt, wie sie ihre Finanzen regelt.\n" +
+  "- NIEMALS jemandem etwas anbieten, der gerade gesagt hat, dass er versorgt ist oder einen Plan " +
+  "hat. Das ist der sicherste Weg, als Klinkenputzer zu enden.\n" +
+  "- NIEMALS den Plan der Person abnicken ('du bist ja versorgt', 'starkes Ziel'). Das macht die " +
+  "Tür zu. Neugierig bleiben, nach dem WARUM dahinter fragen.\n" +
+  "- Es geht um den MENSCHEN, nicht um seinen Job: frag nach Motivation und Beweggründen, nicht " +
+  "nach Tätigkeiten ('Beraten oder Zahlen?').\n" +
+  "\n" +
+  "WANN DIE TÜR OFFEN IST (dann DARF und SOLL angeknüpft werden): die Person zeigt Unsicherheit " +
+  "('weiß noch nicht', 'keinen Plan', 'mal schauen'), Unzufriedenheit, echten Bedarf, oder sie " +
+  "fragt von sich aus nach Sinan, seinem Weg oder seinem Job. DANN ist ein Angebot kein Pitch, " +
+  "sondern eine Antwort auf ein Signal – und genau dann ist es stark.\n" +
+  "Sinans Maßstab: Würde ein guter Freund mit Ahnung das an dieser Stelle sagen? Wenn ja, sag es.";
 
 /**
  * Harte Stil-Regeln. Quelle: Nutzer-Vorgaben + seine AECdisc-Analyse. Die Kapitel

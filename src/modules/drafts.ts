@@ -238,7 +238,7 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
 
     // Hot Lead NUR bei echtem Interesse. Ein höfliches Abwinken ist KEIN heißer Lead –
     // sonst verfälscht es die Pipeline und Sinan ruft die Falschen an.
-    const echtesInteresse = step.intent === "meeting" || step.intent === "positive";
+    const echtesInteresse = ["meeting", "chance", "positive"].includes(step.intent);
     if (echtesInteresse && markRepliedByName(t.participant)) replies++;
     if (step.intent === "objection") markDeclinedByName(t.participant);
 
@@ -250,7 +250,7 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
 
     // Heikle Fälle (Absage/Einwand) NICHT als normalen Entwurf durchwinken, sondern mit
     // Kontext an Sinan eskalieren: Zusammenfassung, Vorschlag, Strategie. Er entscheidet.
-    if (step.intent === "objection" || step.intent === "meeting") {
+    if (step.intent === "objection" || step.intent === "meeting" || step.intent === "chance") {
       events.emit("lead:eskalation", {
         draft: d,
         participant: t.participant,

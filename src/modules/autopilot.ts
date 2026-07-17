@@ -52,6 +52,29 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
       continue;
     }
 
+    /**
+     * DIE TÜR GEHT AUF – der vertrieblich wichtigste Moment im ganzen System.
+     * Die Person zeigt Unsicherheit, Bedarf oder fragt nach Sinan. Genau hier entscheidet
+     * sich, ob ein Gespräch zu etwas wird. Der Bot SENDET hier bewusst NICHT: er bereitet
+     * Sinans Antwort als Entwurf vor und übergibt (Sinans Entscheidung: "der Bot darf und
+     * soll pitchen, aber gut und schlau" + "Entwurf vorbereiten, du gibst frei").
+     * Vorher gab es diesen Zustand nicht: ein heißer Lead plauderte SECHS Mal mit dem Bot,
+     * bevor er überhaupt bei Sinan ankam. Die Chance war dann meist durch.
+     */
+    if (step.intent === "chance") {
+      queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step.reply);
+      db.prepare("UPDATE conversations SET status='escalated', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
+      events.emit("lead:chance", {
+        participant: t.participant,
+        zusammenfassung: step.zusammenfassung,
+        strategie: step.strategie,
+        vorschlag: step.reply,
+        threadUrl: t.threadUrl,
+      });
+      res.escalated++;
+      continue;
+    }
+
     // Termin-Zusage oder Kontakt genannt → HANDOFF, ab hier übernimmt der Mensch
     if (step.intent === "meeting" || step.contact) {
       db.prepare("UPDATE conversations SET status='booked', contact=?, updated_at=datetime('now') WHERE thread_url=?")
