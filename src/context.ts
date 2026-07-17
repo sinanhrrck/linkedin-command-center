@@ -26,15 +26,40 @@ export const PERSONA =
  * Ziel & Winkel der ERSTNACHRICHT an frisch vernetzte Azubis (nach Annahme).
  * Persönlicher Bezug + echtes Interesse an ihrem weiteren Weg.
  */
-export const ERSTNACHRICHT_ANGLE =
-  "Die Brücke ist NICHT die Branche, sondern die Lebenslage: Sinan war selbst Azubi (bei einer " +
-  "Bank) und kennt das Gefühl, motiviert zu sein aber ohne echten Plan für die Zeit danach. " +
-  "Genau da holt er die Person ab. Ziel: herausfinden, ob sie schon einen Plan hat, wie es NACH " +
-  "der Ausbildung bzw. dem Studium weitergeht. Echtes Interesse, kein Pitch, keine Werbung für Fin.Co. " +
-  "WICHTIG: Nimm Bezug auf die ECHTE Ausbildung/das echte Studium der Person aus ihrer Headline. " +
-  "Unterstelle NIEMALS eine Bank – die Zielgruppe sind kaufmännische Azubis und Studenten aller " +
-  "Branchen. Sinans eigene Bankausbildung nur erwähnen, wenn sie zur Person passt; sonst reicht " +
-  "'ich hab selbst als Azubi angefangen'.";
+/**
+ * Zielgruppen. Sinan hat eine AUSBILDUNG gemacht, KEIN Studium – deshalb braucht jede
+ * Zielgruppe ihren eigenen Winkel. Einem Studenten "ich weiß wie das Studium ist" zu
+ * schreiben wäre gelogen, und Studenten riechen das sofort. Ehrlichkeit schlägt Nähe.
+ */
+export type Zielgruppe = "azubi" | "student";
+
+const ANGLE_AZUBI =
+  "Die Brücke ist die gemeinsame Lebenslage: Sinan war SELBST Azubi (bei einer Bank) und kennt " +
+  "das Gefühl, motiviert zu sein aber ohne echten Plan für die Zeit danach. Genau da holt er die " +
+  "Person ab ('ich hab selbst als Azubi angefangen'). Seine Bankausbildung nur erwähnen, wenn die " +
+  "Person auch bei einer Bank/Sparkasse ist; sonst reicht die Azubi-Zeit als gemeinsamer Nenner. " +
+  "Ziel: herausfinden, ob sie schon einen Plan für NACH der Ausbildung hat.";
+
+const ANGLE_STUDENT =
+  "ACHTUNG, HARTE REGEL: Sinan hat NICHT studiert. Er hat eine Ausbildung gemacht. Er darf " +
+  "NIEMALS behaupten, das Studium/die Uni/den Campus/Klausurenphasen zu kennen, und NIEMALS " +
+  "'ich weiß wie das ist' aufs Studium beziehen. Das wäre gelogen und sofort durchschaut. " +
+  "Der ehrliche Winkel ist der UNTERSCHIED, nicht die Gleichheit: Sinan ist den anderen Weg " +
+  "gegangen (Ausbildung statt Studium) und stand am Ende trotzdem vor derselben Frage, was " +
+  "danach kommt. Er fragt aus echter Neugier, nicht aus vorgetäuschter Erfahrung. " +
+  "Ziel: herausfinden, ob die Person schon einen Plan für nach dem Studium hat.";
+
+/** Winkel je Zielgruppe. Bei Unbekannt: der Azubi-Winkel (die häufigere Gruppe). */
+export function erstnachrichtAngle(z: Zielgruppe | null | undefined): string {
+  const kern =
+    "Echtes Interesse, kein Pitch, keine Werbung für Fin.Co. Nimm Bezug auf DAS, was in der " +
+    "Headline der Person steht (echter Beruf, echter Betrieb, echter Studiengang). Erfinde " +
+    "nichts dazu und unterstelle keine Branche.";
+  return `${z === "student" ? ANGLE_STUDENT : ANGLE_AZUBI}\n${kern}`;
+}
+
+/** Rückwärtskompatibel (alte Aufrufer): Azubi-Winkel als Standard. */
+export const ERSTNACHRICHT_ANGLE = erstnachrichtAngle("azubi");
 
 /** Was eine Nachricht erreichen soll (Mehrwert-first / Mentoring). */
 export const ZIEL =

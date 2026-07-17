@@ -1,4 +1,4 @@
-import { db, getState, getMode } from "../db/index.js";
+import { db, getState, getMode, getFocus } from "../db/index.js";
 import { governor } from "../core/safetyGovernor.js";
 import { pendingDrafts } from "./drafts.js";
 import { hotLeads } from "./crm.js";
@@ -97,6 +97,12 @@ export function getDashboardData() {
     drafts: pendingDrafts(),
     hotLeads: hotLeads(),
     mode: getMode(),
+    focus: getFocus(),
+    // Wie viele Leads warten je Zielgruppe? Zeigt, ob der gewaehlte Fokus noch Sprit hat.
+    fokusVorrat: Object.fromEntries(
+      (db.prepare("SELECT COALESCE(zielgruppe,'?') z, COUNT(*) n FROM contacts WHERE status='new' GROUP BY z").all() as { z: string; n: number }[])
+        .map((r) => [r.z, r.n]),
+    ),
     bookedLeads: db
       .prepare("SELECT participant, contact, thread_url, updated_at FROM conversations WHERE status='booked' ORDER BY updated_at DESC")
       .all(),

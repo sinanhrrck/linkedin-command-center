@@ -2,7 +2,7 @@ import { generateText } from "../core/textLlm.js";
 import { generateClaude, claudeAvailable } from "../core/claude.js";
 import { config } from "../config.js";
 import type { Contact } from "./crm.js";
-import { promptKontext, saubern, ERSTNACHRICHT_ANGLE } from "../context.js";
+import { promptKontext, saubern, erstnachrichtAngle, type Zielgruppe } from "../context.js";
 
 /**
  * Router für den Autopilot-Text: bezahltes Claude (Standard im Voll-Modus, Qualität +
@@ -39,7 +39,7 @@ Nimm EINEN konkreten Bezug zur Person (z.B. ihre Rolle/Ausbildung). Gib NUR die 
 export async function firstMessage(c: Contact): Promise<string> {
   const prompt = `Schreibe eine erste LinkedIn-Nachricht an einen frisch vernetzten Kontakt (3-4 Sätze).
 ${promptKontext()}
-Winkel dieser Nachricht: ${ERSTNACHRICHT_ANGLE}
+Winkel dieser Nachricht: ${erstnachrichtAngle(c.zielgruppe as Zielgruppe | null)}
 ${personZeile(c)}
 Nimm konkret Bezug auf DAS, was in der Headline der Person steht (ihre echte Ausbildung, ihr
 echtes Studium, ihr echter Betrieb). Erfinde nichts dazu und unterstelle keine Branche.

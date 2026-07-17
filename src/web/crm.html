@@ -456,6 +456,13 @@
         <button data-mode="full">Voll</button>
       </div>
       <div class="mode-note" id="mode-note"></div>
+      <p class="eyebrow" style="margin-top:16px">Fokus · wen suchen wir?</p>
+      <div class="modeseg" id="focusseg">
+        <button data-focus="azubi">Azubis</button>
+        <button data-focus="student">Studenten</button>
+        <button data-focus="beides">Beides</button>
+      </div>
+      <div class="mode-note" id="focus-note"></div>
       <div class="act-tally" id="act-tally"></div>
     </div>
     <div class="act-right">
@@ -654,6 +661,7 @@ function render() {
 
   renderActivity();
   renderMode();
+  renderFocus();
   renderLive();
   renderTermine();
   renderHotLeads();
@@ -796,6 +804,37 @@ function renderLive() {
   };
   probe.src = "/api/live.jpg?t=" + Date.now();
 }
+
+/**
+ * Fokus-Schalter: Sinan stellt ein, auf wen der Bot gehen soll – der holt sich den Nachschub
+ * dann selbst aus den passenden Quellen. Die Vorrats-Zahl zeigt ehrlich, ob der gewaehlte
+ * Fokus noch Leads hat oder gleich trockenlaeuft.
+ */
+function renderFocus() {
+  const f = state.focus || "azubi";
+  document.querySelectorAll("#focusseg button").forEach(b => {
+    b.classList.toggle("active", b.dataset.focus === f);
+  });
+  const v = state.fokusVorrat || {};
+  const azubi = v.azubi || 0, stud = v.student || 0;
+  const vorrat = f === "azubi" ? azubi : f === "student" ? stud : azubi + stud;
+  const txt = {
+    azubi: "Nur Azubis & duale Studenten. Deine Kern-Zielgruppe: du warst selbst Azubi, die Nachricht trifft.",
+    student: "Nur Studenten. Die KI sagt hier ehrlich, dass du nie studiert hast, statt Naehe vorzutaeuschen.",
+    beides: "Azubis und Studenten. Mehr Nachschub, jede Gruppe bekommt ihren eigenen Winkel.",
+  }[f];
+  document.getElementById("focus-note").innerHTML =
+    txt + `<br><span style="color:${vorrat < 10 ? "var(--red)" : "var(--ink-dim)"}">` +
+    `Vorrat: ${vorrat} Leads warten` + (vorrat < 10 ? " · laeuft bald trocken" : "") + "</span>";
+}
+
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("#focusseg button");
+  if (!b) return;
+  await fetch("/api/focus", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ focus: b.dataset.focus }) });
+  load();
+});
 
 function renderTermine() {
   const list = state.bookedLeads || [];

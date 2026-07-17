@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
 import { getDraft, setDraftStatus, sendDraft } from "../modules/drafts.js";
 import { deleteContact } from "../modules/crm.js";
-import { db, getState, setState, setMode, type Mode } from "../db/index.js";
+import { db, getState, setState, setMode, setFocus, getFocus, type Mode, type Focus } from "../db/index.js";
 import { LIVE_SHOT_PATH } from "../core/session.js";
 
 /**
@@ -116,6 +116,27 @@ const server = createServer((req, res) => {
         }
         setMode(mode as Mode);
         res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, mode }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // FOKUS umschalten: auf welche Zielgruppe geht der Bot? Steuert, aus welchen Quellen er
+  // sich Nachschub holt (leadFeed). Sinan stellt nur das ein, der Rest laeuft von allein.
+  if (url.pathname === "/api/focus" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { focus } = JSON.parse(body || "{}");
+        if (!["azubi", "student", "beides"].includes(focus)) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad focus" }));
+          return;
+        }
+        setFocus(focus as Focus);
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, focus }));
       } catch (e) {
         res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
       }

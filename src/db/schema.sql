@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   accepted_at   TEXT,
   messaged_at   TEXT,   -- wann Erstnachricht raus (Follow-up-Timing)
   replied_at    TEXT,   -- wann der Kontakt geantwortet hat (Hot Lead)
+  zielgruppe    TEXT,   -- azubi | student : steuert den Winkel der Erstnachricht (Sinan hat NICHT studiert)
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS lead_sources (
   cursor_page INTEGER NOT NULL DEFAULT 1,
   active      INTEGER NOT NULL DEFAULT 1,
   keep_filter TEXT,                            -- optional: nur Kontakte speichern, deren Name/Headline dazu passt (Regex, i)
+  zielgruppe  TEXT,                            -- azubi | student : Fokus-Steuerung + Winkel der Erstnachricht
   last_run    TEXT,
   last_added  INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))

@@ -7,17 +7,24 @@ export type Contact = {
   headline?: string;
   status: string;
   notes?: string;
+  /** azubi | student – steuert den Winkel der Erstnachricht. Sinan hat NICHT studiert. */
+  zielgruppe?: string | null;
 };
 
 /** Kontakt anlegen oder ergänzen (kein Duplikat pro Profil-URL). */
 export function upsertContact(c: { profileUrl: string; fullName?: string; headline?: string }) {
+  // Zielgruppe direkt beim Anlegen bestimmen – sie entscheidet später den Winkel der
+  // Erstnachricht (Azubi vs. Student). Aus der Headline, nicht aus der Quelle: eine Suche
+  // liefert gemischte Ergebnisse, die Headline ist die Wahrheit über die Person.
+  const zg = zielgruppeAusHeadline(c.headline);
   db.prepare(
-    `INSERT INTO contacts(profile_url, full_name, headline)
-     VALUES(?,?,?)
+    `INSERT INTO contacts(profile_url, full_name, headline, zielgruppe)
+     VALUES(?,?,?,?)
      ON CONFLICT(profile_url) DO UPDATE SET
-       full_name = COALESCE(excluded.full_name, contacts.full_name),
-       headline  = COALESCE(excluded.headline,  contacts.headline)`,
-  ).run(c.profileUrl, c.fullName ?? null, c.headline ?? null);
+       full_name  = COALESCE(excluded.full_name, contacts.full_name),
+       headline   = COALESCE(excluded.headline,  contacts.headline),
+       zielgruppe = COALESCE(excluded.zielgruppe, contacts.zielgruppe)`,
+  ).run(c.profileUrl, c.fullName ?? null, c.headline ?? null, zg);
 }
 
 /** Nächste noch nicht kontaktierte Leads. */
@@ -62,6 +69,22 @@ export function countContacts(): number {
 }
 
 /** Markiert einen gemessagten Kontakt als 'replied' (Hot Lead), matcht per Name. */
+/**
+ * Zielgruppe aus der Headline ableiten. Entscheidet den Winkel der Erstnachricht:
+ * Sinan war Azubi, hat aber NICHT studiert – einem Studenten Studien-Erfahrung
+ * vorzuspielen wäre gelogen (siehe context.ts ANGLE_STUDENT).
+ *
+ * Reihenfolge zählt: "dualer Student" ist beides, gilt aber als Azubi – dual Studierende
+ * sind im Betrieb und leben faktisch die Azubi-Lebenslage, da passt Sinans Geschichte.
+ */
+export function zielgruppeAusHeadline(headline?: string | null): "azubi" | "student" | null {
+  const h = (headline ?? "").toLowerCase();
+  if (!h) return null;
+  if (/dual|azubi|auszubild|ausbildung|lehrjahr|lehrling/.test(h)) return "azubi";
+  if (/student|studium|studier|bachelor|master|b\.?sc|m\.?sc/.test(h)) return "student";
+  return null;
+}
+
 /**
  * Höfliche Absage: Person hat geantwortet, aber abgewunken ("hab schon einen Plan",
  * "danke der Nachfrage"). Status 'closed' statt 'replied' – damit taucht sie NICHT in den

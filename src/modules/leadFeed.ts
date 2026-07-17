@@ -1,4 +1,4 @@
-import { db } from "../db/index.js";
+import { db, getFocus } from "../db/index.js";
 import { scrapeSearch } from "./leads.js";
 import { countContacts } from "./crm.js";
 
@@ -14,6 +14,7 @@ export type LeadSource = {
   cursor_page: number;
   active: number;
   keep_filter: string | null;
+  zielgruppe: string | null;
   last_run: string | null;
   last_added: number;
 };
@@ -50,7 +51,18 @@ function pagedUrl(url: string, page: number): string {
  * (Ende erreicht) → zurück auf Seite 1 (Suchergebnisse ändern sich über Zeit).
  */
 export async function feedTick(maxPerSource = 25): Promise<number> {
-  const sources = db.prepare("SELECT * FROM lead_sources WHERE active=1").all() as LeadSource[];
+  // FOKUS: Sinan stellt im Dashboard ein, auf wen er gerade geht – der Bot holt sich den
+  // Nachschub dann selbst aus den passenden Quellen. Kein manuelles An-/Ausknipsen mehr.
+  // Quellen ohne Zielgruppe laufen immer mit (alte Quellen bleiben so funktionsfähig).
+  const focus = getFocus();
+  const sources = (
+    db.prepare("SELECT * FROM lead_sources WHERE active=1").all() as LeadSource[]
+  ).filter((s) => focus === "beides" || !s.zielgruppe || s.zielgruppe === focus);
+  if (!sources.length) {
+    console.info(`[feed] keine Quelle für Fokus "${focus}" – nichts zu tun.`);
+    return 0;
+  }
+  console.info(`[feed] Fokus "${focus}" → ${sources.length} Quelle(n)`);
   let totalNew = 0;
   for (const s of sources) {
     const before = countContacts();

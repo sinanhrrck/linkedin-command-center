@@ -25,6 +25,16 @@ try {
 try {
   db.exec("ALTER TABLE contacts ADD COLUMN replied_at TEXT"); // wann der Kontakt geantwortet hat (Hot Lead)
 } catch {
+  /* Spalte existiert schon */
+}
+try {
+  db.exec("ALTER TABLE contacts ADD COLUMN zielgruppe TEXT"); // azubi | student -> Winkel der Erstnachricht
+} catch {
+  /* Spalte existiert schon */
+}
+try {
+  db.exec("ALTER TABLE lead_sources ADD COLUMN zielgruppe TEXT"); // azubi | student -> Fokus-Steuerung
+} catch {
   /* Spalte existiert bereits */
 }
 
@@ -54,4 +64,21 @@ export function getStartDate(): Date {
     setState("start_date", iso);
   }
   return new Date(iso);
+}
+
+/**
+ * FOKUS: auf welche Zielgruppen soll der Bot gerade gehen? Steuert, welche Lead-Quellen
+ * abgegrast werden (leadFeed). Sinan stellt das im Dashboard ein, der Bot holt sich den
+ * Nachschub dann von allein – ohne dass jemand Quellen an- und ausknipsen muss.
+ * "beides" = alle Quellen. Default: azubi (Sinans Kern-Zielgruppe).
+ */
+export type Focus = "azubi" | "student" | "beides";
+
+export function getFocus(): Focus {
+  const v = getState("focus");
+  return v === "student" || v === "beides" ? v : "azubi";
+}
+
+export function setFocus(f: Focus) {
+  setState("focus", f);
 }
