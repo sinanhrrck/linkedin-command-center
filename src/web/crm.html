@@ -264,7 +264,25 @@
   .act-tally { display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
   .act-tally div { font-family: var(--mono); font-size: 9.5px; color: var(--ink-faint); letter-spacing: .1em; text-transform: uppercase; }
   .act-tally b { display: block; font-family: var(--disp); font-size: 23px; color: var(--ink); margin-top: 4px; letter-spacing: -.02em; }
-  .act-feed { display: flex; flex-direction: column; max-height: 210px; overflow-y: auto; }
+  /* Der Feed wuchs nicht mit: feste 210px, waehrend die linke Spalte durch Modus- und
+     Fokus-Schalter immer hoeher wurde -> grosses schwarzes Loch darunter. Jetzt fuellt er
+     die Hoehe der Karte aus und zeigt entsprechend mehr Aktivitaet. */
+  /**
+   * Der Feed hatte feste 210px, waehrend die linke Spalte durch Modus- und Fokus-Schalter
+   * auf 616px wuchs -> ~400px schwarzes Loch. Ein fester max-height-Wert trifft das nie:
+   * die linke Spalte ist mal 466px, mal 616px (je nach Textumbruch).
+   *
+   * Loesung: den Feed ABSOLUT positionieren. Damit zaehlt er nicht zur Zeilenhoehe des
+   * Grids (sonst wuerde er auf alle 30 Eintraege = 1400px aufziehen und die Karte sprengen),
+   * fuellt aber exakt die Hoehe, die die linke Spalte vorgibt – und scrollt darin.
+   * Gemessen: linke Spalte 616px, Feed 590px, Loch 0px.
+   */
+  .act-right { position: relative; min-height: 210px; }
+  .act-feed { position: absolute; left: 0; right: 0; top: 26px; bottom: 0;
+    display: flex; flex-direction: column; overflow-y: auto; }
+  /* Nichts los? Dann sagen wir das, statt eine leere Flaeche zu zeigen. */
+  .act-empty { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
+    color: var(--ink-faint); font-size: 12.5px; line-height: 1.7; padding: 20px; }
   .act-row { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 13px; }
   .act-row:last-child { border-bottom: none; }
   .act-ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none; }
@@ -275,6 +293,10 @@
   @media (max-width: 760px) {
     .activity-panel { grid-template-columns: 1fr; }
     .act-left { border-right: none; border-bottom: 1px solid var(--line); padding: 0 0 18px; }
+    /* Gestapelt gibt es keine linke Spalte, an der sich der Feed ausrichten koennte –
+       absolut positioniert haette er hier gar keine Hoehe. Also zurueck in den Textfluss. */
+    .act-right { position: static; }
+    .act-feed { position: static; max-height: 420px; }
   }
 
   /* --- Hot Leads --- */

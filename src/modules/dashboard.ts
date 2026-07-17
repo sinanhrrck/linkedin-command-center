@@ -52,7 +52,7 @@ export function getDashboardData() {
     .prepare(
       `SELECT a.type, a.target, a.created_at, c.full_name
        FROM actions a LEFT JOIN contacts c ON c.profile_url = a.target
-       ORDER BY a.created_at DESC LIMIT 15`,
+       ORDER BY a.created_at DESC LIMIT 30`, // 30 statt 15: der Feed fuellt jetzt die Kartenhoehe
     )
     .all() as { type: string; target: string | null; created_at: string; full_name: string | null }[];
 
