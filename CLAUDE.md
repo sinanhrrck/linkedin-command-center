@@ -15,7 +15,10 @@ Das Posting über die offizielle API (`src/modules/posting.ts`) ist bewusst getr
 braucht den Governor NICHT.
 
 ## Architektur
-- `core/safetyGovernor.ts` — Herzstück: Drosselung + Circuit-Breaker
+- `core/safetyGovernor.ts` — Herzstück: Drosselung + Circuit-Breaker. WOCHENEND-REGEL
+  (2026-07-18): `withinWorkingHours(type)` ist typ-abhängig — am Sa/So sind nur
+  `config.safety.weekendActions` (connect/like/profileView) erlaubt, message+comment NICHT
+  (Nachrichten wirken werktags menschlicher). Vernetzen läuft also 7 Tage, DMs nur Mo-Fr.
 - `core/session.ts` — persistenter Playwright-Kontext (echte Session) + Checkpoint-Erkennung.
   Fenster läuft VERSTECKT (`config.browser.hidden`, macOS via System Events), stört Sinan nicht.
   `getContext({visible:true})` nur fürs manuelle Login.
@@ -70,6 +73,15 @@ braucht den Governor NICHT.
   Conversion-Funnel als horizontale Balken (`#funnel`, Conversion-% je Stufe); KPI-Trend-
   Badges (`deltaBadge`, `dashboard.deltas` = Woche vs. Vorwoche). Neue State-Felder in
   dashboard.ts: weekActivity, trend, deltas, contacts.lead_score.
+  FREIGABE-WORKFLOW (2026-07-18, Sinans Vorgabe): Der Nutzer entscheidet im Dashboard nur
+  GENEHMIGEN oder ABLEHNEN, das SENDEN macht die ENGINE. `dc-approve` → /api/draft
+  action=approve → `approveDraft` setzt status='approved'. Der Engine-Cron `sendApprovedDrafts`
+  (index.ts, alle 10 Min 9-19 + Morgen-Routine 9:00 + Start-Tick) sendet approved-Drafts
+  governor-gedrosselt. `dc-reject` → action=reject → `rejectDraft` verwirft + erzeugt SOFORT
+  einen neuen Entwurf (`regenerateText`, KI-Aufruf). Kein Direktversand mehr aus dem Dashboard.
+  Entwurfskarten zeigen wichtige Intents (chance/einwand/meeting) als `dc-flag`. Action-Center
+  hat eindeutige Ziele je Punkt (Entwürfe→Bearbeiten, Hot Leads→Anrufen), Eskalation als
+  "N× wichtig"-Tag beim Entwürfe-Punkt statt eigener (verwirrender) Doppel-Zeile.
   ACHTUNG bei langen Seiten: der In-App-Browser-Pane paintet weit unten nach Scroll teils
   nicht (Artefakt) — DOM/oberer Bereich sind maßgeblich, nicht der Leerscreenshot.
 

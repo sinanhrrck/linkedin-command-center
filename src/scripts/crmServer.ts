@@ -4,7 +4,7 @@ import { readFileSync, openSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
-import { getDraft, setDraftStatus, sendDraft } from "../modules/drafts.js";
+import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft } from "../modules/drafts.js";
 import { getPost, approvePost, discardPost } from "../modules/content.js";
 import { deleteContact } from "../modules/crm.js";
 import { db, getState, setState, setMode, setFocus, getFocus, type Mode, type Focus } from "../db/index.js";
@@ -73,6 +73,15 @@ const server = createServer((req, res) => {
           db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), Number(id));
         } else if (action === "discard") {
           setDraftStatus(Number(id), "discarded");
+        } else if (action === "approve") {
+          // Genehmigen: der Bot sendet beim nächsten Lauf (governor-gedrosselt). Kein Direktversand.
+          approveDraft(Number(id), typeof text === "string" ? text : undefined);
+        } else if (action === "reject") {
+          // Ablehnen: verwerfen + sofort einen neuen Entwurf erzeugen (async, KI-Aufruf).
+          rejectDraft(Number(id))
+            .then((r) => res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(r)))
+            .catch((e) => res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String(e?.message ?? e).slice(0, 160) })));
+          return; // Antwort kommt asynchron
         } else if (action === "send") {
           // Vorher speichern, falls im Feld editiert wurde – sonst geht der alte Text raus.
           if (typeof text === "string" && text.trim()) {

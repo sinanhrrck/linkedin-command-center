@@ -24,6 +24,8 @@ export type Draft = {
   status: string;
   created_at: string;
   sent_at: string | null;
+  intent: string | null;
+  ki_original: string | null;
 };
 
 /** Gemini erzeugt Sinans nächste Antwort aus dem Thread-Verlauf. */
@@ -185,6 +187,91 @@ export function getDraft(id: number): Draft | undefined {
 
 export function setDraftStatus(id: number, status: string) {
   db.prepare("UPDATE drafts SET status=? WHERE id=?").run(status, id);
+}
+
+/**
+ * FREIGABE-WORKFLOW (Sinans Wunsch): Der Nutzer entscheidet nur genehmigen/ablehnen, das
+ * SENDEN macht die Engine beim nächsten Lauf (governor-gedrosselt). Kein Direktversand mehr
+ * aus dem Dashboard-Prozess – ein Ort weniger, an dem etwas schiefgeht.
+ *
+ * Genehmigen: Status 'approved'. `sendApprovedDrafts` (Engine-Cron) holt sie und sendet.
+ * Optionaler `text` übernimmt eine letzte Bearbeitung vor der Freigabe.
+ */
+export function approveDraft(id: number, text?: string): boolean {
+  const d = getDraft(id);
+  if (!d || d.status === "sent") return false;
+  if (typeof text === "string" && text.trim()) db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), id);
+  setDraftStatus(id, "approved");
+  return true;
+}
+
+/** Wie viele Entwürfe warten aktuell freigegeben auf den nächsten Versand? (Dashboard-Anzeige) */
+export function approvedCount(): number {
+  return (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status='approved'").get() as { n: number }).n;
+}
+
+/**
+ * Ablehnen: verwirft den Entwurf UND erzeugt sofort einen neuen (andere Formulierung).
+ * Genau das hat Sinan verlangt: "wenn ich sie ablehne will ich, dass ein neuer Entwurf kommt."
+ * Der neue Entwurf ist wieder 'pending' und landet als Karte + Event im Dashboard.
+ */
+export async function rejectDraft(id: number): Promise<{ ok: boolean; regenerated: boolean }> {
+  const d = getDraft(id);
+  if (!d) return { ok: false, regenerated: false };
+  setDraftStatus(id, "discarded");
+  const neu = await regenerateText(d).catch((e) => {
+    console.error("[reject] Neu-Generierung fehlgeschlagen:", String((e as Error)?.message ?? e).slice(0, 90));
+    return "";
+  });
+  if (!neu) return { ok: true, regenerated: false };
+  const info = db
+    .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES(?,?,?,?,?,?,?)")
+    .run(d.kind, d.thread_url, d.participant, d.incoming, neu, neu, d.intent ?? null);
+  events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
+  return { ok: true, regenerated: true };
+}
+
+/** Erzeugt für einen abgelehnten Entwurf einen frischen Text (kind-abhängig, "anders formulieren"). */
+async function regenerateText(d: Draft): Promise<string> {
+  const avoid = d.draft ? `\n\nFormuliere es DEUTLICH anders als dieser abgelehnte Entwurf (Sinan mochte ihn nicht):\n"${d.draft}"` : "";
+  if (d.kind === "first" || d.kind === "followup") {
+    // Für den richtigen Winkel den Kontakt holen; sonst generischer Fallback.
+    const c = db.prepare("SELECT * FROM contacts WHERE profile_url=?").get(d.thread_url) as Contact | undefined;
+    if (c) return d.kind === "first" ? firstMessage(c) : followupMessage(c);
+  }
+  if (d.kind === "comment") {
+    return saubern(await generateText(
+      `Du bist Sinan und kommentierst diesen fremden LinkedIn-Post:\n"${d.incoming}"\n${promptKontext()}\n` +
+      `Schreibe einen kurzen, echten Kommentar (1-2 Sätze), kein Pitch, keine Eigenwerbung.${avoid}\nNur der Kommentar.`,
+    ));
+  }
+  // 'message' = Thread-Antwort (und Fallback für first/followup ohne Kontakt).
+  return saubern(await generateText(
+    `Du bist Sinan und antwortest ${d.participant || "jemandem"} auf eine LinkedIn-Nachricht.\n${promptKontext()}\n` +
+    `Letzte Nachricht von ${d.participant || "der Person"}:\n"${d.incoming}"\n` +
+    `Schreibe Sinans Antwort, konkret auf die Nachricht.${avoid}\nNur der Nachrichtentext.`,
+  ));
+}
+
+/**
+ * Engine-Routine: sendet freigegebene ('approved') Entwürfe nacheinander über den Governor.
+ * Bei Governor-Block (Cap/Arbeitszeit/Wochenende) wird ABGEBROCHEN – die restlichen bleiben
+ * 'approved' und kommen beim nächsten Lauf dran. So sendet der Bot Nachrichten nie am
+ * Wochenende (message ist werktags-gated), arbeitet die Freigaben aber verlässlich ab.
+ */
+export async function sendApprovedDrafts(limit = 10): Promise<number> {
+  const rows = db.prepare("SELECT id FROM drafts WHERE status='approved' ORDER BY created_at LIMIT ?").all(limit) as { id: number }[];
+  let sent = 0;
+  for (const { id } of rows) {
+    const r = await sendDraft(id).catch((e) => {
+      console.error("[approved] Sendefehler:", String((e as Error)?.message ?? e).slice(0, 90));
+      return { ok: false, reason: "Fehler" } as { ok: boolean; reason?: string };
+    });
+    if (r.ok) sent++;
+    else if (r.reason && /Governor|Arbeitszeit|Wochenende|Limit|blockiert/i.test(r.reason)) break;
+  }
+  if (sent) console.info(`[approved] ${sent} freigegebene Entwürfe gesendet`);
+  return sent;
 }
 
 /**

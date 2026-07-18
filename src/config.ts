@@ -107,7 +107,13 @@ export const config = {
 
     // Nur in diesen Zeitfenstern arbeiten (lokale Uhrzeit, 24h).
     workingHours: { start: 9, end: 19 },
-    workOnWeekends: false,
+    // Am Wochenende (Sa/So) NUR diese Aktionstypen: Vernetzungsanfragen wirken auch am
+    // Wochenende natürlich, Direktnachrichten/Kommentare NICHT (die sollen wie ein Mensch
+    // Mo-Fr kommen). Likes/Profilbesuche sind harmlos und dürfen ebenfalls am Wochenende.
+    // Sinans Vorgabe: "Vernetzungsanfragen können auch Samstag und Sonntag gemacht werden,
+    // Nachrichten nur Montag bis Freitag."
+    weekendActions: ["connect", "like", "profileView"],
+    workOnWeekends: true, // Wochenende NICHT komplett sperren – die Feinsteuerung macht weekendActions
 
     // Circuit-Breaker: fällt die Akzeptanzrate der letzten 7 Tage darunter,
     // pausiert der Outreach automatisch.

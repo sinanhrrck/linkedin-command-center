@@ -6,7 +6,7 @@ import { publishPost } from "./modules/posting.js";
 import { outreachTick } from "./modules/outreachTick.js";
 import { checkAcceptances } from "./modules/acceptance.js";
 import { feedTick } from "./modules/leadFeed.js";
-import { generateInboxDrafts, generateFollowups } from "./modules/drafts.js";
+import { generateInboxDrafts, generateFollowups, sendApprovedDrafts } from "./modules/drafts.js";
 import { generatePostIdeas } from "./modules/content.js";
 import { commentTick } from "./modules/comment.js";
 import { runAutopilot } from "./modules/autopilot.js";
@@ -65,6 +65,8 @@ setTimeout(async () => {
   await einzeln("drafts", async () => {
     if (getMode() !== "full") await generateInboxDrafts(8);
   });
+  // Freigegebene Entwürfe, die noch offen sind, gleich beim Start abarbeiten.
+  await einzeln("sendApproved", () => sendApprovedDrafts(15));
 }, 4000);
 
 // Fällige Posts veröffentlichen (offizielle API, kein Governor nötig)
@@ -116,6 +118,20 @@ cron.schedule("*/15 9-19 * * *", () =>
     if (getMode() !== "full") await generateInboxDrafts(8);
   }),
 );
+
+// MORGEN-ROUTINE (9:00, Sinans Vorgabe): erst alle offenen Chats beantworten (Entwürfe
+// erzeugen), dann die vom Nutzer freigegebenen Entwürfe abarbeiten (senden). So liegt morgens
+// als Erstes die frische Antwort-Liste bereit und gestern Genehmigtes geht sofort raus.
+cron.schedule("0 9 * * *", () =>
+  einzeln("morgen", async () => {
+    if (getMode() !== "full") await generateInboxDrafts(10);
+    await sendApprovedDrafts(20);
+  }),
+);
+
+// Freigegebene Entwürfe regelmäßig senden (alle 10 Min in der Arbeitszeit). Governor-gedrosselt;
+// Nachrichten sind werktags-gated, am Wochenende wartet also alles bis Montag.
+cron.schedule("*/10 9-19 * * *", () => einzeln("sendApproved", () => sendApprovedDrafts(10)));
 
 // Follow-ups 1x täglich: für Kontakte, die seit >=4 Tagen nicht geantwortet haben.
 cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4, 5)));

@@ -253,6 +253,30 @@
   .draft-saved { font-size: 11px; color: var(--green); opacity: 0; transition: opacity .2s; }
   .draft-saved.show { opacity: 1; }
   .draft-card.sending { box-shadow: 0 0 0 2px rgba(22,133,90,.3), var(--shadow-sm); }
+  /* Freigabe-Workflow: Genehmigen (primär grün) + Ablehnen (dezent) */
+  .dc-approve { font-family: var(--disp); font-weight: 600; font-size: 12.5px; border: none; border-radius: 10px; padding: 9px 16px; color: #fff; background: var(--hero-grad); box-shadow: 0 6px 14px -6px rgba(20,80,50,.5); transition: transform .12s, opacity .15s; }
+  .dc-approve:hover { transform: translateY(-1px); }
+  .dc-approve.ok { background: var(--green); }
+  .dc-approve:disabled { cursor: default; opacity: .85; }
+  .dc-reject { margin-left: auto; font-family: var(--disp); font-weight: 500; font-size: 12px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-dim); border-radius: 10px; padding: 8px 13px; transition: all .15s; }
+  .dc-reject:hover { border-color: var(--amber); color: var(--amber); }
+  .dc-reject:disabled { cursor: default; }
+  .draft-card.approved { opacity: .55; box-shadow: 0 0 0 2px rgba(31,157,99,.28), var(--shadow-sm); }
+  .draft-card.rejecting { opacity: .5; }
+  /* Intent-Flagge auf der Karte (was ist wichtig?) */
+  .dc-flag { display: flex; flex-direction: column; gap: 1px; padding: 8px 11px; border-radius: 10px; margin-bottom: 10px; border-left: 3px solid; }
+  .dc-flag b { font-size: 12px; font-weight: 700; }
+  .dc-flag span { font-size: 11px; color: var(--ink-dim); line-height: 1.35; }
+  .dc-flag.chance { background: rgba(31,157,99,.08); border-color: var(--green); }
+  .dc-flag.chance b { color: #12855a; }
+  .dc-flag.einwand { background: rgba(192,122,18,.09); border-color: var(--amber); }
+  .dc-flag.einwand b { color: var(--amber); }
+  .dc-flag.absage { background: var(--panel-2); border-color: var(--ink-faint); }
+  .dc-flag.absage b { color: var(--ink-dim); }
+  /* Action-Center CTA + Wichtig-Tag */
+  .ac-cta { font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .ac-item.hot .ac-cta { color: var(--red); }
+  .ac-tag { display: inline-block; font-size: 10px; font-weight: 700; color: #12855a; background: rgba(31,157,99,.14); padding: 1px 6px; border-radius: 20px; margin-left: 4px; }
 
   /* ---------- Live-Ansicht ---------- */
   .live-wrap { padding: 0; overflow: hidden; position: relative; min-height: 200px; }
@@ -577,8 +601,11 @@
   <!-- Entwürfe -->
   <section id="drafts-section" style="display:none">
     <div class="section-head">
-      <p class="sec-title">DM-Entwürfe · Freigabe <span id="drafts-count" class="sec-count"></span></p>
-      <button class="bulk-btn" id="bulk-send" title="Alle DM-Entwürfe nacheinander senden (governor-gedrosselt)">Alle senden</button>
+      <p class="sec-title">Entwürfe · genehmigen oder ablehnen <span id="drafts-count" class="sec-count"></span></p>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="drafts-approved" class="sec-hint" style="color:var(--green)"></span>
+        <button class="bulk-btn" id="bulk-send" title="Alle Entwürfe genehmigen – der Bot sendet sie danach nacheinander">Alle genehmigen</button>
+      </div>
     </div>
     <div class="drafts-grid" id="drafts-grid"></div>
   </section>
@@ -958,12 +985,23 @@ function renderActionCenter() {
   const drafts = (state.drafts || []).length;
   const posts = (state.postDrafts || []).length;
   const hot = (state.hotLeads || []).length;
-  const esc = (state.convStats || {}).escalated || 0;
+  // Wichtige (eskalierte) Entwürfe zählen: Chance/Einwand/Termin. Kein eigener Punkt mehr,
+  // sondern ein Zusatz beim Entwürfe-Punkt – so ist klar, dass beides in derselben Liste steckt.
+  const wichtig = (state.drafts || []).filter(d => ["chance", "einwand", "meeting"].includes(d.intent)).length;
   const items = [];
-  if (hot) items.push({ ic: AC_IC.hot, tone: "hot", txt: `<b>${hot}</b> Hot Lead${hot > 1 ? "s" : ""} ${hot > 1 ? "haben" : "hat"} geantwortet`, jump: "hotleads-section" });
-  if (esc) items.push({ ic: AC_IC.alert, tone: "hot", txt: `<b>${esc}</b> Gespräch${esc > 1 ? "e" : ""} eskaliert – braucht dich`, jump: "drafts-section" });
-  if (drafts) items.push({ ic: AC_IC.pen, tone: "amber", txt: `<b>${drafts}</b> DM-Entwurf${drafts > 1 ? "e" : ""} zur Freigabe`, jump: "drafts-section" });
-  if (posts) items.push({ ic: AC_IC.doc, tone: "amber", txt: `<b>${posts}</b> Post-Entwurf${posts > 1 ? "e" : ""} zur Freigabe`, jump: "posts-section" });
+  // Reihenfolge = Morgen-Routine: erst Entwürfe abarbeiten, dann Hot Leads, dann Posts.
+  if (drafts) items.push({
+    ic: AC_IC.pen, tone: "amber", cta: "Bearbeiten", jump: "drafts-section",
+    txt: `<b>${drafts}</b> Entwurf${drafts > 1 ? "e" : ""} genehmigen oder ablehnen${wichtig ? ` <span class="ac-tag">${wichtig}× wichtig</span>` : ""}`,
+  });
+  if (hot) items.push({
+    ic: AC_IC.hot, tone: "hot", cta: "Anrufen", jump: "hotleads-section",
+    txt: `<b>${hot}</b> Hot Lead${hot > 1 ? "s" : ""} ${hot > 1 ? "haben" : "hat"} geantwortet – ansprechen`,
+  });
+  if (posts) items.push({
+    ic: AC_IC.doc, tone: "amber", cta: "Ansehen", jump: "posts-section",
+    txt: `<b>${posts}</b> Post-Entwurf${posts > 1 ? "e" : ""} freigeben`,
+  });
   if (!items.length) {
     el.className = "action-center clear";
     el.innerHTML = `<span class="ac-check">✓</span> Alles erledigt. Der Bot arbeitet – gerade wartet nichts auf dich.`;
@@ -971,9 +1009,9 @@ function renderActionCenter() {
   }
   el.className = "action-center";
   el.innerHTML =
-    `<div class="ac-head"><span class="ac-title">Dein Fokus jetzt</span><span class="ac-count">${items.length} offen</span></div>
+    `<div class="ac-head"><span class="ac-title">Dein Fokus jetzt</span><span class="ac-count">${items.length} ${items.length > 1 ? "Bereiche" : "Bereich"}</span></div>
      <div class="ac-items">${items.map(it => `
-       <button class="ac-item ${it.tone}" data-jump="${it.jump}"><span class="ac-ic">${it.ic}</span><span class="ac-txt">${it.txt}</span><span class="ac-go">→</span></button>`).join("")}</div>`;
+       <button class="ac-item ${it.tone}" data-jump="${it.jump}"><span class="ac-ic">${it.ic}</span><span class="ac-txt">${it.txt}</span><span class="ac-cta">${it.cta} →</span></button>`).join("")}</div>`;
   el.querySelectorAll(".ac-item").forEach(b => b.onclick = () => {
     const e = document.getElementById(b.dataset.jump);
     if (e) e.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -985,6 +1023,20 @@ function scorePill(s) {
   if (s == null) return "";
   const cls = s >= 60 ? "good" : s >= 30 ? "mid" : "low";
   return `<span class="score-pill ${cls}" title="Lead-Score ${s}/100">${s}</span>`;
+}
+
+// Intent-Flagge auf Entwurfskarten: hebt die WICHTIGEN Entwürfe hervor, damit klar ist,
+// was Priorität hat – statt alles gleich aussehen zu lassen. Nur bei relevanten Intents.
+const INTENT_FLAG = {
+  meeting: { t: "📅 Termin möglich", cls: "chance", hint: "Die Person will/kann ein Gespräch – hier zählt eine gute Antwort." },
+  chance:  { t: "🎯 Chance", cls: "chance", hint: "Öffnung erkannt: hier lohnt sich ein durchdachter, verkäuferischer Zug." },
+  einwand: { t: "⚠ Einwand", cls: "einwand", hint: "Die Person zögert – klug entkräften, nicht drängen." },
+  absage:  { t: "✋ Absage", cls: "absage", hint: "Höflich abgewunken – meist reicht ein netter Abschluss." },
+};
+function intentFlag(intent) {
+  const f = INTENT_FLAG[intent];
+  if (!f) return "";
+  return `<div class="dc-flag ${f.cls}" title="${f.hint}"><b>${f.t}</b><span>${f.hint}</span></div>`;
 }
 
 const MODE_NOTES = {
@@ -1109,82 +1161,66 @@ function renderDrafts() {
   // Nicht neu aufbauen, während jemand gerade in einem Feld tippt (sonst gehen Edits verloren).
   if (grid.contains(document.activeElement)) return;
   sec.style.display = "block";
+  // Genehmigt-wartend-Hinweis in der Kopfzeile
+  const appr = state.approvedCount || 0;
+  const apprEl = document.getElementById("drafts-approved");
+  if (apprEl) apprEl.textContent = appr ? `${appr} genehmigt · warten auf Versand` : "";
   grid.innerHTML = list.map(d => `
     <div class="draft-card" data-id="${d.id}">
-      <div class="dc-top"><span class="dc-name">${esc(d.participant || "—")}</span><span class="dc-kind">${d.kind === "first" ? "Erstnachricht" : d.kind === "followup" ? "Follow-up" : d.kind === "comment" ? "Kommentar" : "Antwort"}</span></div>
+      <div class="dc-top">
+        <span class="dc-name">${esc(d.participant || "—")}</span>
+        <span class="dc-kind">${d.kind === "first" ? "Erstnachricht" : d.kind === "followup" ? "Follow-up" : d.kind === "comment" ? "Kommentar" : "Antwort"}</span>
+      </div>
+      ${intentFlag(d.intent)}
       ${d.kind === "comment"
         ? (d.incoming ? `<div class="dc-in">Unter Post: „${esc(d.incoming.slice(0, 160))}"</div>` : "")
         : d.incoming ? `<div class="dc-in">Auf: „${esc(d.incoming.slice(0, 140))}"</div>` : (d.kind === "first" ? `<div class="dc-in" style="color:var(--green)">✅ ${esc(d.participant || "")} hat deine Vernetzungsanfrage angenommen</div>` : d.kind === "followup" ? `<div class="dc-in">Noch keine Antwort auf deine Erstnachricht</div>` : "")}
       <textarea spellcheck="false">${esc(d.draft)}</textarea>
       <div class="dc-foot">
-        <button class="dc-send" title="Jetzt über LinkedIn senden (governor-gedrosselt)">Senden</button>
+        <button class="dc-approve" title="Genehmigen – der Bot sendet es beim nächsten Lauf automatisch">✓ Genehmigen</button>
         <span class="draft-saved">gespeichert ✓</span>
-        <button class="dc-discard">Verwerfen</button>
+        <button class="dc-reject" title="Ablehnen – der Bot schreibt einen neuen Entwurf">Ablehnen → neu</button>
       </div>
     </div>`).join("");
   grid.querySelectorAll(".draft-card").forEach(card => {
     const id = Number(card.dataset.id);
     const ta = card.querySelector("textarea");
     const saved = card.querySelector(".draft-saved");
-    card._ta = ta;
     ta.addEventListener("blur", async () => {
       await postDraft({ id, action: "save", text: ta.value });
       saved.classList.add("show"); setTimeout(() => saved.classList.remove("show"), 1500);
     });
-    // Echter Versand. Dauert bewusst lange: der Governor haelt 20-75s Abstand vor jeder
-    // Aktion, dazu Seitenaufbau und menschliches Tippen. Deshalb Knopf sperren + Status zeigen,
-    // sonst klickt man dreimal und schickt dreimal.
-    card.querySelector(".dc-send").addEventListener("click", async (e) => {
+    // GENEHMIGEN: der Bot sendet beim nächsten Lauf (governor-gedrosselt). Kein Direktversand
+    // mehr aus dem Dashboard – deshalb ist die Rückmeldung sofort da, kein langes "sendet…".
+    card.querySelector(".dc-approve").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       if (btn.disabled) return;
-      btn.disabled = true;
-      // Der Server arbeitet die Sends der Reihe nach ab (Promise-Kette im crmServer) und der
-      // Browser feuert in Klick-Reihenfolge. Deshalb kann die Anzeige EHRLICH unterscheiden,
-      // was gerade laeuft und was noch wartet – statt bei allen "sendet" zu behaupten.
-      warteschlange.push({ btn, card });
-      zeigeWarteschlange();
-      try {
-        const r = await postDraft({ id, action: "send", text: ta.value });
-        // Erst diesen Knopf aus dem Ladezustand holen – zeigeWarteschlange() fasst ihn
-        // gleich nicht mehr an, sonst dreht der Spinner ewig weiter.
-        fertig(btn, card);
-        zeigeWarteschlange();
-        if (r && r.ok) {
-          btn.textContent = "gesendet ✓";
-          btn.classList.add("ok");
-          setTimeout(load, 1200);
-        } else {
-          // Ehrlich anzeigen statt Erfolg vorgaukeln – der Entwurf bleibt stehen.
-          btn.textContent = "nicht gesendet";
-          btn.classList.add("bad");
-          btn.title = (r && r.reason) || "unbekannter Grund";
-          alert("Nicht gesendet: " + ((r && r.reason) || "unbekannter Grund") + "\n\nDer Entwurf bleibt stehen, du kannst es erneut versuchen.");
-          btn.disabled = false;
-          setTimeout(() => { btn.textContent = "Senden"; btn.classList.remove("bad"); }, 4000);
-        }
-      } catch (err) {
-        // Auch im Fehlerfall raus aus der Schlange, sonst blockiert er die Anzeige der anderen.
-        fertig(btn, card);
-        zeigeWarteschlange();
-        btn.textContent = "Fehler";
-        btn.disabled = false;
-        setTimeout(() => (btn.textContent = "Senden"), 3000);
-      }
+      btn.disabled = true; btn.textContent = "…";
+      await postDraft({ id, action: "approve", text: ta.value });
+      btn.textContent = "genehmigt ✓"; btn.classList.add("ok");
+      card.classList.add("approved");
+      setTimeout(load, 900);
     });
-    card.querySelector(".dc-discard").addEventListener("click", async () => {
-      if (!confirm("Entwurf verwerfen?")) return;
-      await postDraft({ id, action: "discard" }); load();
+    // ABLEHNEN: verwerfen + der Bot erzeugt sofort einen neuen Entwurf (KI-Aufruf, kurz warten).
+    card.querySelector(".dc-reject").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      if (btn.disabled) return;
+      if (!confirm("Diesen Entwurf ablehnen? Der Bot schreibt dann einen neuen.")) return;
+      btn.disabled = true; btn.textContent = "neuer Entwurf…"; card.classList.add("rejecting");
+      const r = await postDraft({ id, action: "reject" });
+      if (r && r.ok && !r.regenerated) alert("Abgelehnt. Ein neuer Entwurf konnte gerade nicht erzeugt werden (evtl. KI-Limit) – beim nächsten Lauf versucht es der Bot erneut.");
+      setTimeout(load, 1000);
     });
   });
-  // Sammel-Freigabe: klickt der Reihe nach jeden Senden-Knopf. Nutzt damit dieselbe
-  // Warteschlange + Verifizierung + Anzeige wie ein Einzelversand – der Server serialisiert,
-  // der Governor drosselt. Kein neuer Sendeweg, nur ein Knopf weniger Handarbeit.
+  // SAMMEL-GENEHMIGUNG: genehmigt alle offenen DM-Entwürfe auf einmal. Der Bot arbeitet sie
+  // danach nacheinander ab (governor-gedrosselt). Ein Klick statt zehn.
   const bulk = document.getElementById("bulk-send");
-  if (bulk) bulk.onclick = () => {
-    const sends = [...document.querySelectorAll("#drafts-grid .dc-send")].filter(b => !b.disabled);
-    if (!sends.length) return;
-    if (!confirm(`Alle ${sends.length} Entwürfe senden? Läuft nacheinander (governor-gedrosselt, 20–75s Abstand) – das dauert, ist aber sicher.`)) return;
-    sends.forEach(b => b.click());
+  if (bulk) bulk.onclick = async () => {
+    if (!list.length) return;
+    if (!confirm(`Alle ${list.length} Entwürfe genehmigen? Der Bot sendet sie danach nacheinander (Nachrichten nur Mo–Fr, governor-gedrosselt).`)) return;
+    bulk.disabled = true; bulk.textContent = "…";
+    for (const d of list) await postDraft({ id: d.id, action: "approve" });
+    load();
   };
 }
 

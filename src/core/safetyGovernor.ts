@@ -62,12 +62,22 @@ class SafetyGovernor {
     return Math.max(1, Math.floor(config.safety.dailyCaps[type] * this.warmupFactor()));
   }
 
-  private withinWorkingHours(): boolean {
+  /**
+   * Zeitfenster-Prüfung. Für den Aktionstyp gilt am Wochenende eine Sonderregel: nur
+   * `weekendActions` (Vernetzen/Like/Profilbesuch) sind Sa/So erlaubt, Direktnachrichten &
+   * Kommentare NICHT – die sollen wie bei einem Menschen nur werktags kommen.
+   */
+  private withinWorkingHours(type?: ActionType): boolean {
     const now = new Date();
-    const day = now.getDay(); // 0 = So, 6 = Sa
-    if (!config.safety.workOnWeekends && (day === 0 || day === 6)) return false;
     const h = now.getHours();
-    return h >= config.safety.workingHours.start && h < config.safety.workingHours.end;
+    if (h < config.safety.workingHours.start || h >= config.safety.workingHours.end) return false;
+    const weekend = now.getDay() === 0 || now.getDay() === 6;
+    if (weekend) {
+      // Ohne Typ (Telemetrie): Wochenende gilt als "aktiv", solange überhaupt etwas erlaubt ist.
+      if (!type) return true;
+      return (config.safety.weekendActions as readonly string[]).includes(type);
+    }
+    return true;
   }
 
   /** Akzeptanzrate der letzten 7 Tage (accepted / invited). */
@@ -107,8 +117,15 @@ class SafetyGovernor {
     if (this.isPaused())
       return { ok: false, reason: `pausiert (${getState("pause_reason") ?? "unbekannt"})` };
 
-    if (!this.withinWorkingHours())
-      return { ok: false, reason: "außerhalb der Arbeitszeit" };
+    if (!this.withinWorkingHours(type)) {
+      const now = new Date();
+      const inHours = now.getHours() >= config.safety.workingHours.start && now.getHours() < config.safety.workingHours.end;
+      const weekend = now.getDay() === 0 || now.getDay() === 6;
+      return {
+        ok: false,
+        reason: inHours && weekend ? "am Wochenende keine Nachrichten (nur Vernetzungen)" : "außerhalb der Arbeitszeit",
+      };
+    }
 
     if (this.countToday(type) >= this.effectiveCap(type))
       return { ok: false, reason: `Tageslimit erreicht (${type})` };
