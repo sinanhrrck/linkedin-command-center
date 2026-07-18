@@ -89,6 +89,7 @@ export const config = {
       connect: 20, // Vernetzungsanfragen (Wochenlimit bremst zusätzlich)
       message: 30, // Nachrichten an Erstkontakte
       comment: 15,
+      like: 40, // Likes sind harmlos, duerfen autonom + haeufiger; Governor-Delay bremst trotzdem
       profileView: 120,
     },
     // Wochenlimit für Vernetzungen – LinkedIns praktische Sperr-Schwelle liegt bei ~100/Woche.

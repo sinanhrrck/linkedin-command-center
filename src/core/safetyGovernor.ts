@@ -3,7 +3,7 @@ import { db, getStartDate, getState, setState } from "../db/index.js";
 import { humanDelay } from "./humanize.js";
 import { events } from "./events.js";
 
-export type ActionType = "connect" | "message" | "comment" | "profileView";
+export type ActionType = "connect" | "message" | "comment" | "profileView" | "like";
 
 type Decision = { ok: true } | { ok: false; reason: string };
 

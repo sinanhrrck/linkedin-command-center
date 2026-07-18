@@ -4,6 +4,7 @@ import { promptKontext, saubern } from "../context.js";
 import { events } from "../core/events.js";
 import { fetchNichePosts, NISCHE_KEYWORDS, type FeedPost } from "./feed.js";
 import { getDraft } from "./drafts.js";
+import { likePost } from "./outreach.js";
 
 /**
  * REICHWEITEN-KOMMENTARE für Sichtbarkeit. Der Bot findet Nischen-Posts (feed.ts), lässt die KI
@@ -67,6 +68,10 @@ export async function commentTick(maxDrafts = 3): Promise<number> {
     if (hatKommentar(post.url)) continue;
     const step = await bewertenUndKommentieren(post);
     if (!step || !step.relevant) continue;
+
+    // Relevanter Post → autonom liken (Sinans Wahl: Likes autonom, Kommentare mit Freigabe).
+    // Harmlos, hält präsent bei genau den Posts, die seine Zielgruppe liest. Governor-gedrosselt.
+    await likePost(post.url);
     const info = db
       .prepare(
         "INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('comment',?,?,?,?,?,'comment')",

@@ -45,6 +45,9 @@ const SEL = {
   commentBox: ".comments-comment-box__form .ql-editor, .comments-comment-texteditor .ql-editor, div[data-placeholder*='Kommentar']",
   commentSend: "button.comments-comment-box__submit-button, button[aria-label*='Kommentar posten'], button[class*='comments'][class*='submit']",
   commentItem: ".comments-comment-item, article.comments-comment-entity",
+  // Like-Button des Haupt-Posts. aria-pressed wechselt false→true = unser Beleg. Read-only
+  // verifiziert 2026-07-17: Label "Mit „Gefällt mir" reagieren", aria-pressed anfangs false.
+  likeBtn: "button[aria-label*='efällt mir'][aria-pressed], button[aria-label='Like'][aria-pressed]",
 };
 
 /** Findet den Vernetzen-Button – direkt oder nach Öffnen des "Mehr"-Menüs. */
@@ -214,6 +217,35 @@ export async function sendThreadReply(threadUrl: string, text: string) {
     await humanDelay(1200, 2500);
     await tippenUndSenden(page, text);
   });
+}
+
+/**
+ * Post autonom LIKEN (governor-gated, ActionType 'like'). Ein Like ist harmlos (kann nicht
+ * peinlich werden) → darf ohne Freigabe. Trotzdem über den Governor: Masse-Liken ist ein
+ * Bot-Signal, der 20-75s-Abstand + Cap verhindern das. Beleg: aria-pressed wechselt auf true.
+ * Wirft still (kein Drama, wenn ein Like mal nicht klappt).
+ */
+export async function likePost(postUrl: string): Promise<boolean> {
+  try {
+    return await governor.execute("like", postUrl, async () => {
+      const page = await newPage();
+      await page.goto(postUrl, { waitUntil: "domcontentloaded" });
+      if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
+      await humanDelay(1500, 3000);
+      const btn = page.locator(SEL.likeBtn).first();
+      if ((await btn.count()) === 0) throw new Error("Like-Button nicht gefunden");
+      if ((await btn.getAttribute("aria-pressed")) === "true") return true; // schon geliked
+      await btn.evaluate((el) => (el as HTMLElement).click());
+      await humanDelay(800, 1600);
+      const jetzt = await page.locator(SEL.likeBtn).first().getAttribute("aria-pressed").catch(() => null);
+      if (jetzt !== "true") throw new Error("Like nicht bestätigt");
+      return true;
+    });
+  } catch (e) {
+    if (e instanceof GovernorBlocked) return false; // Limit/Arbeitszeit – kein Drama
+    console.info(`[like] übersprungen (${postUrl.slice(0, 50)}): ${(e as Error).message}`);
+    return false;
+  }
 }
 
 /**

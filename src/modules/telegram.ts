@@ -179,6 +179,7 @@ export function startTelegram() {
    */
   events.on("action:done", (a: { type: string; target: string | null }) => {
     if (!bot || !config.telegram.chatId) return;
+    if (a.type === "like") return; // Likes laufen autonom + häufig -> nicht einzeln pushen (Spam)
     const wer = a.target ? nameFuerZiel(a.target) : "";
     const heute = governor.snapshot();
     const zeile = AKTIONS_TEXT[a.type] ?? `▫️ ${a.type}`;
