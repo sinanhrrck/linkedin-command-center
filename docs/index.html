@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NextLead — dein LinkedIn-Assistent, der für dich arbeitet</title>
+<meta name="description" content="NextLead vernetzt sich für dich auf LinkedIn, schreibt Nachrichten in deiner Stimme und legt dir alles zur Freigabe vor. Läuft lokal auf deinem Rechner." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#eef1f0; --panel:#fff; --panel-2:#f5f8f6; --line:#e6eae8; --ink:#16201b; --ink-dim:#5c6b64;
+    --ink-faint:#93a099; --green:#1f9d63; --accent:#16855a; --hero:linear-gradient(155deg,#1d7a51,#123f26);
+    --shadow:0 1px 2px rgba(20,40,30,.05),0 18px 40px -20px rgba(20,40,30,.18);
+    --disp:"Inter",system-ui,sans-serif; --display:"Sora",var(--disp); --ease:cubic-bezier(.2,.7,.2,1);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--disp);-webkit-font-smoothing:antialiased;letter-spacing:-.01em;line-height:1.55;}
+  a{color:var(--accent);}
+  .wrap{max-width:960px;margin:0 auto;padding:0 22px;}
+  /* Nav */
+  nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0;}
+  .logo{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;font-size:19px;}
+  .logo .mk{width:34px;height:34px;border-radius:10px;background:var(--hero);display:grid;place-items:center;color:#fff;box-shadow:0 6px 14px -4px rgba(20,80,50,.5);}
+  .logo .mk svg{width:19px;height:19px;}
+  .nav-cta{font-weight:600;font-size:14px;text-decoration:none;color:#fff;background:var(--hero);padding:9px 16px;border-radius:11px;box-shadow:0 8px 18px -8px rgba(20,80,50,.5);}
+  /* Hero */
+  .hero{text-align:center;padding:60px 0 46px;}
+  .badge{display:inline-block;font-size:12px;font-weight:600;color:var(--accent);background:rgba(31,157,99,.11);padding:6px 13px;border-radius:20px;margin-bottom:22px;}
+  h1{font-family:var(--display);font-size:clamp(34px,6vw,52px);font-weight:800;letter-spacing:-.03em;line-height:1.05;margin:0 0 18px;}
+  h1 .g{background:var(--hero);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .sub{font-size:clamp(16px,2.4vw,19px);color:var(--ink-dim);max-width:620px;margin:0 auto 30px;}
+  .cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;align-items:center;}
+  .btn{font-family:var(--disp);font-weight:600;font-size:16px;text-decoration:none;border-radius:14px;padding:15px 26px;display:inline-flex;align-items:center;gap:10px;transition:transform .12s var(--ease),box-shadow .16s;}
+  .btn.primary{background:var(--hero);color:#fff;box-shadow:0 12px 26px -10px rgba(20,80,50,.55);}
+  .btn.primary:hover{transform:translateY(-2px);}
+  .btn.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow);}
+  .cta-note{font-size:13px;color:var(--ink-faint);margin-top:14px;}
+  /* Mockup-Streifen */
+  .shot{margin:44px auto 0;max-width:900px;background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:20px;}
+  .shot .bar{display:flex;gap:7px;margin-bottom:16px;}
+  .shot .bar i{width:11px;height:11px;border-radius:50%;background:#dfe4e2;}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .kpi{background:var(--panel-2);border-radius:13px;padding:16px;}
+  .kpi.hot{background:var(--hero);color:#fff;}
+  .kpi .l{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);}
+  .kpi.hot .l{color:rgba(255,255,255,.8);}
+  .kpi .n{font-family:var(--display);font-weight:700;font-size:26px;margin-top:6px;}
+  /* Sektionen */
+  section{padding:52px 0;}
+  h2{font-family:var(--display);font-size:clamp(24px,4vw,32px);font-weight:700;letter-spacing:-.02em;text-align:center;margin:0 0 10px;}
+  .lead{text-align:center;color:var(--ink-dim);max-width:600px;margin:0 auto 36px;}
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:var(--shadow);}
+  .step .num{width:34px;height:34px;border-radius:10px;background:rgba(31,157,99,.12);color:var(--accent);display:grid;place-items:center;font-family:var(--display);font-weight:700;margin-bottom:14px;}
+  .step h3{font-size:16px;margin:0 0 6px;}
+  .step p{font-size:14px;color:var(--ink-dim);margin:0;}
+  .feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;}
+  .f{display:flex;gap:13px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow);}
+  .f .ic{width:38px;height:38px;flex:0 0 38px;border-radius:11px;background:rgba(31,157,99,.1);color:var(--accent);display:grid;place-items:center;}
+  .f .ic svg{width:19px;height:19px;}
+  .f b{display:block;font-size:15px;margin-bottom:3px;}
+  .f span{font-size:13.5px;color:var(--ink-dim);}
+  /* Download-Block */
+  .download{background:var(--panel);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:44px 30px;text-align:center;}
+  .os{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--ink-dim);}
+  /* FAQ */
+  details{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px 20px;margin-bottom:10px;box-shadow:var(--shadow);}
+  details summary{font-weight:600;cursor:pointer;font-size:15px;}
+  details[open] summary{margin-bottom:8px;}
+  details p{font-size:14px;color:var(--ink-dim);margin:0;}
+  /* Hinweis / Footer */
+  .note{background:rgba(192,122,18,.07);border:1px solid rgba(192,122,18,.2);border-radius:14px;padding:18px 20px;font-size:13.5px;color:#7a5410;line-height:1.6;}
+  footer{padding:40px 0 60px;text-align:center;color:var(--ink-faint);font-size:13px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <div class="logo"><span class="mk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg></span>NextLead</div>
+    <a class="nav-cta" href="#download">Herunterladen</a>
+  </nav>
+
+  <header class="hero">
+    <span class="badge">Läuft lokal auf deinem Rechner · kostenlos</span>
+    <h1>Dein LinkedIn-Assistent, der <span class="g">für dich arbeitet</span></h1>
+    <p class="sub">NextLead vernetzt sich automatisch mit deinen Wunschkontakten, schreibt Nachrichten in <b>deiner</b> Stimme und legt dir jeden Vorschlag zur Freigabe vor. Du entscheidest, NextLead erledigt den Rest.</p>
+    <div class="cta-row">
+      <a class="btn primary" href="#download">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg>
+        Jetzt herunterladen
+      </a>
+      <a class="btn ghost" href="#so">So funktioniert's</a>
+    </div>
+    <p class="cta-note">Für Mac &amp; Windows · keine Vorkenntnisse nötig</p>
+
+    <div class="shot">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <div class="kpis">
+        <div class="kpi hot"><div class="l">Hot Leads</div><div class="n">3</div></div>
+        <div class="kpi"><div class="l">Antwortrate</div><div class="n">38 %</div></div>
+        <div class="kpi"><div class="l">Angenommen</div><div class="n">6</div></div>
+        <div class="kpi"><div class="l">Diese Woche</div><div class="n">34</div></div>
+      </div>
+    </div>
+  </header>
+
+  <section id="so">
+    <h2>In 4 Schritten startklar</h2>
+    <p class="lead">Kein Programmieren, kein Server. Herunterladen, dem Assistenten folgen, fertig.</p>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><h3>Herunterladen</h3><p>ZIP laden, entpacken, Doppelklick auf den Starter. Beim ersten Mal richtet sich alles selbst ein.</p></div>
+      <div class="step"><div class="num">2</div><h3>Dich vorstellen</h3><p>Der Assistent fragt deinen Namen, ein paar Sätze über dich und Beispiel-Nachrichten. So klingt NextLead wie du.</p></div>
+      <div class="step"><div class="num">3</div><h3>LinkedIn verbinden</h3><p>Einmal in deinem Konto einloggen. Alles bleibt auf deinem Rechner, nichts wird gespeichert.</p></div>
+      <div class="step"><div class="num">4</div><h3>Freigeben</h3><p>NextLead sammelt Kontakte und schreibt Entwürfe. Du klickst „Genehmigen" oder „Ablehnen".</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Was NextLead für dich macht</h2>
+    <p class="lead">Damit du am Ende fertige Leads hast, statt dich um alles selbst zu kümmern.</p>
+    <div class="feat">
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.8 5.8 0 0 1 11 0M18.5 8v5M16 10.5h5"/></svg></span><div><b>Automatisch vernetzen</b><span>Mit deinen Wunschkontakten, gedrosselt und menschlich, damit dein Konto sicher bleibt.</span></div></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-4 3.2V16H4z"/></svg></span><div><b>Nachrichten in deiner Stimme</b><span>Personalisiert pro Person, kein Copy-Paste. Immer erst als Entwurf zur Freigabe.</span></div></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5 3.5 5 9a5 5 0 0 1-10 0c0-2 1-3.5 1-3.5S8 12 10 12c0-3 2-6 2-9z"/></svg></span><div><b>Heiße Kontakte erkennen</b><span>Wer antwortet, landet oben. Du siehst sofort, wen du anrufen solltest.</span></div></div>
+      <div class="f"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg></span><div><b>Schützt dein Konto</b><span>Feste Limits, Pausen und ein Notaus, wenn die Annahmequote zu tief fällt.</span></div></div>
+    </div>
+  </section>
+
+  <section id="download">
+    <div class="download">
+      <span class="badge">Kostenlos &amp; Open Source</span>
+      <h2 style="margin-top:10px">NextLead herunterladen</h2>
+      <p class="lead" style="margin-bottom:24px">Lad den Ordner, entpack ihn und starte per Doppelklick. Die Anleitung liegt bei und der Assistent führt dich durch alles.</p>
+      <a class="btn primary" style="font-size:17px" href="https://github.com/sinanhrrck/linkedin-command-center/archive/refs/heads/main.zip">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg>
+        Ordner herunterladen (ZIP)
+      </a>
+      <div class="os">
+        <span>🍎 macOS: „NextLead starten.command"</span>
+        <span>🪟 Windows: „NextLead starten (Windows).bat"</span>
+      </div>
+      <p class="cta-note" style="margin-top:20px">Beim ersten Start wird einmalig Node.js gebraucht (kostenlos) — der Starter führt dich zur Installation. Volle Anleitung: <a href="https://github.com/sinanhrrck/linkedin-command-center#readme">README ansehen</a>.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Häufige Fragen</h2>
+    <div style="max-width:720px;margin:24px auto 0">
+      <details><summary>Ist das kostenlos?</summary><p>Ja. NextLead selbst ist gratis, und der KI-Dienst (Google Gemini) hat einen kostenlosen Rahmen, der für den Alltag reicht.</p></details>
+      <details><summary>Sieht jemand meine Daten?</summary><p>Nein. NextLead läuft komplett auf deinem Rechner mit deinem Konto. Es gibt keinen Server und keine Cloud.</p></details>
+      <details><summary>Muss mein Computer anbleiben?</summary><p>Ja, solange NextLead arbeiten soll, muss der Rechner laufen. Auf dem Mac hält das Tool ihn automatisch wach.</p></details>
+      <details><summary>Brauche ich technisches Wissen?</summary><p>Nein. Du musst einmalig Node.js installieren (der Starter zeigt dir wie), der Rest läuft über den Assistenten im Browser.</p></details>
+      <details><summary>Werden Nachrichten ohne mich verschickt?</summary><p>Standardmäßig nicht. Jede Nachricht kommt erst als Entwurf. Du gibst frei, was rausgehen soll.</p></details>
+    </div>
+  </section>
+
+  <section>
+    <div class="note">
+      <b>Fair bleiben.</b> NextLead automatisiert dein LinkedIn — das steht nicht im Einklang mit den Nutzungsbedingungen von LinkedIn, die Nutzung erfolgt auf eigene Verantwortung. Der eingebaute Schutz hält das Risiko klein, aber nicht bei null. Du speicherst Daten anderer Menschen und bist dafür selbst verantwortlich (DSGVO). Nutze das Tool für echte, wertvolle Kontakte, nicht für Spam.
+    </div>
+  </section>
+</div>
+
+<footer>
+  NextLead · läuft lokal, gehört dir · <a href="https://github.com/sinanhrrck/linkedin-command-center">Quellcode auf GitHub</a>
+</footer>
+</body>
+</html>

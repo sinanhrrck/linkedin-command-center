@@ -1,8 +1,8 @@
-# Command Center für LinkedIn
+# NextLead
 
-Dein persönlicher LinkedIn-Assistent, der **lokal auf deinem Rechner** läuft. Er vernetzt
+Dein persönlicher LinkedIn-Assistent, der **lokal auf deinem Rechner** läuft. NextLead vernetzt
 sich für dich, schreibt Nachrichten in **deiner** Stimme, erkennt heiße Kontakte und legt dir
-alles als Entwurf zur Freigabe vor. Du entscheidest, der Bot arbeitet.
+alles als Entwurf zur Freigabe vor. Du entscheidest, NextLead arbeitet.
 
 Alles läuft **auf deinem Computer, mit deinem Konto**. Es gibt keinen Server, keine Cloud,
 niemand außer dir sieht deine Daten.
@@ -29,8 +29,8 @@ niemand außer dir sieht deine Daten.
 
 ## 2. Starten
 
-**Mac:** Doppelklick auf **`Command Center starten.command`**
-**Windows:** Doppelklick auf **`Command Center starten (Windows).bat`**
+**Mac:** Doppelklick auf **`NextLead starten.command`**
+**Windows:** Doppelklick auf **`NextLead starten (Windows).bat`**
 
 Beim **allerersten Mal** richtet sich das Tool selbst ein (das dauert ein paar Minuten – bitte
 das schwarze Fenster offen lassen). Falls **Node.js** fehlt, öffnet sich automatisch die

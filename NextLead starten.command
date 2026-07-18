@@ -4,7 +4,7 @@
 # danach startet es in Sekunden.
 cd "$(dirname "$0")"
 
-echo "── Command Center ──────────────────────────────"
+echo "── NextLead ──────────────────────────────"
 
 # 1) Node vorhanden? Ohne Node läuft nichts – Laien freundlich hinweisen.
 if ! command -v node >/dev/null 2>&1; then

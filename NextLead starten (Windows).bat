@@ -2,7 +2,7 @@
 REM Doppelklick = Ersteinrichtung (falls noetig) + Start + Dashboard im Browser oeffnen.
 REM Beim allerersten Mal dauert es ein paar Minuten (Installation), danach Sekunden.
 cd /d "%~dp0"
-echo -- Command Center --------------------------------
+echo -- NextLead --------------------------------
 
 REM 1) Node vorhanden?
 where node >nul 2>nul
