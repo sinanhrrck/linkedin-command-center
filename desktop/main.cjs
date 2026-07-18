@@ -70,13 +70,24 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  startServer();
-  waitForServer(createWindow);
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+// EINMAL-START: verhindert, dass die App zweimal läuft (sonst kollidieren beide um Port 4321
+// → EADDRINUSE-Absturz). Ein zweiter Start bringt stattdessen das bestehende Fenster nach vorn.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const wins = BrowserWindow.getAllWindows();
+    if (wins.length) { if (wins[0].isMinimized()) wins[0].restore(); wins[0].focus(); }
   });
-});
+  app.whenReady().then(() => {
+    startServer();
+    waitForServer(createWindow);
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 // Server sauber beenden, wenn die App schließt.
 function stopServer() {

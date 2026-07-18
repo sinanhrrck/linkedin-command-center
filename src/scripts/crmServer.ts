@@ -19,8 +19,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const HTML_PATH = join(__dirname, "..", "web", "crm.html");
 const SETUP_PATH = join(__dirname, "..", "web", "setup.html");
 const PROJECT_ROOT = join(__dirname, "..", "..");
-const ENV_PATH = join(PROJECT_ROOT, ".env");
-const PROFIL_PATH = join(PROJECT_ROOT, "profil.local.json");
+// WICHTIG: .env + Profil liegen im ARBEITSVERZEICHNIS, nicht im Code-Ordner. Im Dev ist das
+// der Projekt-Ordner; in der gepackten App der beschreibbare userData-Ordner (main.cjs setzt
+// cwd=userData). Vorher zeigten diese auf PROJECT_ROOT = app.asar (schreibgeschützt) → die App
+// fand nie eine Konfig und der Setup-Assistent kam immer wieder / Speichern schlug fehl.
+const ENV_PATH = join(process.cwd(), ".env");
+const PROFIL_PATH = join(process.cwd(), "profil.local.json");
 const PORT = Number(process.env.CRM_PORT ?? 4321);
 
 /** .env als Key→Value lesen (frisch von Platte, damit Änderungen ohne Neustart sichtbar sind). */
