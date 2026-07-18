@@ -8,6 +8,7 @@ import { checkAcceptances } from "./modules/acceptance.js";
 import { feedTick } from "./modules/leadFeed.js";
 import { generateInboxDrafts, generateFollowups } from "./modules/drafts.js";
 import { generatePostIdeas } from "./modules/content.js";
+import { commentTick } from "./modules/comment.js";
 import { runAutopilot } from "./modules/autopilot.js";
 import { config } from "./config.js";
 import { startTelegram } from "./modules/telegram.js";
@@ -123,6 +124,11 @@ cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4,
 cron.schedule(`*/${config.autopilot.intervalMinutes} * * * *`, () =>
   einzeln("autopilot", () => runAutopilot()),
 );
+
+// KOMMENTARE: 1x täglich (12:30) Nischen-Posts finden und Kommentar-ENTWÜRFE erzeugen.
+// Öffentlich → immer erst Freigabe (Telegram), nie autonom. Moderate Frequenz: Sichtbarkeit
+// entsteht durch stetige, gute Kommentare, nicht durch Masse. Governor-gated erst beim Senden.
+cron.schedule("30 12 * * 1-5", () => einzeln("comment", () => commentTick(3)));
 
 // CONTENT: 1x pro Woche (Montag 8 Uhr) Post-Ideen erzeugen. Sie landen als Entwürfe und
 // werden erst nach Sinans Freigabe über die offizielle API veröffentlicht (öffentlich = nie

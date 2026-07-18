@@ -156,6 +156,21 @@ export function startTelegram() {
   // Neue Entwürfe automatisch pushen.
   events.on("draft:new", (d: Draft) => notifyDraft(d));
 
+  // Öffentlicher Kommentar-Vorschlag → Freigabe (nie autonom, weil oeffentlich).
+  events.on("comment:new", (e: { draft: Draft; autor: string; postText: string; url: string }) => {
+    if (!bot || !config.telegram.chatId || !e.draft) return;
+    bot.api
+      .sendMessage(
+        config.telegram.chatId,
+        `💬 *Kommentar-Vorschlag* (oeffentlich, unter fremdem Post)\n\n` +
+          `Post von *${e.autor}*:\n_${e.postText}_\n\n` +
+          `*Dein Kommentar:*\n${e.draft.draft}\n\n` +
+          `[Post ansehen](${e.url})\n👉 Oeffentlich posten?`,
+        { parse_mode: "Markdown", link_preview_options: { is_disabled: true }, reply_markup: draftKeyboard(e.draft.id) },
+      )
+      .catch(() => {});
+  });
+
   /**
    * JEDE erfolgreiche Sendeaktion melden (aus governor.record – dem einzigen Choke-Point,
    * durch den alle Sends laufen). So bekommt Sinan mit, was der Bot tut, ohne ins Dashboard

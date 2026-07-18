@@ -1,7 +1,7 @@
 import { db, getMode } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { fetchThreads, type ThreadContext } from "./inbox.js";
-import { sendThreadReply, sendMessage } from "./outreach.js";
+import { sendThreadReply, sendMessage, sendComment } from "./outreach.js";
 import { firstMessage, followupMessage , converseStep } from "./personalize.js";
 import { GovernorBlocked } from "../core/safetyGovernor.js";
 import { markRepliedByName, markDeclinedByName, messagedAwaitingFollowup, type Contact } from "./crm.js";
@@ -199,7 +199,8 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
   if (!d.thread_url) return { ok: false, reason: "Kein Ziel (Thread/Profil)" };
   try {
     // 'first'/'followup' = Nachricht an einen Kontakt (über Profil), 'message' = Thread-Antwort.
-    if (d.kind === "first" || d.kind === "followup") await sendMessage(d.thread_url, d.draft);
+    if (d.kind === "comment") await sendComment(d.thread_url, d.draft); // öffentlicher Kommentar
+    else if (d.kind === "first" || d.kind === "followup") await sendMessage(d.thread_url, d.draft);
     else await sendThreadReply(d.thread_url, d.draft);
     db.prepare("UPDATE drafts SET status='sent', sent_at=datetime('now') WHERE id=?").run(id);
     return { ok: true };

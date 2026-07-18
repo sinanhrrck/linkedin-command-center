@@ -40,6 +40,11 @@ const SEL = {
   // Ein einzelnes Chat-Fenster im Overlay. Nötig, um Prüfungen auf UNSER Fenster zu scopen
   // (LinkedIn stellt mehrere offene Fenster wieder her).
   bubble: ".msg-overlay-conversation-bubble",
+  // Öffentliche Kommentare (feed.ts/comment.ts). Read-only verifiziert 2026-07-17.
+  commentBtn: "button[aria-label*='ommentier']",
+  commentBox: ".comments-comment-box__form .ql-editor, .comments-comment-texteditor .ql-editor, div[data-placeholder*='Kommentar']",
+  commentSend: "button.comments-comment-box__submit-button, button[aria-label*='Kommentar posten'], button[class*='comments'][class*='submit']",
+  commentItem: ".comments-comment-item, article.comments-comment-entity",
 };
 
 /** Findet den Vernetzen-Button – direkt oder nach Öffnen des "Mehr"-Menüs. */
@@ -208,5 +213,46 @@ export async function sendThreadReply(threadUrl: string, text: string) {
     if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
     await humanDelay(1200, 2500);
     await tippenUndSenden(page, text);
+  });
+}
+
+/**
+ * ÖFFENTLICHEN KOMMENTAR unter einem fremden Post posten (governor-gated, ActionType 'comment').
+ * Nur ueber freigegebene Kommentar-Entwuerfe (kind='comment'). Wie bei DMs mit VERIFIKATION:
+ * ein oeffentlicher Kommentar, der als "gepostet" gemeldet wird aber nicht ankam, waere eine
+ * Falschmeldung – und ein doppelter waere peinlich. Deshalb Beleg: der Text steht danach im
+ * Kommentarbereich. HINWEIS: der scharfe Versand ist nicht automatisiert testbar (System sperrt
+ * reale oeffentliche Sends) – Selektoren read-only verifiziert, beim ersten echten Lauf pruefen.
+ */
+export async function sendComment(postUrl: string, text: string) {
+  return governor.execute("comment", postUrl, async () => {
+    const page = await newPage();
+    await page.goto(postUrl, { waitUntil: "domcontentloaded" });
+    if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
+    await humanDelay(2000, 3500);
+
+    // Kommentarbereich oeffnen
+    const kbtn = page.locator(SEL.commentBtn).first();
+    if ((await kbtn.count()) === 0) throw new Error("Kommentar-Button nicht gefunden");
+    await kbtn.evaluate((el) => (el as HTMLElement).click());
+    await humanDelay(1200, 2500);
+
+    const box = page.locator(SEL.commentBox).first();
+    await box.waitFor({ timeout: 12000 });
+    await humanTypeInto(box, text);
+    await humanDelay(700, 1600);
+
+    const send = page.locator(SEL.commentSend).first();
+    if (await send.isEnabled().catch(() => false)) await send.click();
+    else throw new Error("Kommentar-Senden-Button nicht aktiv");
+
+    // Beleg: unser Text steht jetzt im Kommentarbereich.
+    const marker = text.replace(/\s+/g, " ").trim().slice(0, 35);
+    const drin = await page
+      .locator(SEL.commentItem)
+      .filter({ hasText: marker })
+      .count()
+      .catch(() => 0);
+    if (drin === 0) throw new Error("Kommentar nicht bestätigt: steht nicht im Kommentarbereich");
   });
 }
