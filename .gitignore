@@ -10,3 +10,6 @@ dist/
 # Live-Ansicht (Screenshots fürs Dashboard)
 .live/
 .DS_Store
+
+# Persönliches Nutzer-Profil (bleibt lokal, wie .env)
+profil.local.json

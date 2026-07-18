@@ -52,9 +52,16 @@ braucht den Governor NICHT.
   NUR mit bezahltem KI-Key (20/Tag-Gratis reicht nicht) + Immer-an-Maschine sinnvoll.
 - `modules/dashboard.ts` — stellt Dashboard-State als JSON zusammen (rein lesend)
 - `core/safetyGovernor.ts` → `snapshot()` — read-only Telemetrie (Caps/Warm-up/Rate/Pause)
-- `context.ts` — ZENTRALER Standpunkt für ALLE KI-Texte: PERSONA (Finanzmakler Fin.Co),
-  ZIEL (Mehrwert-first/Mentoring), STIL_REGELN (per Du, keine Emojis, keine Gedankenstriche),
-  BEISPIEL_NACHRICHTEN (few-shot). `promptKontext()` + `saubern()`. Hier ändern wirkt überall.
+- `context.ts` + `profil.ts` — ZENTRALER Standpunkt für ALLE KI-Texte. Seit 2026-07-18 kommt
+  der INHALT (PERSONA, ZIEL, TABUS, STIL_REGELN, BEISPIEL_NACHRICHTEN, Winkel) aus dem
+  NUTZER-PROFIL statt fest aus dem Code: `profil.ts` lädt `profil.local.json` → sonst
+  `profil.example.json` → sonst neutraler Default. context.ts hält nur noch die LOGIK
+  (`promptKontext()`, `saubern()`, `erstnachrichtAngle()`, Exporte unverändert). Damit kann
+  JEDER das Tool lokal mit eigenem Profil nutzen (Ziel: an Laien verteilbar). `profil.local.json`
+  ist gitignored (bleibt lokal wie .env/.session); `profil.example.json` = mitgelieferte Blaupause.
+  Sinans Werte stehen in seiner lokalen profil.local.json; sein `promptKontext()` ist byte-
+  identisch zu vorher (einzige Abweichung: Erstnachricht-Winkel sagt "keine Werbung" statt
+  "keine Werbung für Fin.Co" — die Marke gehört ins Profil, nicht in den geteilten Grundtext).
 - `web/crm.html` — lokales CRM-Cockpit. HELLES SaaS-Design (2026-07-18, inspiriert von
   Donezo/Nexus/Zentra): App-Shell mit linker Sidebar (`.app > .sidebar + .wrap`), grüner
   Marken-Akzent, weiche Schatten, Card-Layout, grosse Zahlen. WICHTIG bei Umbauten: das CSS
