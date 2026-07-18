@@ -39,39 +39,33 @@ function startServer() {
   serverProc.on("error", (e) => console.error("[app] Server-Start fehlgeschlagen:", e.message));
 }
 
-/** Warten, bis der Server auf Port 4321 antwortet, dann Callback. */
-function waitForServer(cb, tries = 80) {
-  http
-    .get(DASHBOARD_URL, () => cb())
-    .on("error", () => {
-      if (tries <= 0) return cb();
-      setTimeout(() => waitForServer(cb, tries - 1), 500);
-    });
-}
-
+/**
+ * Fenster SOFORT öffnen und die Seite so lange neu laden, bis der Server bereit ist.
+ * Robuster als vorher: das Fenster hängt nicht mehr an einem http.get im Hauptprozess (der
+ * schlug im gepackten Zustand fehl → Fenster kam nie). Erst kurze Warteseite, dann Dashboard.
+ */
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1320,
-    height: 880,
-    minWidth: 980,
-    minHeight: 640,
-    title: "NextLead",
-    backgroundColor: "#eef1f0",
-    autoHideMenuBar: true,
+    width: 1320, height: 880, minWidth: 980, minHeight: 640,
+    title: "NextLead", backgroundColor: "#eef1f0", autoHideMenuBar: true,
   });
-  win.loadURL(DASHBOARD_URL);
-  // Externe Links (z.B. LinkedIn, aistudio) im echten Browser öffnen, nicht in der App.
+  // Externe Links (LinkedIn, aistudio) im echten Browser öffnen, nicht in der App.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(DASHBOARD_URL)) {
-      shell.openExternal(url);
-      return { action: "deny" };
-    }
+    if (!url.startsWith(DASHBOARD_URL)) { shell.openExternal(url); return { action: "deny" }; }
     return { action: "allow" };
   });
+  // Ladeversuch mit Wiederholung, bis der Server antwortet.
+  let versuche = 0;
+  const laden = () => win.loadURL(DASHBOARD_URL).catch(() => {});
+  win.webContents.on("did-fail-load", () => {
+    if (++versuche <= 120) setTimeout(laden, 500); // bis zu 60s auf den Server warten
+  });
+  laden();
+  return win;
 }
 
-// EINMAL-START: verhindert, dass die App zweimal läuft (sonst kollidieren beide um Port 4321
-// → EADDRINUSE-Absturz). Ein zweiter Start bringt stattdessen das bestehende Fenster nach vorn.
+// EINMAL-START: verhindert Doppelstart (Port-4321-Kollision). Zweiter Start holt das
+// bestehende Fenster nach vorn. requestSingleInstanceLock ist self-healing (tote Locks zählen nicht).
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -82,7 +76,7 @@ if (!gotLock) {
   });
   app.whenReady().then(() => {
     startServer();
-    waitForServer(createWindow);
+    createWindow(); // Fenster sofort – lädt das Dashboard, sobald der Server steht.
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
