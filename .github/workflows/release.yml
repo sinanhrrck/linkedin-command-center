@@ -1,0 +1,32 @@
+name: NextLead App bauen
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Abhaengigkeiten
+        run: npm ci
+      - name: Electron-Werkzeuge
+        run: npm install --no-save electron electron-builder
+      - name: Chromium buendeln
+        run: npx playwright install chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: "0"
+      - name: Bauen und veroeffentlichen
+        run: npm run dist -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
