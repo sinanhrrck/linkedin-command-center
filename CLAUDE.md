@@ -52,9 +52,15 @@ braucht den Governor NICHT.
 - `context.ts` — ZENTRALER Standpunkt für ALLE KI-Texte: PERSONA (Finanzmakler Fin.Co),
   ZIEL (Mehrwert-first/Mentoring), STIL_REGELN (per Du, keine Emojis, keine Gedankenstriche),
   BEISPIEL_NACHRICHTEN (few-shot). `promptKontext()` + `saubern()`. Hier ändern wirkt überall.
-- `web/crm.html` — lokales CRM-Cockpit (Premium-Design: Glas/Aurora/Sora, Hero-Kommandozeile,
-  Conversion-Funnel, Icons). Start/Stop-Button (POST /api/engine) + Modus-Umschalter (POST /api/mode).
-  "Command Center starten.command" = Doppelklick-Launcher.
+- `web/crm.html` — lokales CRM-Cockpit. HELLES SaaS-Design (2026-07-18, inspiriert von
+  Donezo/Nexus/Zentra): App-Shell mit linker Sidebar (`.app > .sidebar + .wrap`), grüner
+  Marken-Akzent, weiche Schatten, Card-Layout, grosse Zahlen. WICHTIG bei Umbauten: das CSS
+  nutzt durchgängig CSS-Variablen mit BEIBEHALTENEN Namen (`--accent`, `--green`, `--amber`,
+  `--red`, `--ink`, `--panel` …), weil die render-Funktionen Inline-Styles wie
+  `style="color:var(--amber)"` setzen — Werte in `:root` ummappen wirkt überall, Namen NICHT
+  umbenennen. Sidebar-Nav = `.nav-item[data-jump]` (scrollt zur Sektion, rein visuell/Anker).
+  Start/Stop-Button (POST /api/engine) + Modus-Umschalter (POST /api/mode) + Post-Freigabe
+  (POST /api/post). "Command Center starten.command" = Doppelklick-Launcher.
 
 ## Automatik-Modi (db state 'mode', default 'manual', umschaltbar im Dashboard)
 - **manual**: vernetzt auto; Erstnachricht + Antworten + Follow-ups = Entwürfe zur Freigabe.
