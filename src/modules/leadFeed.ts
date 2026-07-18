@@ -19,15 +19,22 @@ export type LeadSource = {
   last_added: number;
 };
 
-/** Quelle anlegen oder reaktivieren (dedupliziert per URL). keepFilter = Regex (i). */
-export function addSource(searchUrl: string, label?: string, keepFilter?: string) {
+/** Quelle anlegen oder reaktivieren (dedupliziert per URL). keepFilter = Regex (i).
+ *  zielgruppe (azubi|student) steuert, bei welchem Fokus die Quelle mitläuft. */
+export function addSource(searchUrl: string, label?: string, keepFilter?: string, zielgruppe?: string) {
   db.prepare(
-    `INSERT INTO lead_sources(label, search_url, keep_filter) VALUES(?, ?, ?)
+    `INSERT INTO lead_sources(label, search_url, keep_filter, zielgruppe) VALUES(?, ?, ?, ?)
      ON CONFLICT(search_url) DO UPDATE SET
        label = COALESCE(excluded.label, lead_sources.label),
        keep_filter = COALESCE(excluded.keep_filter, lead_sources.keep_filter),
+       zielgruppe = COALESCE(excluded.zielgruppe, lead_sources.zielgruppe),
        active = 1`,
-  ).run(label ?? null, searchUrl, keepFilter ?? null);
+  ).run(label ?? null, searchUrl, keepFilter ?? null, zielgruppe ?? null);
+}
+
+/** Quelle löschen. */
+export function deleteSource(id: number) {
+  db.prepare("DELETE FROM lead_sources WHERE id=?").run(id);
 }
 
 export function listSources(): LeadSource[] {

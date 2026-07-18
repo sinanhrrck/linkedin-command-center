@@ -82,8 +82,8 @@ export function getDashboardData() {
   ).n;
 
   const leadSources = db
-    .prepare("SELECT id, label, search_url, cursor_page, active, last_added, last_run FROM lead_sources ORDER BY created_at")
-    .all() as { id: number; label: string | null; active: number; last_added: number; cursor_page: number }[];
+    .prepare("SELECT id, label, search_url, cursor_page, active, last_added, last_run, zielgruppe FROM lead_sources ORDER BY created_at")
+    .all() as { id: number; label: string | null; active: number; last_added: number; cursor_page: number; zielgruppe: string | null }[];
 
   // 7-Tage-Aktivität fürs Balkendiagramm: pro Tag connect + message (+ Rest) zählen.
   // Flache Query, im JS zu einem lückenlosen 7-Tage-Fenster (heute rechts) aufgefüllt.

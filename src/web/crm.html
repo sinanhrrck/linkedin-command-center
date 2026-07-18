@@ -314,6 +314,25 @@
   .bulk-btn { font-family: var(--disp); font-weight: 600; font-size: 12.5px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--accent); border-radius: 10px; padding: 8px 15px; box-shadow: var(--shadow-sm); transition: all .15s; }
   .bulk-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+  /* ---------- Lead-Quellen ---------- */
+  #sources-panel { padding: 22px 24px; }
+  .src-add { display: flex; gap: 10px; flex-wrap: wrap; }
+  .src-add input, .src-add select { font-family: var(--disp); font-size: 13.5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; padding: 10px 13px; color: var(--ink); }
+  .src-add input:focus, .src-add select:focus { outline: none; border-color: var(--accent); background: var(--panel); }
+  .src-add #src-url { flex: 1; min-width: 220px; }
+  .src-add #src-label { flex: 0 0 170px; }
+  .btn-add { font-family: var(--disp); font-weight: 600; font-size: 13px; border: none; border-radius: 11px; padding: 10px 20px; color: #fff; background: var(--hero-grad); box-shadow: 0 6px 14px -6px rgba(20,80,50,.5); transition: transform .12s; }
+  .btn-add:hover { transform: translateY(-1px); }
+  .src-add .btn-add:disabled { opacity: .6; }
+  .src-help { font-size: 12px; color: var(--ink-dim); line-height: 1.55; margin: 13px 2px 6px; }
+  .src-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-top: 1px solid var(--line); }
+  .src-name { font-size: 13.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+  .src-zg { font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--accent); background: rgba(22,133,90,.1); padding: 2px 8px; border-radius: 20px; }
+  .src-meta { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-left: auto; }
+  .src-del { border: none; background: transparent; color: var(--ink-faint); font-size: 15px; line-height: 1; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
+  .src-del:hover { background: rgba(220,75,82,.12); color: var(--red); }
+  .src-empty { font-size: 13px; color: var(--ink-dim); padding: 14px 2px 2px; }
+
   /* ---------- Action-Center ---------- */
   .action-center { margin-bottom: 14px; }
   .action-center.clear { display: flex; align-items: center; gap: 10px; background: rgba(31,157,99,.07); border: 1px solid rgba(31,157,99,.18); color: var(--ink-dim); border-radius: 16px; padding: 16px 20px; font-size: 13px; }
@@ -622,6 +641,26 @@
     <div class="drafts-grid" id="posts-grid"></div>
   </section>
 
+  <!-- Lead-Quellen: Nachschub steuern (ersetzt npm run source/scrape) -->
+  <div class="section-head" style="margin-top:28px">
+    <p class="sec-title">Lead-Quellen · Nachschub</p>
+    <button class="bulk-btn" id="feed-now" title="Der Bot holt gleich frische Leads aus deinen Quellen">↻ Jetzt Nachschub holen</button>
+  </div>
+  <div class="panel" id="sources-panel">
+    <div class="src-add">
+      <input type="text" id="src-url" placeholder="LinkedIn-Such-Adresse einfügen (z.B. eine Personensuche)" autocomplete="off" />
+      <input type="text" id="src-label" placeholder="Name (z.B. Azubis Bank)" autocomplete="off" />
+      <select id="src-zg">
+        <option value="">Egal</option>
+        <option value="azubi">Azubis</option>
+        <option value="student">Studenten</option>
+      </select>
+      <button class="btn-add" id="src-add-btn">Hinzufügen</button>
+    </div>
+    <p class="src-help">So kommst du an eine Such-Adresse: Auf LinkedIn oben nach Personen suchen (z.B. „Auszubildende Bankkaufmann"), Filter setzen, dann die <b>Adresse aus der Browserzeile kopieren</b> und hier einfügen. Der Bot füllt daraus automatisch Nachschub, solange er läuft.</p>
+    <div id="src-list"></div>
+  </div>
+
   <!-- Pipeline als Conversion-Balken -->
   <div class="section-head" style="margin-top:28px">
     <p class="sec-title">Conversion-Funnel</p>
@@ -814,6 +853,7 @@ function render() {
   renderHotLeads();
   renderDrafts();
   renderPosts();
+  renderSources();
 
   // Chips
   const counts = Object.fromEntries(state.pipeline.map(p => [p.stage, p.count]));
@@ -869,11 +909,11 @@ function renderActivity() {
   const activeSrc = sources.filter(s => s.active).length;
   const srcLine = activeSrc
     ? `<br><span style="color:var(--ink-faint)">${activeSrc} Lead-Quelle${activeSrc > 1 ? "n" : ""} aktiv – füttert automatisch.</span>`
-    : `<br><span style="color:var(--ink-faint)">Keine Lead-Quellen. Anlegen: <code>npm run source -- add "&lt;such-url&gt;" "&lt;label&gt;"</code></span>`;
+    : `<br><span style="color:var(--ink-faint)">Noch keine Lead-Quellen. Unten bei „Lead-Quellen" eine LinkedIn-Suche hinzufügen.</span>`;
   const hb = document.getElementById("bot-hb");
   if (e.alive) hb.innerHTML = `Loop läuft. Vernetzt, trackt Annahmen und schreibt Entwürfe automatisch.${srcLine}`;
-  else if (e.heartbeat) hb.innerHTML = `Zuletzt aktiv ${relDate(e.heartbeat).t}. Starten mit <code>npm run dev</code>${srcLine}`;
-  else hb.innerHTML = `Noch nie gestartet. Motor anwerfen mit <code>npm run dev</code>${srcLine}`;
+  else if (e.heartbeat) hb.innerHTML = `Zuletzt aktiv ${relDate(e.heartbeat).t}. Starten über den Knopf „Bot starten".${srcLine}`;
+  else hb.innerHTML = `Noch nie gestartet. Klick oben auf „Bot starten".${srcLine}`;
 
   const btn = document.getElementById("engine-btn");
   if (e.alive) { btn.textContent = "■ Bot stoppen"; btn.className = "engine-btn stop"; }
@@ -907,7 +947,7 @@ function renderActivity() {
   const feed = document.getElementById("act-feed");
   const list = state.recentActions || [];
   if (!list.length) {
-    feed.innerHTML = `<div class="act-empty">Noch keine Aktionen protokolliert.<br>Sobald der Bot läuft (<code>npm run dev</code>), erscheint hier jede Vernetzung und Nachricht.</div>`;
+    feed.innerHTML = `<div class="act-empty">Noch keine Aktionen protokolliert.<br>Sobald der Bot läuft, erscheint hier jede Vernetzung und Nachricht.</div>`;
     return;
   }
   feed.innerHTML = list.map(r => {
@@ -1300,6 +1340,63 @@ async function postPost(payload) {
     return await r.json();
   } catch { return { ok: false }; }
 }
+
+// LEAD-QUELLEN: im Dashboard hinzufügen/löschen + Sofort-Nachschub. Ersetzt npm run source/scrape.
+async function postSource(p) {
+  try { const r = await fetch("/api/source", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }); return await r.json(); }
+  catch { return { ok: false }; }
+}
+function renderSources() {
+  const el = document.getElementById("src-list");
+  if (!el) return;
+  const list = state.leadSources || [];
+  if (!list.length) {
+    el.innerHTML = `<div class="src-empty">Noch keine Quelle. Füg oben eine LinkedIn-Suche ein, dann füllt der Bot automatisch Leads nach (solange er läuft).</div>`;
+  } else if (!el.contains(document.activeElement)) {
+    el.innerHTML = list.map(s => {
+      const zg = s.zielgruppe === "azubi" ? "Azubis" : s.zielgruppe === "student" ? "Studenten" : "";
+      const name = s.label || (s.search_url || "").replace(/^https?:\/\/(www\.)?/, "").slice(0, 42);
+      const last = s.last_run ? `zuletzt +${s.last_added || 0}` : "wartet auf ersten Lauf";
+      return `<div class="src-row" data-id="${s.id}">
+        <span class="src-name">${esc(name)}</span>
+        ${zg ? `<span class="src-zg">${zg}</span>` : ""}
+        <span class="src-meta">${last}</span>
+        <button class="src-del" title="Quelle entfernen">✕</button>
+      </div>`;
+    }).join("");
+    el.querySelectorAll(".src-del").forEach(b => b.onclick = async () => {
+      const id = Number(b.closest(".src-row").dataset.id);
+      if (!confirm("Diese Lead-Quelle entfernen?")) return;
+      await postSource({ action: "delete", id }); load();
+    });
+  }
+  const addBtn = document.getElementById("src-add-btn");
+  if (addBtn && !addBtn._wired) {
+    addBtn._wired = true;
+    addBtn.onclick = async () => {
+      const u = document.getElementById("src-url");
+      const url = u.value.trim();
+      if (!/linkedin\.com/i.test(url)) { alert("Bitte eine LinkedIn-Such-Adresse einfügen (sie beginnt mit linkedin.com)."); return; }
+      addBtn.disabled = true; addBtn.textContent = "…";
+      const r = await postSource({ action: "add", url, label: document.getElementById("src-label").value, zielgruppe: document.getElementById("src-zg").value });
+      addBtn.disabled = false; addBtn.textContent = "Hinzufügen";
+      if (r && r.ok) {
+        u.value = ""; document.getElementById("src-label").value = "";
+        alert(r.running ? "Quelle hinzugefügt! Der Bot holt gleich Nachschub (kann 1-2 Min dauern)." : "Quelle hinzugefügt! Starte oben den Bot, dann holt er die Leads.");
+        load();
+      } else alert("Konnte nicht hinzufügen: " + ((r && r.error) || "unbekannt"));
+    };
+  }
+  const feedBtn = document.getElementById("feed-now");
+  if (feedBtn && !feedBtn._wired) {
+    feedBtn._wired = true;
+    feedBtn.onclick = async () => {
+      const r = await postSource({ action: "feednow" });
+      if (r && r.ok) alert(r.running ? "Alles klar. Der Bot holt gleich frischen Nachschub (kann 1-2 Min dauern)." : "Der Bot ist gestoppt. Starte ihn oben, dann holt er Nachschub.");
+      else if ((state.leadSources || []).length === 0) alert("Füg zuerst eine Lead-Quelle hinzu.");
+    };
+  }
+}
 /**
  * Spiegel der Server-Warteschlange. Der crmServer haengt jeden Versand hinten an eine
  * Promise-Kette; der Browser feuert in Klick-Reihenfolge. Diese Liste bildet also exakt ab,
@@ -1360,7 +1457,7 @@ function renderRows() {
   if (list.length === 0) {
     rows.innerHTML = "";
     empty.innerHTML = state.totals.contacts === 0
-      ? `<div class="empty"><h3>Noch keine Leads im CRM</h3><div>Sammle welche mit <code>npm run scrape -- "&lt;LinkedIn-Such-URL&gt;"</code></div></div>`
+      ? `<div class="empty"><h3>Noch keine Leads im CRM</h3><div>Füge unten bei „Lead-Quellen" eine LinkedIn-Suche hinzu und hol Nachschub.</div></div>`
       : `<div class="empty"><h3>Kein Treffer</h3><div>Filter oder Suche anpassen.</div></div>`;
     return;
   }

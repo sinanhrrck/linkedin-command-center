@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { db, setState, getMode } from "./db/index.js";
+import { db, setState, getState, getMode } from "./db/index.js";
 import { governor } from "./core/safetyGovernor.js";
 import { events } from "./core/events.js";
 import { publishPost } from "./modules/posting.js";
@@ -67,6 +67,9 @@ setTimeout(async () => {
   });
   // Freigegebene Entwürfe, die noch offen sind, gleich beim Start abarbeiten.
   await einzeln("sendApproved", () => sendApprovedDrafts(15));
+  // Beim Start einmal Nachschub holen: wer Quellen angelegt + den Bot gestartet hat, bekommt
+  // gleich Leads, statt bis zum nächsten festen Fütter-Termin zu warten.
+  await einzeln("feed", () => feedTick());
 }, 4000);
 
 /**
@@ -110,6 +113,18 @@ cron.schedule("5 9-19 * * *", () => einzeln("acceptance", () => checkAcceptances
 // Lead-Fütterung 2x täglich: gespeicherte Such-Quellen abgrasen (rein lesend).
 // Hält die Pipeline gefüllt, damit der Outreach nicht trockenläuft.
 cron.schedule("0 10,16 * * *", () => einzeln("feed", () => feedTick()));
+
+// SOFORT-NACHSCHUB auf Knopfdruck: das Dashboard setzt "feed_now"=1 (neue Quelle oder
+// "Jetzt Nachschub holen"). Der Loop prüft alle 2 Min und füttert dann gleich – so wirkt der
+// Knopf zeitnah, ohne dass der Nutzer bis zum festen Termin wartet. Der Browser gehört der
+// Engine, deshalb läuft das Scrapen hier (nicht im Dashboard-Prozess).
+cron.schedule("*/2 * * * *", () =>
+  einzeln("feed", async () => {
+    if (getState("feed_now") !== "1") return;
+    setState("feed_now", "");
+    await feedTick();
+  }),
+);
 
 // DM-Entwürfe 2x täglich generieren (rein lesend + Gemini, SENDET NICHT).
 // Neue Entwürfe erscheinen als 'pending' im Dashboard zur Freigabe.

@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
 import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft } from "../modules/drafts.js";
 import { getPost, approvePost, discardPost } from "../modules/content.js";
+import { addSource, deleteSource } from "../modules/leadFeed.js";
 import { deleteContact } from "../modules/crm.js";
 import { db, getState, setState, setMode, setFocus, getFocus, type Mode, type Focus } from "../db/index.js";
 import { LIVE_SHOT_PATH } from "../core/session.js";
@@ -329,6 +330,40 @@ const server = createServer((req, res) => {
         }
         setFocus(focus as Focus);
         res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, focus }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // Lead-Quellen: hinzufügen / löschen / sofort Nachschub anfordern. Ersetzt `npm run source`.
+  // Das eigentliche Scrapen macht die ENGINE (sie besitzt den Browser) – hier wird nur die
+  // Quelle gespeichert und ein "feed_now"-Flag gesetzt, das der Loop beim nächsten Tick abholt.
+  if (url.pathname === "/api/source" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { action, url: srcUrl, label, zielgruppe, id } = JSON.parse(body || "{}");
+        if (action === "add") {
+          if (typeof srcUrl !== "string" || !/linkedin\.com/i.test(srcUrl)) {
+            res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "Bitte eine LinkedIn-Such-Adresse einfügen (beginnt mit linkedin.com)." }));
+            return;
+          }
+          const zg = ["azubi", "student"].includes(zielgruppe) ? zielgruppe : undefined;
+          addSource(srcUrl.trim(), (typeof label === "string" && label.trim()) || undefined, undefined, zg);
+          setState("feed_now", "1"); // Bot holt beim nächsten Tick Nachschub aus der neuen Quelle
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, running: engineAlive() }));
+        } else if (action === "delete") {
+          deleteSource(Number(id));
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+        } else if (action === "feednow") {
+          setState("feed_now", "1");
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, running: engineAlive() }));
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
+        }
       } catch (e) {
         res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
       }
