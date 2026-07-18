@@ -21,7 +21,7 @@ jobs:
       - name: Abhaengigkeiten
         run: npm ci
       - name: Electron-Werkzeuge
-        run: npm install --no-save electron electron-builder
+        run: npm install --no-save electron@32 electron-builder
       - name: Chromium buendeln
         run: npx playwright install chromium
         env:
