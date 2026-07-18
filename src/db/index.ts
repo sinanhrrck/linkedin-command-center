@@ -96,3 +96,33 @@ export function getFocus(): Focus {
 export function setFocus(f: Focus) {
   setState("focus", f);
 }
+
+/**
+ * KATEGORIENWEISE AUTONOMIE – das Rueckgrat des Stufenmodells.
+ * Statt eines Grobschalters (manual/semi/full) entscheidet pro Signal-Typ, ob der Bot
+ * autonom handelt ("auto") oder Sinan uebergibt ("ask"). So laesst sich die Freigabe
+ * kategorienweise anheben, sobald die Wochen-Bilanz zeigt, dass eine Kategorie sitzt –
+ * genau Sinans Stufe 2 ("Kategorien, bei denen du ~immer gleich entscheidest, werden
+ * freigegeben"). Greift nur im full-Modus (im Autopilot); manual/semi machen weiter Entwuerfe.
+ *
+ * Defaults bilden das heutige Verhalten ab: Routine + Abschiede laufen autonom, die
+ * vertrieblich heiklen Momente (Tuer + Einwand) gehen erst mal zu Sinan.
+ */
+export type IntentKat = "absage" | "einwand" | "chance" | "positive" | "neutral";
+const AUTONOMIE_DEFAULT: Record<IntentKat, "auto" | "ask"> = {
+  absage: "auto",   // Abschied, nichts zu entscheiden
+  neutral: "auto",  // Smalltalk
+  positive: "auto", // interessiert, aber noch kein Tuer-Moment
+  chance: "ask",    // DER Vertriebsmoment -> Sinans Wahl: erst beobachten
+  einwand: "ask",   // heikel, ein falscher Satz verbrennt den Lead
+};
+
+export function autonomyFor(intent: string): "auto" | "ask" {
+  const v = getState(`autonomy_${intent}`);
+  if (v === "auto" || v === "ask") return v;
+  return AUTONOMIE_DEFAULT[intent as IntentKat] ?? "ask";
+}
+
+export function setAutonomy(intent: IntentKat, val: "auto" | "ask") {
+  setState(`autonomy_${intent}`, val);
+}

@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { db, getMode } from "../db/index.js";
+import { db, getMode, autonomyFor } from "../db/index.js";
 import { fetchThreads } from "./inbox.js";
 import { converseStep } from "./personalize.js";
 import { sendThreadReply } from "./outreach.js";
@@ -62,10 +62,8 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
       continue;
     }
 
-    // KI unsicher / echter EINWAND / Nachrichten-Limit → an den Menschen eskalieren.
-    // Ein Einwand ist NICHT das Ende: die Person ist noch da, aber ein falscher Satz
-    // verbrennt sie. Genau dafür gibt es Sinan.
-    if (!step || step.intent === "einwand" || conv.auto_count >= config.autopilot.maxMessagesPerThread) {
+    // Reissleine: KI-Ausfall oder Nachrichten-Limit → immer an den Menschen, egal welche Kategorie.
+    if (!step || conv.auto_count >= config.autopilot.maxMessagesPerThread) {
       queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step?.reply || "", step?.intent ?? "unklar");
       db.prepare("UPDATE conversations SET status='escalated', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
       res.escalated++;
@@ -73,26 +71,28 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
     }
 
     /**
-     * DIE TÜR GEHT AUF – der vertrieblich wichtigste Moment im ganzen System.
-     * Die Person zeigt Unsicherheit, Bedarf oder fragt nach Sinan. Genau hier entscheidet
-     * sich, ob ein Gespräch zu etwas wird. Der Bot SENDET hier bewusst NICHT: er bereitet
-     * Sinans Antwort als Entwurf vor und übergibt (Sinans Entscheidung: "der Bot darf und
-     * soll pitchen, aber gut und schlau" + "Entwurf vorbereiten, du gibst frei").
-     * Vorher gab es diesen Zustand nicht: ein heißer Lead plauderte SECHS Mal mit dem Bot,
-     * bevor er überhaupt bei Sinan ankam. Die Chance war dann meist durch.
+     * EINWAND & CHANCE – die vertrieblich heiklen Momente. Ob der Bot sie autonom fährt oder
+     * an Sinan übergibt, entscheidet das AUTONOMIE-REGISTER (autonomyFor), nicht mehr harter
+     * Code. Default "ask" (Sinans Wahl: erst beobachten). Sobald die Wochen-Bilanz zeigt, dass
+     * eine Kategorie sitzt, stellt Sinan sie auf "auto" und der Bot übernimmt sie selbst.
+     * Genau Stufe 2 des Zielbilds: die Schwelle lässt sich pro Kategorie anheben.
      */
-    if (step.intent === "chance") {
-      queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step.reply, "chance");
-      db.prepare("UPDATE conversations SET status='escalated', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
-      events.emit("lead:chance", {
-        participant: t.participant,
-        zusammenfassung: step.zusammenfassung,
-        strategie: step.strategie,
-        vorschlag: step.reply,
-        threadUrl: t.threadUrl,
-      });
-      res.escalated++;
-      continue;
+    if (step.intent === "einwand" || step.intent === "chance") {
+      if (autonomyFor(step.intent) === "ask") {
+        queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step.reply, step.intent);
+        db.prepare("UPDATE conversations SET status='escalated', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
+        events.emit("lead:chance", {
+          participant: t.participant,
+          zusammenfassung: step.zusammenfassung,
+          strategie: step.strategie,
+          vorschlag: step.reply,
+          threadUrl: t.threadUrl,
+          intent: step.intent,
+        });
+        res.escalated++;
+        continue;
+      }
+      // "auto": faellt durch zum autonomen Senden unten (inkl. Protokoll + Push).
     }
 
     // Termin-Zusage oder Kontakt genannt → HANDOFF, ab hier übernimmt der Mensch
