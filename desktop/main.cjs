@@ -25,12 +25,15 @@ let serverProc = null;
 function startServer() {
   if (app.isPackaged) {
     const dataDir = app.getPath("userData");
+    // Chromium liegt ENTPACKT in app.asar.unpacked (asarUnpack). Playwright würde ihn sonst im
+    // gepackten app.asar suchen und beim Start scheitern (spawn ENOTDIR), weil die Engine als
+    // reines Node läuft (keine Electron-asar-Umleitung beim Spawnen von Binaries). Deshalb hier
+    // den ENTPACKTEN Browser-Ordner explizit vorgeben.
+    const browsersPath = path.join(process.resourcesPath, "app.asar.unpacked", "node_modules", "playwright-core", ".local-browsers");
     serverProc = spawn(process.execPath, [path.join(__dirname, "..", "dist", "scripts", "crmServer.js")], {
       cwd: dataDir,
       stdio: "inherit",
-      // PLAYWRIGHT_BROWSERS_PATH=0 → Playwright sucht Chromium in node_modules (mitgebündelt),
-      // nicht im System-Cache. So braucht der Nutzer keine separate Browser-Installation.
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NEXTLEAD_PACKAGED: "1", NEXTLEAD_APP_DIR: path.join(__dirname, ".."), PLAYWRIGHT_BROWSERS_PATH: "0", DB_PATH: path.join(dataDir, "data.db"), SESSION_DIR: path.join(dataDir, ".session") },
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NEXTLEAD_PACKAGED: "1", NEXTLEAD_APP_DIR: path.join(__dirname, ".."), PLAYWRIGHT_BROWSERS_PATH: browsersPath, DB_PATH: path.join(dataDir, "data.db"), SESSION_DIR: path.join(dataDir, ".session") },
     });
   } else {
     const npm = process.platform === "win32" ? "npm.cmd" : "npm";
