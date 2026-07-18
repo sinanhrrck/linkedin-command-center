@@ -38,6 +38,11 @@
   .btn.primary:hover{transform:translateY(-2px);}
   .btn.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow);}
   .cta-note{font-size:13px;color:var(--ink-faint);margin-top:14px;}
+  .dl-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;}
+  .dl-btn{display:inline-flex;align-items:center;gap:13px;padding:15px 24px;text-align:left;font-size:16px;}
+  .dl-btn svg{width:26px;height:26px;flex:0 0 26px;}
+  .dl-btn span{display:flex;flex-direction:column;line-height:1.2;}
+  .dl-btn small{font-size:11px;font-weight:400;opacity:.72;margin-top:3px;}
   /* Mockup-Streifen */
   .shot{margin:44px auto 0;max-width:900px;background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:20px;}
   .shot .bar{display:flex;gap:7px;margin-bottom:16px;}
@@ -133,16 +138,18 @@
     <div class="download">
       <span class="badge">Kostenlos &amp; Open Source</span>
       <h2 style="margin-top:10px">NextLead herunterladen</h2>
-      <p class="lead" style="margin-bottom:24px">Lad den Ordner, entpack ihn und starte per Doppelklick. Die Anleitung liegt bei und der Assistent führt dich durch alles.</p>
-      <a class="btn primary" style="font-size:17px" href="https://github.com/sinanhrrck/linkedin-command-center/releases/latest">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg>
-        NextLead herunterladen
-      </a>
-      <div class="os">
-        <span>🍎 macOS (.dmg)</span>
-        <span>🪟 Windows (.exe)</span>
+      <p class="lead" style="margin-bottom:26px">Wähle dein System — der Download startet direkt.</p>
+      <div class="dl-row">
+        <a class="btn primary dl-btn" href="https://github.com/sinanhrrck/linkedin-command-center/releases/latest/download/NextLead-0.1.7-arm64.dmg">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2-.05 1.6-.75 3-.75s1.8.75 3 .73c1.2-.02 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.3-2.6-.03-.01-2.5-.96-2.5-3.8zM14.1 6.1c.65-.8 1.1-1.9.98-3-.94.04-2.1.63-2.77 1.42-.6.7-1.13 1.83-.99 2.9 1.05.08 2.13-.53 2.78-1.32z"/></svg>
+          <span>Für Mac laden<small>.dmg · Apple Silicon (M1–M4)</small></span>
+        </a>
+        <a class="btn ghost dl-btn" href="https://github.com/sinanhrrck/linkedin-command-center/releases/latest/download/NextLead-Setup-0.1.7.exe">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.4v7.1H3zM11.5 4.3 21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg>
+          <span>Für Windows laden<small>.exe · Installer</small></span>
+        </a>
       </div>
-      <p class="cta-note" style="margin-top:20px">Beim ersten Öffnen zeigt dein System evtl. eine Warnung, weil die App noch nicht signiert ist. <b>Mac:</b> Rechtsklick → Öffnen. <b>Windows:</b> „Weitere Informationen" → „Trotzdem ausführen". Danach läuft alles normal.<br>Lieber als Ordner (für Technik-Affine)? <a href="https://github.com/sinanhrrck/linkedin-command-center/archive/refs/heads/main.zip">ZIP laden</a> · <a href="https://github.com/sinanhrrck/linkedin-command-center#readme">Anleitung</a></p>
+      <p class="cta-note" style="margin-top:22px">Beim ersten Öffnen zeigt dein System eine Warnung (die App ist nicht kommerziell signiert). <b>Mac:</b> Rechtsklick → Öffnen → Öffnen. <b>Windows:</b> „Weitere Informationen" → „Trotzdem ausführen". Danach läuft alles normal.<br>Alle Versionen &amp; Windows/Intel: <a href="https://github.com/sinanhrrck/linkedin-command-center/releases">Releases</a> · <a href="https://github.com/sinanhrrck/linkedin-command-center#readme">Anleitung</a></p>
     </div>
   </section>
 
