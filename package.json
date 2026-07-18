@@ -1,6 +1,6 @@
 {
   "name": "linkedin-command-center",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "description": "Lokales All-in-One LinkedIn-Tool: Posting, Outreach, Inbox, CRM, Analytics",
@@ -62,7 +62,14 @@
         "repo": "linkedin-command-center"
       }
     ],
-    "asar": false
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/node_modules/@img/**",
+      "**/node_modules/playwright-core/**",
+      "**/node_modules/playwright/**",
+      "**/node_modules/playwright-core/.local-browsers/**",
+      "**/*.local-browsers/**"
+    ]
   },
   "author": "NextLead"
 }
