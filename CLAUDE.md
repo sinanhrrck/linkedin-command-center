@@ -61,6 +61,17 @@ braucht den Governor NICHT.
   umbenennen. Sidebar-Nav = `.nav-item[data-jump]` (scrollt zur Sektion, rein visuell/Anker).
   Start/Stop-Button (POST /api/engine) + Modus-Umschalter (POST /api/mode) + Post-Freigabe
   (POST /api/post). "Command Center starten.command" = Doppelklick-Launcher.
+  SMART-FEATURES (2026-07-18): Action-Center oben (`renderActionCenter`, zeigt was JETZT
+  Hand braucht: Hot Leads/Eskalationen/Entwürfe, springt hin), Sammel-Freigabe (`#bulk-send`
+  klickt jeden Senden-Knopf → nutzt dieselbe serialisierte Queue), Lead-Score-Pills
+  (`scorePill`, aus contacts.lead_score). CHARTS: Verlauf-Linienchart (`renderTrend`, SVG,
+  `dashboard.trend` = 28 Tage connect+accepted) + Wochenbalken (`renderChart`,
+  `dashboard.weekActivity`) zusammen in EINEM Panel (.analytics-big, weniger Kacheln);
+  Conversion-Funnel als horizontale Balken (`#funnel`, Conversion-% je Stufe); KPI-Trend-
+  Badges (`deltaBadge`, `dashboard.deltas` = Woche vs. Vorwoche). Neue State-Felder in
+  dashboard.ts: weekActivity, trend, deltas, contacts.lead_score.
+  ACHTUNG bei langen Seiten: der In-App-Browser-Pane paintet weit unten nach Scroll teils
+  nicht (Artefakt) — DOM/oberer Bereich sind maßgeblich, nicht der Leerscreenshot.
 
 ## Automatik-Modi (db state 'mode', default 'manual', umschaltbar im Dashboard)
 - **manual**: vernetzt auto; Erstnachricht + Antworten + Follow-ups = Entwürfe zur Freigabe.

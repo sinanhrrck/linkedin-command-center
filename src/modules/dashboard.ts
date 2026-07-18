@@ -21,12 +21,13 @@ type ContactRow = {
   invited_at: string | null;
   accepted_at: string | null;
   created_at: string;
+  lead_score: number | null;
 };
 
 export function getDashboardData() {
   const contacts = db
     .prepare(
-      `SELECT id, full_name, headline, profile_url, status, invited_at, accepted_at, created_at
+      `SELECT id, full_name, headline, profile_url, status, invited_at, accepted_at, created_at, lead_score
        FROM contacts ORDER BY
          CASE status WHEN 'replied' THEN 0 WHEN 'messaged' THEN 1 WHEN 'accepted' THEN 2
                      WHEN 'invited' THEN 3 WHEN 'new' THEN 4 ELSE 5 END,
@@ -106,6 +107,30 @@ export function getDashboardData() {
     return { label: WD[dt.getDay()], connect, message, total: connect + message, today: i === 6 };
   });
 
+  // 28-Tage-Verlauf fürs Linienchart: Vernetzungen (aus actions) + Annahmen (accepted_at) pro Tag.
+  const dayKey = (offset: number) => {
+    const dt = new Date();
+    dt.setDate(dt.getDate() - offset);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  };
+  const connMap = Object.fromEntries(
+    (db.prepare(
+      `SELECT date(created_at,'localtime') d, COUNT(*) n FROM actions
+        WHERE type='connect' AND created_at >= datetime('now','localtime','-27 days','start of day') GROUP BY d`,
+    ).all() as { d: string; n: number }[]).map((r) => [r.d, r.n]),
+  );
+  const accMap = Object.fromEntries(
+    (db.prepare(
+      `SELECT date(accepted_at,'localtime') d, COUNT(*) n FROM contacts
+        WHERE accepted_at >= datetime('now','localtime','-27 days','start of day') GROUP BY d`,
+    ).all() as { d: string; n: number }[]).map((r) => [r.d, r.n]),
+  );
+  const trend = Array.from({ length: 28 }, (_, i) => {
+    const key = dayKey(27 - i);
+    const d = new Date(key);
+    return { date: key, label: `${d.getDate()}.${d.getMonth() + 1}.`, connect: connMap[key] ?? 0, accepted: accMap[key] ?? 0 };
+  });
+
   // Woche-über-Woche-Deltas für die KPI-Trend-Badges (diese 7 Tage vs. die 7 davor).
   const wow = (sql: string) => {
     const cur = (db.prepare(sql).get("-7 days", "now") as { n: number }).n;
@@ -132,6 +157,7 @@ export function getDashboardData() {
     drafts: pendingDrafts(),
     postDrafts: pendingPosts(),
     weekActivity,
+    trend,
     deltas,
     hotLeads: hotLeads(),
     mode: getMode(),
