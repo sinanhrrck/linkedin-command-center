@@ -7,6 +7,7 @@ import { outreachTick } from "./modules/outreachTick.js";
 import { checkAcceptances } from "./modules/acceptance.js";
 import { feedTick } from "./modules/leadFeed.js";
 import { generateInboxDrafts, generateFollowups } from "./modules/drafts.js";
+import { generatePostIdeas } from "./modules/content.js";
 import { runAutopilot } from "./modules/autopilot.js";
 import { config } from "./config.js";
 import { startTelegram } from "./modules/telegram.js";
@@ -122,6 +123,11 @@ cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4,
 cron.schedule(`*/${config.autopilot.intervalMinutes} * * * *`, () =>
   einzeln("autopilot", () => runAutopilot()),
 );
+
+// CONTENT: 1x pro Woche (Montag 8 Uhr) Post-Ideen erzeugen. Sie landen als Entwürfe und
+// werden erst nach Sinans Freigabe über die offizielle API veröffentlicht (öffentlich = nie
+// autonom). Rein KI, kein Governor (Posting läuft über die API, nicht die Browser-Session).
+cron.schedule("0 8 * * 1", () => einzeln("content", () => generatePostIdeas(3)));
 
 // WOCHEN-BILANZ automatisch: Montag 9:05 Uhr per Telegram, ohne dass Sinan etwas tippt.
 // "sowas muss automatisch passieren" – der Report kommt von allein, reife Kategorien

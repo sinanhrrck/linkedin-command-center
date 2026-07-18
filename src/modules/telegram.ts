@@ -6,6 +6,7 @@ import { governor } from "../core/safetyGovernor.js";
 import { countByStatus, hotLeads } from "./crm.js";
 import { pendingDrafts, sendDraft, setDraftStatus, type Draft } from "./drafts.js";
 import { computeBilanz } from "./bilanz.js";
+import { pendingPosts, approvePost, discardPost } from "./content.js";
 
 /**
  * Telegram-Steuerung: Entwürfe freigeben/senden, offene Nachrichten sehen, Tages-Status.
@@ -370,6 +371,44 @@ export function startTelegram() {
     if (!allowed(ctx.chat.id)) return;
     (["chance", "einwand", "positive", "neutral"] as IntentKat[]).forEach((k) => setAutonomy(k, "ask"));
     ctx.reply("✋ Alle heiklen Kategorien gehen wieder über deine Freigabe.");
+  });
+
+  /**
+   * CONTENT: neue Post-Idee → in den Chat mit "Posten"/"Verwerfen". Öffentlich, also NIE
+   * autonom: erst wenn Sinan tippt, geht der Post über die offizielle API raus.
+   */
+  const postKb = (id: number) =>
+    new InlineKeyboard().text("📢 Posten", `postok:${id}`).text("🗑 Verwerfen", `postno:${id}`);
+
+  events.on("post:new", (p: { id: number; body: string }) => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api
+      .sendMessage(config.telegram.chatId, `📝 *Post-Idee* (dein Vorschlag)\n\n${p.body}\n\n👉 Öffentlich posten?`, {
+        parse_mode: "Markdown",
+        reply_markup: postKb(p.id),
+      })
+      .catch(() => {});
+  });
+
+  bot.command(["posts", "content"], async (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    const ps = pendingPosts();
+    if (!ps.length) return ctx.reply("Keine offenen Post-Ideen. Der Bot schlägt Montags neue vor.");
+    await ctx.reply(`${ps.length} Post-Idee(n) zur Freigabe:`);
+    for (const p of ps) await ctx.reply(`📝 ${p.body}\n\n👉 Posten?`, { reply_markup: postKb(p.id) });
+  });
+
+  bot.callbackQuery(/^postok:(\d+)$/, async (ctx) => {
+    if (!allowed(ctx.chat?.id)) return ctx.answerCallbackQuery("Nicht erlaubt.");
+    const ok = approvePost(Number(ctx.match[1]));
+    await ctx.answerCallbackQuery(ok ? "Wird veröffentlicht…" : "schon erledigt");
+    await ctx.editMessageText(ok ? "📢 Freigegeben – geht in den nächsten Minuten raus." : "War schon erledigt.").catch(() => {});
+  });
+  bot.callbackQuery(/^postno:(\d+)$/, async (ctx) => {
+    if (!allowed(ctx.chat?.id)) return ctx.answerCallbackQuery("Nicht erlaubt.");
+    discardPost(Number(ctx.match[1]));
+    await ctx.answerCallbackQuery("Verworfen.");
+    await ctx.editMessageText("🗑 Verworfen.").catch(() => {});
   });
 
   bot.catch((err) => console.error("[telegram] Fehler:", err.message));
