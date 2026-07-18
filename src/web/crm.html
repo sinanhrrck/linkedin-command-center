@@ -172,20 +172,21 @@
   .status-meta > div { display: flex; flex-direction: column; gap: 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-faint); }
   .status-meta b { font-family: var(--display); font-size: 16px; font-weight: 700; color: var(--ink); text-transform: none; letter-spacing: -.01em; }
 
-  /* ---------- Gauge · Ring (Apple-Activity-Stil: ruhig, dünn, runde Enden) ---------- */
-  .gauge-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .gauge { position: relative; width: 180px; height: 180px; margin: 10px auto 4px; }
-  .ring { display: block; transform: rotate(-90deg); }         /* Start oben (12 Uhr) */
-  .ring-track { stroke: var(--panel-2); stroke-width: 12; }
-  .ring-fill {
-    stroke: var(--green); stroke-width: 12; stroke-linecap: round;
-    stroke-dasharray: 1000; stroke-dashoffset: 1000;
-    transition: stroke-dashoffset .8s var(--ease), stroke .35s var(--ease);
-  }
-  .gauge .read { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
-  .gauge .read .val { font-family: var(--display); font-size: 40px; font-weight: 600; letter-spacing: -.03em; color: var(--ink); line-height: 1; }
-  .gauge .read .lab { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .1em; }
-  .gauge-note { font-size: 12px; color: var(--ink-dim); text-align: center; margin-top: 10px; line-height: 1.5; max-width: 240px; }
+  /* ---------- Akzeptanzrate · selbsterklärende Karte (Klartext statt Tacho) ---------- */
+  .accept-card { display: flex; flex-direction: column; }
+  .accept-head { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
+  .accept-big { font-family: var(--display); font-size: 46px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); line-height: 1; font-variant-numeric: tabular-nums; }
+  .accept-badge { font-size: 11.5px; font-weight: 600; padding: 4px 11px; border-radius: 20px; }
+  .accept-badge.good { color: #12855a; background: rgba(31,157,99,.13); }
+  .accept-badge.bad { color: #c23940; background: rgba(220,75,82,.12); }
+  .accept-badge.wait { color: var(--ink-dim); background: var(--panel-2); }
+  .accept-sub { font-size: 13px; color: var(--ink-dim); margin: 12px 0 16px; line-height: 1.45; }
+  .accept-bar { position: relative; height: 12px; border-radius: 20px; background: var(--panel-2); overflow: visible; }
+  .accept-fill { height: 100%; border-radius: 20px; background: var(--green); transition: width .7s var(--ease), background .35s; }
+  .accept-thresh { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); opacity: .45; border-radius: 2px; }
+  .accept-scale { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10.5px; color: var(--ink-faint); position: relative; }
+  .accept-scale-th { position: absolute; left: 30%; transform: translateX(-50%); color: var(--ink-dim); font-weight: 600; white-space: nowrap; }
+  .gauge-note { font-size: 12px; color: var(--ink-dim); margin-top: 18px; line-height: 1.5; }
 
   /* ---------- Meter ---------- */
   .meter-block { margin-top: 2px; }
@@ -535,15 +536,18 @@
       <div class="meter-foot" style="font-size:11px;margin-top:12px" id="acts">—</div>
     </div>
 
-    <div class="panel gauge-wrap">
-      <p class="eyebrow" style="align-self:flex-start">Akzeptanzrate</p>
-      <div class="gauge">
-        <svg class="ring" viewBox="0 0 180 180" width="180" height="180" fill="none" aria-hidden="true">
-          <circle class="ring-track" cx="90" cy="90" r="74" />
-          <circle id="g-fill" class="ring-fill" cx="90" cy="90" r="74" pathLength="1000" />
-        </svg>
-        <div class="read"><div class="val" id="g-val">—</div><div class="lab" id="g-lab">Annahmequote</div></div>
+    <div class="panel accept-card">
+      <p class="eyebrow">Wie viele nehmen deine Anfrage an?</p>
+      <div class="accept-head">
+        <span class="accept-big" id="g-val">—</span>
+        <span class="accept-badge" id="g-badge">—</span>
       </div>
+      <div class="accept-sub" id="g-lab">—</div>
+      <div class="accept-bar">
+        <div class="accept-fill" id="g-fill" style="width:0%"></div>
+        <div class="accept-thresh" id="g-thresh" style="left:30%"></div>
+      </div>
+      <div class="accept-scale"><span>0 %</span><span class="accept-scale-th" id="g-thresh-lab">Sperre 30 %</span><span>100 %</span></div>
       <div class="gauge-note" id="g-note">—</div>
     </div>
   </section>
@@ -710,24 +714,45 @@ function render() {
   weekEl.textContent = `${g.connect.week}/${g.connect.weeklyCap}`;
   weekEl.className = g.connect.week >= g.connect.weeklyCap ? "bad" : "";
 
-  // Gauge · Ring. Fill über stroke-dashoffset (pathLength=1000 → 1000 = voller Kreis).
-  // Im Standby fährt der Ring den FORTSCHRITT bis zur Scharfstellung (sample/minSample) in
-  // Grau – so ist die Anzeige nie tot, sondern zeigt, wie nah der Breaker am Aktivwerden ist.
+  // Akzeptanzrate als Klartext-Karte: grosse %-Zahl + "X von Y angenommen" + Balken mit
+  // markierter Sperr-Grenze. Sofort verständlich, was gemeint ist.
   const a = g.acceptance;
   const rate = Math.max(0, Math.min(1, a.rate));
+  const ratePct = Math.round(rate * 100);
+  const thPct = Math.round(a.minRate * 100);
   const healthy = rate >= a.minRate;
-  const frac = a.armed ? rate : Math.min(1, a.sample / a.minSample);
-  const gFill = document.getElementById("g-fill");
-  gFill.style.strokeDashoffset = String(Math.round(1000 * (1 - frac)));
-  gFill.style.stroke = !a.armed ? "var(--line-strong)" : (healthy ? "var(--green)" : "var(--red)");
+  const accepted = Math.round(rate * a.sample); // aus Rate + Stichprobe rekonstruiert
   const gv = document.getElementById("g-val");
-  gv.textContent = a.armed ? Math.round(rate * 100) + "%" : `${a.sample}/${a.minSample}`;
-  gv.style.fontSize = a.armed ? "40px" : "30px";
-  gv.style.color = !a.armed ? "var(--ink-dim)" : (healthy ? "var(--ink)" : "var(--red)");
-  document.getElementById("g-lab").textContent = a.armed ? "Annahmequote" : "Aufwärmen";
-  document.getElementById("g-note").textContent = a.armed
-    ? `${a.sample} reife Einladungen · Breaker unter ${Math.round(a.minRate * 100)}%`
-    : `Sammelt Daten – der Schutz greift ab ${a.minSample} Einladungen.`;
+  const badge = document.getElementById("g-badge");
+  const sub = document.getElementById("g-lab");
+  const gFill = document.getElementById("g-fill");
+  const th = document.getElementById("g-thresh");
+  const thLab = document.getElementById("g-thresh-lab");
+  // Sperr-Marker + Skala-Label an die konfigurierte Grenze setzen.
+  th.style.left = thPct + "%";
+  thLab.style.left = thPct + "%";
+  thLab.textContent = `Sperre ${thPct} %`;
+  if (a.armed) {
+    gv.textContent = ratePct + " %";
+    gv.style.color = healthy ? "var(--ink)" : "var(--red)";
+    badge.textContent = healthy ? "Gesund" : "Kritisch";
+    badge.className = "accept-badge " + (healthy ? "good" : "bad");
+    sub.textContent = `${accepted} von ${a.sample} haben deine Anfrage angenommen.`;
+    gFill.style.width = ratePct + "%";
+    gFill.style.background = healthy ? "var(--green)" : "var(--red)";
+    document.getElementById("g-note").textContent = healthy
+      ? `Alles im grünen Bereich. Der Bot pausiert automatisch, falls die Quote unter ${thPct} % fällt.`
+      : `Zu niedrig – der Bot hat das Vernetzen zum Schutz deines Accounts pausiert.`;
+  } else {
+    // Noch nicht genug Daten für eine Aussage – ehrlich benennen statt eine Zahl vortäuschen.
+    gv.textContent = "—";
+    gv.style.color = "var(--ink-faint)";
+    badge.textContent = "Sammelt Daten";
+    badge.className = "accept-badge wait";
+    sub.textContent = `Erst ${a.sample} von ${a.minSample} Einladungen ausgewertet – für eine belastbare Quote zu wenig.`;
+    gFill.style.width = "0%";
+    document.getElementById("g-note").textContent = `Sobald ${a.minSample} Einladungen alt genug sind, zeigt der Bot hier deine echte Annahmequote.`;
+  }
 
   // Cap meter
   document.getElementById("m-today").textContent = g.connect.today;
