@@ -57,6 +57,39 @@ function setupStatus() {
 }
 
 /**
+ * Prozess-Start für Engine/Login/Login-Prüfung – funktioniert in BEIDEN Welten:
+ *  - Dev (`npm run crm`): startet die .ts über `tsx` (mit caffeinate für die Engine auf Mac).
+ *  - Paketierte App (Electron): main.cjs setzt NEXTLEAD_PACKAGED=1 + NEXTLEAD_APP_DIR und startet
+ *    dann die KOMPILIERTE Version (dist/*.js) über Electrons eingebautes Node (ELECTRON_RUN_AS_NODE).
+ * So braucht die verteilte App weder Node noch tsx im System.
+ */
+const PACKAGED = process.env.NEXTLEAD_PACKAGED === "1";
+const APP_DIR = process.env.NEXTLEAD_APP_DIR || PROJECT_ROOT;
+const JOB_ENTRY = {
+  engine: PACKAGED ? join(APP_DIR, "dist/index.js") : "src/index.ts",
+  login: PACKAGED ? join(APP_DIR, "dist/scripts/login.js") : "src/scripts/login.ts",
+  checkLogin: PACKAGED ? join(APP_DIR, "dist/scripts/checkLogin.js") : "src/scripts/checkLogin.ts",
+} as const;
+type JobStdio = "ignore" | "pipe";
+function spawnJob(
+  job: keyof typeof JOB_ENTRY,
+  opts: { detached?: boolean; logFd?: number; pipe?: boolean; extraEnv?: Record<string, string>; keepAwake?: boolean } = {},
+) {
+  const env = { ...process.env, ...(opts.extraEnv ?? {}) };
+  const out = opts.logFd ?? (opts.pipe ? "pipe" : "ignore");
+  const stdio: [JobStdio, JobStdio | number, JobStdio | number] = ["ignore", out as never, out as never];
+  if (PACKAGED) {
+    return spawn(process.execPath, [JOB_ENTRY[job]], {
+      cwd: process.cwd(), detached: opts.detached, stdio, env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+    });
+  }
+  const useCaf = opts.keepAwake && process.platform === "darwin";
+  const cmd = useCaf ? "caffeinate" : "npx";
+  const args = useCaf ? ["-i", "npx", "tsx", JOB_ENTRY[job]] : ["tsx", JOB_ENTRY[job]];
+  return spawn(cmd, args, { cwd: PROJECT_ROOT, detached: opts.detached, stdio, env });
+}
+
+/**
  * SENDE-WARTESCHLANGE. Klickt Sinan mehrere "Senden"-Knöpfe, kommen mehrere HTTP-Requests
  * gleichzeitig an. Ohne Serialisierung wäre das gefährlich:
  *  1. `session.newPage()` liefert IMMER dieselbe Seite (`ctx.pages()[0]`) – zwei parallele
@@ -135,11 +168,8 @@ const server = createServer((req, res) => {
   // LinkedIn verbinden: öffnet ein SICHTBARES Browserfenster zum Einloggen (wie `npm run login`).
   if (url.pathname === "/api/setup/login" && req.method === "POST") {
     try {
-      const logFd = openSync(join(PROJECT_ROOT, "engine.log"), "a");
-      const child = spawn("npx", ["tsx", "src/scripts/login.ts"], {
-        cwd: PROJECT_ROOT, detached: true, stdio: ["ignore", logFd, logFd],
-        env: { ...process.env, BROWSER_MODE: "visible" },
-      });
+      const logFd = openSync(join(process.cwd(), "engine.log"), "a");
+      const child = spawnJob("login", { detached: true, logFd, extraEnv: { BROWSER_MODE: "visible" } });
       child.unref();
       res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
     } catch (e) {
@@ -150,10 +180,10 @@ const server = createServer((req, res) => {
 
   // Login prüfen: schließt das Login-Fenster, öffnet versteckt den Feed und prüft, ob eingeloggt.
   if (url.pathname === "/api/setup/verify-login" && req.method === "POST") {
-    execFile("pkill", ["-f", "tsx src/scripts/login.ts"], () => {
-      try { rmSync(join(PROJECT_ROOT, ".session", "SingletonLock"), { force: true }); } catch { /* egal */ }
+    execFile("pkill", ["-f", PACKAGED ? "dist/scripts/login.js" : "tsx src/scripts/login.ts"], () => {
+      try { rmSync(join(process.cwd(), ".session", "SingletonLock"), { force: true }); } catch { /* egal */ }
       setTimeout(() => {
-        const child = spawn("npx", ["tsx", "src/scripts/checkLogin.ts"], { cwd: PROJECT_ROOT, env: process.env });
+        const child = spawnJob("checkLogin", { pipe: true });
         let ausgabe = "";
         child.stdout?.on("data", (d) => (ausgabe += d));
         child.stderr?.on("data", (d) => (ausgabe += d));
@@ -315,25 +345,17 @@ const server = createServer((req, res) => {
             return;
           }
           // Loop-Ausgabe in engine.log schreiben (statt still) – fürs Debuggen.
-          const logFd = openSync(join(PROJECT_ROOT, "engine.log"), "a");
-          // Auf macOS via `caffeinate -i` starten: hält den Mac wach, solange der Loop läuft
-          // (verhindert Idle-Sleep → Bot stirbt nicht). Beim Stoppen schläft der Mac wieder normal.
-          const isMac = process.platform === "darwin";
-          const cmd = isMac ? "caffeinate" : "npx";
-          const args = isMac ? ["-i", "npx", "tsx", "src/index.ts"] : ["tsx", "src/index.ts"];
-          const child = spawn(cmd, args, {
-            cwd: PROJECT_ROOT,
-            detached: true,
-            stdio: ["ignore", logFd, logFd],
-            env: process.env,
-          });
+          // process.cwd() ist im Dev der Projekt-Ordner, in der App der beschreibbare Nutzer-Ordner.
+          const logFd = openSync(join(process.cwd(), "engine.log"), "a");
+          // keepAwake: hält den Rechner im Dev via caffeinate wach (Mac), damit der Loop nicht stirbt.
+          const child = spawnJob("engine", { detached: true, logFd, keepAwake: true });
           child.unref();
           res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, pid: child.pid }));
         } else if (action === "stop") {
           // Robust: Loop-Prozess per Muster killen (egal wie gestartet), Lock aufräumen.
-          execFile("pkill", ["-f", "tsx src/index.ts"], () => {
+          execFile("pkill", ["-f", PACKAGED ? "dist/index.js" : "tsx src/index.ts"], () => {
             try {
-              rmSync(join(PROJECT_ROOT, ".session", "SingletonLock"), { force: true });
+              rmSync(join(process.cwd(), ".session", "SingletonLock"), { force: true });
             } catch {
               /* egal */
             }

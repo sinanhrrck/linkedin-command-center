@@ -1,49 +1,45 @@
-# NextLead als Desktop-App (Electron)
+# NextLead als Desktop-App
 
-Ziel: NextLead als echtes Programm (`.app` / `.exe`) statt ZIP-Ordner. Diese Hülle
-(`main.cjs`) startet den lokalen Dashboard-Server und zeigt ihn in einem eigenen Fenster.
+NextLead als echtes Programm (`.app` / `.exe`), das man herunterlädt und öffnet — kein
+ZIP-Ordner, kein Terminal. `main.cjs` ist die Electron-Hülle: sie startet den Dashboard-
+Server und zeigt ihn in einem eigenen Fenster.
 
-Der Weg hat **drei Stufen** – Stufe 1 läuft sofort, 2 und 3 sind der Verteil-Schritt.
+## So entstehen die Download-Dateien (automatisch über GitHub)
 
-## Stufe 1 — jetzt testen (Dev-Fenster)
+Niemand muss die App von Hand bauen. **GitHub baut sie kostenlos** und legt sie zum Download
+bereit (`.github/workflows/release.yml`):
 
-Auf einem Rechner mit installierten Abhängigkeiten:
+1. Einen Versions-Tag pushen, z.B.:
+   ```
+   git tag v0.1.0 && git push origin v0.1.0
+   ```
+   (Oder auf GitHub unter **Actions → „NextLead App bauen" → Run workflow**.)
+2. GitHub baut auf echten Mac- und Windows-Rechnern die Installer und hängt sie an ein
+   **Release**. Die Landing-Page („Download") verlinkt automatisch auf das neueste Release.
 
-```bash
+Der Build kompiliert vorher TypeScript → JavaScript (`npm run build:app`) und bündelt
+Chromium mit (`PLAYWRIGHT_BROWSERS_PATH=0`), damit die App ohne Zusatz-Installation läuft.
+
+## Lokal testen (eigenes Fenster, Dev)
+
+```
 npm install
-npm install --save-dev electron      # einmalig, ~250 MB (bewusst NICHT in den Standard-Deps)
+npm install --save-dev electron
 npm run app
 ```
 
-→ NextLead öffnet sich in einem eigenen Fenster (kein Browser-Tab). Der Setup-Assistent
-läuft darin genauso wie im Browser.
+## Bekannter Stand / was noch iteriert wird
 
-## Stufe 2 — installierbares Paket bauen (.dmg / .exe)
+- **Verifiziert:** Der Server läuft kompiliert ohne `tsx` (Dashboard + API), Dev-Betrieb
+  unverändert. Die Prozess-Starts (Engine/Login) sind für den paketierten Modus umgestellt
+  (Electrons Node statt tsx). Nutzerdaten (.env, profil.local.json, data.db, .session) landen
+  im beschreibbaren `userData`-Ordner.
+- **Wird beim ersten CI-Build geprüft:** native SQLite-Neukompilierung für Electron
+  (electron-builder macht das automatisch) und das Chromium-Bündeln. Falls dort etwas hakt,
+  steht die Ursache im Actions-Log — das ist unsere Debug-Fläche, ohne dass jemand lokal bauen muss.
 
-Für eine Datei, die man weitergeben und doppelklicken kann:
+## Signieren (später, optional)
 
-1. `npm install --save-dev electron-builder`
-2. In `package.json` einen `build`-Block ergänzen (appId, productName „NextLead", Ziel
-   `dmg`/`nsis`, Icon) und ein `dist`-Script (`electron-builder`).
-3. **Wichtig:** Der Server läuft heute über `tsx` (Dev-Werkzeug). Für ein Paket ohne
-   Dev-Werkzeuge muss der TypeScript-Code vorher nach JavaScript kompiliert werden
-   (`tsc` → `dist/`) und `main.cjs` startet dann die kompilierte Version statt `npm run crm`.
-4. Playwrights Chromium (~150 MB) muss mitgebündelt werden (`extraResources`) **oder** die
-   App lädt es beim ersten Start (`npx playwright install chromium`).
-5. `npm run dist` → erzeugt das Paket in `dist/`.
-
-Das ist ein richtiger Build und wird auf **deinem** Mac/PC gemacht (nicht in der Cloud).
-
-## Stufe 3 — Signieren (damit Laien es ohne Warnung öffnen)
-
-- **macOS:** Ohne Signatur + Notarisierung zeigt macOS „Entwickler nicht verifiziert"
-  (Nutzer: Rechtsklick → Öffnen). Für die saubere Variante braucht es einen
-  **Apple-Developer-Account (99 $/Jahr)**; electron-builder signiert + notarisiert dann.
-- **Windows:** Ohne Signatur warnt SmartScreen („Trotzdem ausführen"). Ein Code-Signing-
-  Zertifikat entfernt die Warnung, ist aber optional.
-
-## Empfehlung
-
-Erst Stufe 1 als eigenes Fenster nutzen und mit 1–2 echten Nutzern testen. Stufe 2/3
-(paketieren + signieren) lohnt sich, sobald du es breiter verteilen willst — dann gehen
-wir die gemeinsam auf deinem Rechner durch.
+Unsigniert zeigt das System beim ersten Öffnen eine Warnung (Mac: Rechtsklick → Öffnen;
+Windows: „Trotzdem ausführen"). Für die warnungsfreie Variante: macOS braucht einen
+Apple-Developer-Account (99 $/Jahr), dann signiert electron-builder automatisch.

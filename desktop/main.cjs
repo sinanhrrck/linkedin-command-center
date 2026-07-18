@@ -14,10 +14,28 @@ const ROOT = path.join(__dirname, "..");
 const DASHBOARD_URL = "http://localhost:4321";
 let serverProc = null;
 
-/** Dashboard-Server starten (Dev: npm run crm). */
+/**
+ * Dashboard-Server starten.
+ *  - DEV (nicht paketiert): über `npm run crm` (tsx).
+ *  - PAKETIERT: den KOMPILIERTEN Server (dist/scripts/crmServer.js) über Electrons eingebautes
+ *    Node (ELECTRON_RUN_AS_NODE). Arbeitsverzeichnis = beschreibbarer Nutzer-Ordner
+ *    (userData) → dort landen .env, profil.local.json, data.db, .session. NEXTLEAD_APP_DIR
+ *    zeigt auf den (schreibgeschützten) App-Code, damit der Server Engine/Login-Skripte findet.
+ */
 function startServer() {
-  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  serverProc = spawn(npm, ["run", "crm"], { cwd: ROOT, stdio: "inherit", env: process.env });
+  if (app.isPackaged) {
+    const dataDir = app.getPath("userData");
+    serverProc = spawn(process.execPath, [path.join(__dirname, "..", "dist", "scripts", "crmServer.js")], {
+      cwd: dataDir,
+      stdio: "inherit",
+      // PLAYWRIGHT_BROWSERS_PATH=0 → Playwright sucht Chromium in node_modules (mitgebündelt),
+      // nicht im System-Cache. So braucht der Nutzer keine separate Browser-Installation.
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NEXTLEAD_PACKAGED: "1", NEXTLEAD_APP_DIR: path.join(__dirname, ".."), PLAYWRIGHT_BROWSERS_PATH: "0", DB_PATH: path.join(dataDir, "data.db"), SESSION_DIR: path.join(dataDir, ".session") },
+    });
+  } else {
+    const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+    serverProc = spawn(npm, ["run", "crm"], { cwd: ROOT, stdio: "inherit", env: process.env });
+  }
   serverProc.on("error", (e) => console.error("[app] Server-Start fehlgeschlagen:", e.message));
 }
 

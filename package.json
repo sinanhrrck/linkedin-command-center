@@ -18,7 +18,9 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "bilanz": "tsx src/scripts/bilanz.ts",
-    "app": "electron desktop/main.cjs"
+    "app": "electron desktop/main.cjs",
+    "build:app": "tsc && node build-assets.mjs",
+    "dist": "npm run build:app && electron-builder"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
@@ -35,5 +37,36 @@
     "@types/node-cron": "^3.0.11",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
+  },
+  "main": "desktop/main.cjs",
+  "build": {
+    "appId": "com.nextlead.app",
+    "productName": "NextLead",
+    "files": [
+      "desktop/**",
+      "dist/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/node_modules/playwright-core/**",
+      "**/node_modules/playwright/**",
+      "**/node_modules/@img/**"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.business",
+      "identity": null
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "sinanhrrck",
+        "repo": "linkedin-command-center"
+      }
+    ]
   }
 }
