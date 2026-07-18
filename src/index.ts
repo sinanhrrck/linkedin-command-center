@@ -69,23 +69,34 @@ setTimeout(async () => {
   await einzeln("sendApproved", () => sendApprovedDrafts(15));
 }, 4000);
 
-// Fällige Posts veröffentlichen (offizielle API, kein Governor nötig)
-cron.schedule("* * * * *", async () => {
-  const due = db
-    .prepare(
-      "SELECT id, body FROM posts WHERE status='approved' AND scheduled_for <= datetime('now') ORDER BY scheduled_for LIMIT 1",
-    )
-    .get() as { id: number; body: string } | undefined;
-  if (!due) return;
-  try {
-    const urn = await publishPost(due.body);
-    db.prepare("UPDATE posts SET status='posted', posted_urn=? WHERE id=?").run(urn, due.id);
-    console.info(`[post] veröffentlicht: ${urn}`);
-  } catch (e) {
-    db.prepare("UPDATE posts SET status='failed' WHERE id=?").run(due.id);
-    console.error(`[post] fehlgeschlagen (#${due.id}):`, e);
-  }
-});
+/**
+ * OFFIZIELLE-API-FEATURES sind OPTIONAL. Das eigene Posten über die LinkedIn-Posts-API braucht
+ * eine LinkedIn-Developer-App (Client-ID/Secret + Token) – das kann ein Laie kaum anlegen.
+ * Der KERN (Vernetzen, DMs, Kommentare, Likes) läuft über die Browser-Session und braucht das
+ * NICHT. Fehlen die LinkedIn-Keys, überspringen wir Posting + Post-Ideen komplett und still,
+ * statt Fehler zu spammen. Ein neuer Nutzer braucht dann nur: Gemini-Key + einmal einloggen.
+ */
+const hatPosting = !!(config.linkedin.accessToken || config.linkedin.clientId);
+if (!hatPosting) console.info("[post] Kein LinkedIn-API-Zugang konfiguriert – Posten/Post-Ideen deaktiviert (optional). Vernetzen & DMs laufen normal.");
+
+// Fällige Posts veröffentlichen (offizielle API, kein Governor nötig). Nur wenn API konfiguriert.
+if (hatPosting)
+  cron.schedule("* * * * *", async () => {
+    const due = db
+      .prepare(
+        "SELECT id, body FROM posts WHERE status='approved' AND scheduled_for <= datetime('now') ORDER BY scheduled_for LIMIT 1",
+      )
+      .get() as { id: number; body: string } | undefined;
+    if (!due) return;
+    try {
+      const urn = await publishPost(due.body);
+      db.prepare("UPDATE posts SET status='posted', posted_urn=? WHERE id=?").run(urn, due.id);
+      console.info(`[post] veröffentlicht: ${urn}`);
+    } catch (e) {
+      db.prepare("UPDATE posts SET status='failed' WHERE id=?").run(due.id);
+      console.error(`[post] fehlgeschlagen (#${due.id}):`, e);
+    }
+  });
 
 // Outreach-Tick alle 12 Minuten. Der Governor drosselt intern (Caps/Warm-up/Zeitfenster/Delays).
 cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick()));
@@ -149,7 +160,7 @@ cron.schedule("30 12 * * 1-5", () => einzeln("comment", () => commentTick(3)));
 // CONTENT: 1x pro Woche (Montag 8 Uhr) Post-Ideen erzeugen. Sie landen als Entwürfe und
 // werden erst nach Sinans Freigabe über die offizielle API veröffentlicht (öffentlich = nie
 // autonom). Rein KI, kein Governor (Posting läuft über die API, nicht die Browser-Session).
-cron.schedule("0 8 * * 1", () => einzeln("content", () => generatePostIdeas(3)));
+if (hatPosting) cron.schedule("0 8 * * 1", () => einzeln("content", () => generatePostIdeas(3)));
 
 // WOCHEN-BILANZ automatisch: Montag 9:05 Uhr per Telegram, ohne dass Sinan etwas tippt.
 // "sowas muss automatisch passieren" – der Report kommt von allein, reife Kategorien
