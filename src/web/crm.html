@@ -172,13 +172,20 @@
   .status-meta > div { display: flex; flex-direction: column; gap: 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-faint); }
   .status-meta b { font-family: var(--display); font-size: 16px; font-weight: 700; color: var(--ink); text-transform: none; letter-spacing: -.01em; }
 
-  /* ---------- Gauge ---------- */
-  .gauge-wrap { display: flex; flex-direction: column; align-items: center; }
-  .gauge { position: relative; margin: 6px 0 2px; }
-  .gauge .read { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; }
-  .gauge .read .val { font-size: 30px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
-  .gauge .read .lab { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
-  .gauge-note { font-size: 12px; color: var(--ink-dim); text-align: center; margin-top: 8px; line-height: 1.45; }
+  /* ---------- Gauge · Ring (Apple-Activity-Stil: ruhig, dünn, runde Enden) ---------- */
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .gauge { position: relative; width: 180px; height: 180px; margin: 10px auto 4px; }
+  .ring { display: block; transform: rotate(-90deg); }         /* Start oben (12 Uhr) */
+  .ring-track { stroke: var(--panel-2); stroke-width: 12; }
+  .ring-fill {
+    stroke: var(--green); stroke-width: 12; stroke-linecap: round;
+    stroke-dasharray: 1000; stroke-dashoffset: 1000;
+    transition: stroke-dashoffset .8s var(--ease), stroke .35s var(--ease);
+  }
+  .gauge .read { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+  .gauge .read .val { font-family: var(--display); font-size: 40px; font-weight: 600; letter-spacing: -.03em; color: var(--ink); line-height: 1; }
+  .gauge .read .lab { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .1em; }
+  .gauge-note { font-size: 12px; color: var(--ink-dim); text-align: center; margin-top: 10px; line-height: 1.5; max-width: 240px; }
 
   /* ---------- Meter ---------- */
   .meter-block { margin-top: 2px; }
@@ -529,17 +536,13 @@
     </div>
 
     <div class="panel gauge-wrap">
-      <p class="eyebrow" style="align-self:flex-start">Akzeptanzrate · Breaker 30%</p>
+      <p class="eyebrow" style="align-self:flex-start">Akzeptanzrate</p>
       <div class="gauge">
-        <svg width="200" height="116" viewBox="0 0 200 116" fill="none" aria-hidden="true">
-          <path d="M14 108 A86 86 0 0 1 186 108" stroke="#e9ecec" stroke-width="12" stroke-linecap="round"/>
-          <path id="g-danger" d="" stroke="var(--red)" stroke-width="12" stroke-linecap="round" opacity=".55"/>
-          <path id="g-fill" d="" stroke="var(--green)" stroke-width="12" stroke-linecap="round"/>
-          <line id="g-thresh" stroke="var(--ink)" stroke-width="2" opacity=".6"/>
-          <line id="g-needle" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
-          <circle cx="100" cy="108" r="4" fill="var(--ink)"/>
+        <svg class="ring" viewBox="0 0 180 180" width="180" height="180" fill="none" aria-hidden="true">
+          <circle class="ring-track" cx="90" cy="90" r="74" />
+          <circle id="g-fill" class="ring-fill" cx="90" cy="90" r="74" pathLength="1000" />
         </svg>
-        <div class="read"><div class="val" id="g-val">—</div><div class="lab" id="g-lab">akzeptiert / eingeladen</div></div>
+        <div class="read"><div class="val" id="g-val">—</div><div class="lab" id="g-lab">Annahmequote</div></div>
       </div>
       <div class="gauge-note" id="g-note">—</div>
     </div>
@@ -707,29 +710,24 @@ function render() {
   weekEl.textContent = `${g.connect.week}/${g.connect.weeklyCap}`;
   weekEl.className = g.connect.week >= g.connect.weeklyCap ? "bad" : "";
 
-  // Gauge
+  // Gauge · Ring. Fill über stroke-dashoffset (pathLength=1000 → 1000 = voller Kreis).
+  // Im Standby fährt der Ring den FORTSCHRITT bis zur Scharfstellung (sample/minSample) in
+  // Grau – so ist die Anzeige nie tot, sondern zeigt, wie nah der Breaker am Aktivwerden ist.
   const a = g.acceptance;
   const rate = Math.max(0, Math.min(1, a.rate));
-  document.getElementById("g-danger").setAttribute("d", arc(86, 0, a.minRate));
-  document.getElementById("g-fill").setAttribute("d", a.armed && rate > 0 ? arc(86, 0, rate) : "");
-  document.getElementById("g-fill").setAttribute("stroke", rate < a.minRate ? "var(--red)" : "url(#gauge-grad)");
-  const [tx1, ty1] = polar(100, 108, 74, a.minRate * 180);
-  const [tx2, ty2] = polar(100, 108, 98, a.minRate * 180);
-  const th = document.getElementById("g-thresh");
-  th.setAttribute("x1", tx1); th.setAttribute("y1", ty1); th.setAttribute("x2", tx2); th.setAttribute("y2", ty2);
-  const [nx, ny] = polar(100, 108, 78, (a.armed ? rate : 0) * 180);
-  const nd = document.getElementById("g-needle");
-  nd.setAttribute("x1", 100); nd.setAttribute("y1", 108); nd.setAttribute("x2", nx); nd.setAttribute("y2", ny);
-  nd.style.opacity = a.armed ? 1 : .3;
+  const healthy = rate >= a.minRate;
+  const frac = a.armed ? rate : Math.min(1, a.sample / a.minSample);
+  const gFill = document.getElementById("g-fill");
+  gFill.style.strokeDashoffset = String(Math.round(1000 * (1 - frac)));
+  gFill.style.stroke = !a.armed ? "var(--line-strong)" : (healthy ? "var(--green)" : "var(--red)");
   const gv = document.getElementById("g-val");
-  gv.textContent = a.armed ? Math.round(rate * 100) + "%" : "STANDBY";
-  gv.style.fontSize = a.armed ? "34px" : "18px";
-  document.getElementById("g-lab").style.visibility = a.armed ? "visible" : "hidden";
-  document.querySelector(".gauge circle").style.opacity = a.armed ? "1" : ".3";
-  gv.style.color = !a.armed ? "var(--ink-faint)" : (rate < a.minRate ? "var(--red)" : "var(--green)");
+  gv.textContent = a.armed ? Math.round(rate * 100) + "%" : `${a.sample}/${a.minSample}`;
+  gv.style.fontSize = a.armed ? "40px" : "30px";
+  gv.style.color = !a.armed ? "var(--ink-dim)" : (healthy ? "var(--ink)" : "var(--red)");
+  document.getElementById("g-lab").textContent = a.armed ? "Annahmequote" : "Aufwärmen";
   document.getElementById("g-note").textContent = a.armed
-    ? `${a.sample} Einladungen · Breaker unter ${Math.round(a.minRate*100)}%`
-    : `Breaker scharf ab ${a.minSample} Einladungen (aktuell ${a.sample}).`;
+    ? `${a.sample} reife Einladungen · Breaker unter ${Math.round(a.minRate * 100)}%`
+    : `Sammelt Daten – der Schutz greift ab ${a.minSample} Einladungen.`;
 
   // Cap meter
   document.getElementById("m-today").textContent = g.connect.today;
