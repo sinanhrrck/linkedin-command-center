@@ -84,6 +84,40 @@ export function getDashboardData() {
     .prepare("SELECT id, label, search_url, cursor_page, active, last_added, last_run FROM lead_sources ORDER BY created_at")
     .all() as { id: number; label: string | null; active: number; last_added: number; cursor_page: number }[];
 
+  // 7-Tage-Aktivität fürs Balkendiagramm: pro Tag connect + message (+ Rest) zählen.
+  // Flache Query, im JS zu einem lückenlosen 7-Tage-Fenster (heute rechts) aufgefüllt.
+  const rawWeek = db
+    .prepare(
+      `SELECT date(created_at,'localtime') d, type, COUNT(*) n
+         FROM actions
+        WHERE created_at >= datetime('now','localtime','-6 days','start of day')
+        GROUP BY d, type`,
+    )
+    .all() as { d: string; type: string; n: number }[];
+  const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  const weekActivity = Array.from({ length: 7 }, (_, i) => {
+    const dt = new Date();
+    dt.setDate(dt.getDate() - (6 - i));
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    const rows = rawWeek.filter((r) => r.d === key);
+    const get = (t: string) => rows.find((r) => r.type === t)?.n ?? 0;
+    const connect = get("connect");
+    const message = get("message") + get("comment") + get("like");
+    return { label: WD[dt.getDay()], connect, message, total: connect + message, today: i === 6 };
+  });
+
+  // Woche-über-Woche-Deltas für die KPI-Trend-Badges (diese 7 Tage vs. die 7 davor).
+  const wow = (sql: string) => {
+    const cur = (db.prepare(sql).get("-7 days", "now") as { n: number }).n;
+    const prev = (db.prepare(sql).get("-14 days", "-7 days") as { n: number }).n;
+    return { cur, prev, delta: cur - prev };
+  };
+  const deltas = {
+    leads: wow("SELECT COUNT(*) n FROM contacts WHERE created_at >= datetime('now',?) AND created_at < datetime('now',?)"),
+    accepted: wow("SELECT COUNT(*) n FROM contacts WHERE accepted_at >= datetime('now',?) AND accepted_at < datetime('now',?)"),
+    replied: wow("SELECT COUNT(*) n FROM contacts WHERE replied_at >= datetime('now',?) AND replied_at < datetime('now',?)"),
+  };
+
   return {
     generatedAt: new Date().toISOString(),
     engine: { heartbeat, alive: engineAlive, startedAt: getState("engine_started") || null },
@@ -97,6 +131,8 @@ export function getDashboardData() {
     posts: Object.fromEntries(posts.map((p) => [p.status, p.n])),
     drafts: pendingDrafts(),
     postDrafts: pendingPosts(),
+    weekActivity,
+    deltas,
     hotLeads: hotLeads(),
     mode: getMode(),
     focus: getFocus(),

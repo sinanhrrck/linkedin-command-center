@@ -52,7 +52,8 @@
   .meter-head .n, .gauge .read .val, .stage .s-num, .act-tally b, .status-meta b, .date, .h-when, .cs-val { font-variant-numeric: tabular-nums; }
 
   @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-  .command, .hero > .panel, .activity-panel, #hotleads-section, #drafts-section, #posts-section, .funnel, .controls, .tbl-wrap { animation: rise .5s var(--ease) both; }
+  .command, .analytics > .panel, .hero > .panel, .activity-panel, #hotleads-section, #drafts-section, #posts-section, .funnel, .controls, .tbl-wrap { animation: rise .5s var(--ease) both; }
+  .analytics > .panel:nth-child(2) { animation-delay: .06s; }
   .hero > .panel:nth-child(2) { animation-delay: .06s; }
   .hero > .panel:nth-child(3) { animation-delay: .12s; }
   .activity-panel { animation-delay: .16s; }
@@ -117,17 +118,51 @@
   .cmd-hero::after { content: ""; position: absolute; right: -30px; bottom: -40px; width: 160px; height: 160px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.14), transparent 70%); }
   .cmd-hero-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.82); display: flex; align-items: center; gap: 7px; }
   .cmd-hero-num { font-size: 52px; font-weight: 800; line-height: 1; letter-spacing: -.03em; margin: 10px 0 2px; color: #fff; }
-  .cmd-hero-sub { font-size: 12px; color: rgba(255,255,255,.78); position: relative; }
+  .cmd-hero-sub { font-size: 12px; color: rgba(255,255,255,.78); position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cs-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .cs-lab { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-faint); }
+  .cs-ic { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; background: var(--panel-2); color: var(--ink-dim); display: grid; place-items: center; }
+  .cs-ic svg { width: 15px; height: 15px; }
   .cs-val { font-size: 30px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); margin-top: auto; }
   .cs-val.accent { color: var(--accent); }
+  .cs-sub { font-size: 10.5px; color: var(--ink-faint); margin-top: 4px; }
+  /* Trend-Badges */
+  .kpi-delta { display: inline-flex; align-items: center; gap: 3px; font-family: var(--disp); font-size: 10.5px; font-weight: 700; padding: 3px 7px; border-radius: 20px; letter-spacing: 0; text-transform: none; margin-top: 4px; }
+  .kpi-delta-lab { font-weight: 500; opacity: .7; }
+  .kpi-delta.up { color: #12855a; background: rgba(31,157,99,.13); }
+  .kpi-delta.down { color: #c23940; background: rgba(220,75,82,.12); }
+  .kpi-delta.flat { color: var(--ink-faint); background: var(--panel-2); }
+  .cmd-hero-sub .kpi-delta { background: rgba(255,255,255,.16); color: #eafff4; }
+  .cmd-hero-sub .kpi-delta.down { background: rgba(255,180,180,.22); color: #ffdede; }
 
   /* ---------- Karten-Grundlage ---------- */
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); }
   .eyebrow { font-family: var(--disp); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 14px; }
 
   /* ---------- Governor-Reihe ---------- */
-  .hero { display: grid; grid-template-columns: 1fr 1.1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .hero { display: grid; grid-template-columns: 1fr 1.25fr; gap: 14px; margin-bottom: 14px; }
+
+  /* ---------- Analytics: Balkendiagramm + Gauge ---------- */
+  .analytics { display: grid; grid-template-columns: 1.7fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .chart-card { display: flex; flex-direction: column; }
+  .chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .chart-big { font-family: var(--display); font-size: 30px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); display: flex; align-items: baseline; gap: 9px; }
+  .chart-big-lab { font-family: var(--disp); font-size: 12px; font-weight: 500; color: var(--ink-dim); letter-spacing: 0; }
+  .chart-legend { display: flex; flex-direction: column; gap: 7px; }
+  .chart-legend span { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-dim); font-weight: 500; }
+  .chart-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; align-items: end; height: 168px; padding-top: 6px; }
+  .bar-col { display: flex; flex-direction: column; align-items: center; gap: 9px; height: 100%; justify-content: flex-end; }
+  .bar-stack { width: 100%; max-width: 34px; display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; flex: 1 1 auto; min-height: 0; position: relative; }
+  .bar-seg { width: 100%; border-radius: 6px; transition: height .5s var(--ease); min-height: 0; }
+  .bar-seg.msg { background: #a9dcc3; }
+  .bar-seg.con { background: var(--accent); }
+  .bar-col.is-today .bar-seg.con { box-shadow: 0 0 0 2px rgba(22,133,90,.25); }
+  .bar-empty { width: 100%; max-width: 34px; height: 4px; border-radius: 3px; background: var(--panel-2); }
+  .bar-lab { font-size: 11px; font-weight: 600; color: var(--ink-faint); }
+  .bar-col.is-today .bar-lab { color: var(--accent); }
+  .bar-val { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-bottom: -2px; opacity: 0; transition: opacity .15s; }
+  .bar-col:hover .bar-val { opacity: 1; }
   .status-panel { display: flex; flex-direction: column; }
   .status-big { display: flex; align-items: center; gap: 12px; }
   .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--ink-faint); flex: 0 0 12px; }
@@ -338,17 +373,65 @@
     <div class="cmd-hero">
       <div class="cmd-hero-label">🔥 Hot Leads</div>
       <div class="cmd-hero-num" id="cmd-hot">0</div>
-      <div class="cmd-hero-sub" id="cmd-hot-sub">haben auf deine Nachricht geantwortet</div>
+      <div class="cmd-hero-sub" id="cmd-hot-sub">haben auf deine Nachricht geantwortet<span id="kpi-hot-delta"></span></div>
     </div>
     <div class="cmd-stats">
-      <div class="cmd-stat"><span class="cs-lab">Antwortrate</span><span class="cs-val accent" id="cmd-reply">–</span></div>
-      <div class="cmd-stat"><span class="cs-lab">Angenommen</span><span class="cs-val" id="cmd-acc">0</span></div>
-      <div class="cmd-stat"><span class="cs-lab">Woche</span><span class="cs-val" id="cmd-week">0/100</span></div>
-      <div class="cmd-stat"><span class="cs-lab">Entwürfe</span><span class="cs-val" id="cmd-drafts">0</span></div>
+      <div class="cmd-stat">
+        <div class="cs-top"><span class="cs-lab">Antwortrate</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg></span></div>
+        <span class="cs-val accent" id="cmd-reply">–</span>
+      </div>
+      <div class="cmd-stat">
+        <div class="cs-top"><span class="cs-lab">Angenommen</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></div>
+        <span class="cs-val" id="cmd-acc">0</span>
+        <span id="kpi-acc-delta"></span>
+      </div>
+      <div class="cmd-stat">
+        <div class="cs-top"><span class="cs-lab">Woche</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg></span></div>
+        <span class="cs-val" id="cmd-week">0/100</span>
+        <span class="cs-sub">Invites · Cap 100</span>
+      </div>
+      <div class="cmd-stat">
+        <div class="cs-top"><span class="cs-lab">Entwürfe</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h16M4 19h10"/></svg></span></div>
+        <span class="cs-val" id="cmd-drafts">0</span>
+        <span class="cs-sub">warten auf Freigabe</span>
+      </div>
     </div>
   </section>
 
   <!-- Governor hero -->
+  <!-- Analytics: Wochen-Aktivität (Balken) + Akzeptanzrate (Gauge) -->
+  <section class="analytics">
+    <div class="panel chart-card">
+      <div class="chart-head">
+        <div>
+          <p class="eyebrow" style="margin:0 0 6px">Aktivität · letzte 7 Tage</p>
+          <div class="chart-big"><span id="wk-total">—</span><span class="chart-big-lab">Aktionen diese Woche</span></div>
+        </div>
+        <div class="chart-legend">
+          <span><i style="background:var(--accent)"></i>Vernetzt</span>
+          <span><i style="background:#a9dcc3"></i>Nachrichten</span>
+        </div>
+      </div>
+      <div class="bars" id="wk-bars"></div>
+    </div>
+
+    <div class="panel gauge-wrap">
+      <p class="eyebrow" style="align-self:flex-start">Akzeptanzrate · Breaker 30%</p>
+      <div class="gauge">
+        <svg width="200" height="116" viewBox="0 0 200 116" fill="none" aria-hidden="true">
+          <path d="M14 108 A86 86 0 0 1 186 108" stroke="#e9ecec" stroke-width="12" stroke-linecap="round"/>
+          <path id="g-danger" d="" stroke="var(--red)" stroke-width="12" stroke-linecap="round" opacity=".55"/>
+          <path id="g-fill" d="" stroke="var(--green)" stroke-width="12" stroke-linecap="round"/>
+          <line id="g-thresh" stroke="var(--ink)" stroke-width="2" opacity=".6"/>
+          <line id="g-needle" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="100" cy="108" r="4" fill="var(--ink)"/>
+        </svg>
+        <div class="read"><div class="val" id="g-val">—</div><div class="lab" id="g-lab">akzeptiert / eingeladen</div></div>
+      </div>
+      <div class="gauge-note" id="g-note">—</div>
+    </div>
+  </section>
+
   <section class="hero">
     <div class="panel status-panel">
       <p class="eyebrow">Safety Governor</p>
@@ -362,28 +445,6 @@
         <div>Warm-up<b id="st-warm">—</b></div>
         <div>Woche<b id="st-week">—</b></div>
       </div>
-    </div>
-
-    <div class="panel gauge-wrap">
-      <p class="eyebrow" style="align-self:flex-start">Akzeptanzrate · Breaker 30%</p>
-      <div class="gauge">
-        <svg width="200" height="116" viewBox="0 0 200 116" fill="none" aria-hidden="true">
-          <defs>
-            <linearGradient id="gauge-grad" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0" stop-color="#8b7bff"/>
-              <stop offset="1" stop-color="#4fd6e6"/>
-            </linearGradient>
-          </defs>
-          <path d="M14 108 A86 86 0 0 1 186 108" stroke="#e9ecec" stroke-width="12" stroke-linecap="round"/>
-          <path id="g-danger" d="" stroke="var(--red)" stroke-width="12" stroke-linecap="round" opacity=".55"/>
-          <path id="g-fill" d="" stroke="var(--green)" stroke-width="12" stroke-linecap="round"/>
-          <line id="g-thresh" stroke="var(--ink)" stroke-width="2" opacity=".6"/>
-          <line id="g-needle" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
-          <circle cx="100" cy="108" r="4" fill="var(--ink)"/>
-        </svg>
-        <div class="read"><div class="val" id="g-val">—</div><div class="lab" id="g-lab">akzeptiert / eingeladen</div></div>
-      </div>
-      <div class="gauge-note" id="g-note">—</div>
     </div>
 
     <div class="panel">
@@ -622,7 +683,12 @@ function render() {
   document.getElementById("cmd-acc").textContent = pc.accepted || 0;
   document.getElementById("cmd-week").textContent = g.connect.week + "/" + g.connect.weeklyCap;
   document.getElementById("cmd-drafts").textContent = (state.drafts || []).length;
+  // Trend-Badges (Woche vs. Vorwoche)
+  const dl = state.deltas || {};
+  const accD = document.getElementById("kpi-acc-delta"); if (accD) accD.innerHTML = deltaBadge(dl.accepted);
+  const hotD = document.getElementById("kpi-hot-delta"); if (hotD) hotD.innerHTML = dl.replied ? deltaBadge(dl.replied) : "";
 
+  renderChart();
   renderActivity();
   renderMode();
   renderFocus();
@@ -676,7 +742,7 @@ function renderActivity() {
     sfWord.textContent = e.alive ? "Arbeitet" : "Offline";
     sfDot.style.background = e.alive ? "#7de0ac" : "#f5a3a7";
     sfDot.style.boxShadow = "0 0 0 3px " + (e.alive ? "rgba(125,224,172,.25)" : "rgba(245,163,167,.22)");
-    sfSub.textContent = e.alive ? "Läuft und füttert die Pipeline." : "Gestoppt. Über „Bot starten" wieder anwerfen.";
+    sfSub.textContent = e.alive ? "Läuft und füttert die Pipeline." : "Gestoppt. Oben wieder starten.";
   }
   // Sidebar-Badges: offene Entwürfe (DM + Post) und Hot Leads.
   const nd = document.getElementById("nav-drafts"), nh = document.getElementById("nav-hot");
@@ -736,6 +802,39 @@ function renderActivity() {
       <span class="act-when">${relDate(r.created_at).t}</span>
     </div>`;
   }).join("");
+}
+
+// Wochen-Aktivität als gestapelte Balken (Vernetzt unten = Akzent, Nachrichten oben = hell).
+// Skaliert relativ zum aktivsten Tag; leere Tage bekommen einen Stub, damit die Achse steht.
+function renderChart() {
+  const wk = state.weekActivity || [];
+  const bars = document.getElementById("wk-bars");
+  if (!bars) return;
+  document.getElementById("wk-total").textContent = wk.reduce((s, d) => s + d.total, 0);
+  const max = Math.max(1, ...wk.map(d => d.total));
+  bars.innerHTML = wk.map(d => {
+    const conH = d.total ? (d.connect / max * 100) : 0;
+    const msgH = d.total ? (d.message / max * 100) : 0;
+    const stack = d.total
+      ? `<div class="bar-stack">
+           ${d.message ? `<div class="bar-seg msg" style="height:${msgH}%"></div>` : ""}
+           ${d.connect ? `<div class="bar-seg con" style="height:${conH}%"></div>` : ""}
+         </div>`
+      : `<div class="bar-stack"><div class="bar-empty"></div></div>`;
+    return `<div class="bar-col ${d.today ? "is-today" : ""}" title="${d.label}: ${d.connect} vernetzt, ${d.message} Nachrichten/Interaktionen">
+      ${stack}<span class="bar-lab">${d.label}</span>
+    </div>`;
+  }).join("");
+}
+
+// Kleine Trend-Badge (diese Woche vs. letzte): grün hoch, rot runter, grau neutral.
+function deltaBadge(d) {
+  if (!d) return "";
+  const v = d.delta;
+  if (v === 0) return `<span class="kpi-delta flat">±0</span>`;
+  const up = v > 0;
+  const arrow = up ? "↑" : "↓";
+  return `<span class="kpi-delta ${up ? "up" : "down"}">${arrow} ${Math.abs(v)} <span class="kpi-delta-lab">/ Woche</span></span>`;
 }
 
 const MODE_NOTES = {
