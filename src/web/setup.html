@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Command Center · Einrichtung</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:#eef1f0; --panel:#fff; --panel-2:#f6f8f7; --line:#e9ecec; --line-strong:#dfe4e3;
+    --ink:#16201b; --ink-dim:#64716b; --ink-faint:#98a29c; --green:#1f9d63; --accent:#16855a;
+    --red:#dc4b52; --amber:#c07a12; --hero:linear-gradient(155deg,#1d7a51,#14512f);
+    --shadow:0 1px 2px rgba(20,40,30,.05),0 12px 28px -14px rgba(20,40,30,.14);
+    --disp:"Inter",system-ui,sans-serif; --display:"Sora",var(--disp); --ease:cubic-bezier(.2,.7,.2,1);
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--disp); -webkit-font-smoothing:antialiased; letter-spacing:-.01em; }
+  .wrap { max-width:680px; margin:0 auto; padding:40px 22px 80px; }
+  .brand { display:flex; align-items:center; gap:12px; margin-bottom:28px; }
+  .brand .logo { width:40px; height:40px; border-radius:11px; background:var(--hero); display:grid; place-items:center; color:#fff; box-shadow:0 6px 14px -4px rgba(20,80,50,.5); }
+  .brand .logo svg { width:22px; height:22px; }
+  .brand b { font-family:var(--display); font-size:18px; font-weight:700; }
+  .brand span { display:block; font-size:11px; color:var(--ink-faint); letter-spacing:.14em; text-transform:uppercase; }
+  /* Fortschritt */
+  .steps { display:flex; gap:8px; margin-bottom:26px; }
+  .steps .s { flex:1; height:5px; border-radius:20px; background:var(--line-strong); transition:background .3s; }
+  .steps .s.done { background:var(--green); }
+  .steps .s.now { background:var(--accent); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:20px; box-shadow:var(--shadow); padding:30px 30px 26px; }
+  .eyebrow { font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin:0 0 6px; }
+  h1 { font-family:var(--display); font-size:24px; font-weight:700; letter-spacing:-.02em; margin:0 0 8px; }
+  .lead { font-size:14px; color:var(--ink-dim); line-height:1.55; margin:0 0 22px; }
+  label { display:block; font-size:13px; font-weight:600; margin:16px 0 6px; }
+  label .opt { font-weight:400; color:var(--ink-faint); }
+  .hint { font-size:12px; color:var(--ink-dim); line-height:1.5; margin:5px 0 0; }
+  .hint a { color:var(--accent); font-weight:600; }
+  input[type=text], input[type=password], textarea {
+    width:100%; font-family:var(--disp); font-size:14px; color:var(--ink); background:var(--panel-2);
+    border:1px solid var(--line); border-radius:11px; padding:11px 13px; transition:border-color .15s;
+  }
+  input:focus, textarea:focus { outline:none; border-color:var(--accent); background:var(--panel); }
+  textarea { resize:vertical; min-height:70px; line-height:1.5; }
+  .adv { margin-top:20px; border-top:1px solid var(--line); padding-top:14px; }
+  .adv summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--ink-dim); }
+  .adv[open] summary { color:var(--ink); margin-bottom:8px; }
+  .foot { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:26px; }
+  .btn { font-family:var(--disp); font-weight:600; font-size:14px; border:none; border-radius:12px; padding:12px 22px; cursor:pointer; transition:transform .12s var(--ease),opacity .15s; }
+  .btn.primary { background:var(--hero); color:#fff; box-shadow:0 8px 18px -8px rgba(20,80,50,.5); }
+  .btn.primary:hover { transform:translateY(-1px); }
+  .btn.primary:disabled { opacity:.5; cursor:default; transform:none; }
+  .btn.ghost { background:transparent; color:var(--ink-dim); border:1px solid var(--line-strong); }
+  .btn.ghost:hover { color:var(--ink); }
+  .status { font-size:13px; margin-top:14px; padding:11px 14px; border-radius:11px; display:none; }
+  .status.show { display:block; }
+  .status.ok { background:rgba(31,157,99,.1); color:#12855a; }
+  .status.err { background:rgba(220,75,82,.1); color:#c23940; }
+  .status.wait { background:var(--panel-2); color:var(--ink-dim); }
+  .li-box { display:flex; gap:14px; align-items:flex-start; background:var(--panel-2); border:1px solid var(--line); border-radius:13px; padding:16px; margin-top:8px; }
+  .li-box .n { width:26px; height:26px; flex:0 0 26px; border-radius:50%; background:var(--accent); color:#fff; display:grid; place-items:center; font-size:13px; font-weight:700; }
+  .li-box p { margin:0; font-size:13px; color:var(--ink-dim); line-height:1.5; }
+  .done-check { width:64px; height:64px; border-radius:50%; background:var(--green); color:#fff; display:grid; place-items:center; font-size:32px; margin:0 auto 18px; }
+  .center { text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg></span>
+    <div><b>Command Center</b><span>Einrichtung</span></div>
+  </div>
+  <div class="steps" id="steps"></div>
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+let step = 0;
+const TOTAL = 4;
+// Zwischenspeicher fürs Formular (wird erst am Ende gespeichert)
+const data = {
+  keys: { GEMINI_API_KEY:"", ANTHROPIC_API_KEY:"", TELEGRAM_BOT_TOKEN:"", TELEGRAM_CHAT_ID:"" },
+  profil: {
+    name:"", persona:"", ziel:"Mehrwert zuerst: ehrlich hilfreich und sympathisch sein, echtes Interesse zeigen. NICHT verkaufen, NICHT pitchen. Die Tür für ein späteres Gespräch sanft offen halten.",
+    tabus:"Zuerst verdienen, dann anbieten: kein Pitch, solange die Person keinen Bedarf gezeigt hat. Niemals nach sensiblen/privaten Themen fragen, die die Person nicht selbst aufgemacht hat. Niemals jemandem etwas anbieten, der gerade gesagt hat, dass er versorgt ist.",
+    stilRegeln:["immer per Du, niemals siezen","keine Emojis","kurz halten: 2 bis 3 Sätze, niemals mehr","locker und menschlich, kein Verkäufersprech","keine Floskeln","mit EINER echten, konkreten Frage enden"],
+    beispielNachrichten:[],
+    winkel:{ azubi:"", student:"" }
+  }
+};
+
+const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function renderSteps() {
+  document.getElementById("steps").innerHTML = Array.from({length:TOTAL}, (_,i) =>
+    `<div class="s ${i<step?"done":i===step?"now":""}"></div>`).join("");
+}
+
+function render() {
+  renderSteps();
+  const c = document.getElementById("card");
+  if (step === 0) c.innerHTML = viewGemini();
+  else if (step === 1) c.innerHTML = viewProfil();
+  else if (step === 2) c.innerHTML = viewLinkedIn();
+  else c.innerHTML = viewFertig();
+  wire();
+}
+
+// ---- Schritt 1: Gemini-Key ----
+function viewGemini() {
+  return `
+    <p class="eyebrow">Schritt 1 von 4</p>
+    <h1>KI-Schlüssel</h1>
+    <p class="lead">Der Bot schreibt deine Nachrichten mit Google Gemini. Der ist <b>kostenlos</b>. Du holst dir in 2 Minuten einen Schlüssel und fügst ihn hier ein.</p>
+    <label>Gemini API-Schlüssel</label>
+    <input type="password" id="gemini" placeholder="AIza..." value="${esc(data.keys.GEMINI_API_KEY)}" autocomplete="off" />
+    <p class="hint">Schlüssel holen: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → „Create API key" → kopieren → hier einfügen.</p>
+    <details class="adv">
+      <summary>Erweitert (optional)</summary>
+      <label>Claude-Schlüssel <span class="opt">– optional, nur für den Voll-Autopilot (kostet Geld)</span></label>
+      <input type="password" id="anthropic" placeholder="sk-ant-..." value="${esc(data.keys.ANTHROPIC_API_KEY)}" autocomplete="off" />
+      <label>Telegram Bot-Token <span class="opt">– optional, für Benachrichtigungen aufs Handy</span></label>
+      <input type="password" id="tg" placeholder="123456:ABC..." value="${esc(data.keys.TELEGRAM_BOT_TOKEN)}" autocomplete="off" />
+    </details>
+    <div class="status" id="status"></div>
+    <div class="foot">
+      <span></span>
+      <button class="btn primary" id="next" disabled>Weiter</button>
+    </div>`;
+}
+
+// ---- Schritt 2: Profil ----
+function viewProfil() {
+  const p = data.profil;
+  return `
+    <p class="eyebrow">Schritt 2 von 4</p>
+    <h1>Wer bist du?</h1>
+    <p class="lead">Damit der Bot in <b>deiner</b> Stimme schreibt und nicht generisch. Je konkreter, desto besser klingen die Nachrichten.</p>
+    <label>Dein Vorname</label>
+    <input type="text" id="name" placeholder="z.B. Max" value="${esc(p.name)}" />
+    <label>Über dich <span class="opt">– Rolle und Wesen, 1-3 Sätze</span></label>
+    <textarea id="persona" placeholder="z.B. Max ist selbstständiger Fotograf. Locker, direkt, echtes Interesse am Menschen. Kein Verkäufersprech, immer auf Augenhöhe.">${esc(p.persona)}</textarea>
+    <label>Beispiel-Nachrichten <span class="opt">– 1-4 echte Nachrichten von dir, eine pro Absatz (Leerzeile dazwischen)</span></label>
+    <textarea id="beispiele" style="min-height:120px" placeholder="Hey [Name], ich bin Max. ...\n\nSehr cool, wie hast du das geplant?">${esc(p.beispielNachrichten.join("\n\n"))}</textarea>
+    <p class="hint">Das ist der stärkste Hebel für gute Nachrichten: Der Bot ahmt deinen Satzbau und Ton nach, nicht den Inhalt.</p>
+    <details class="adv">
+      <summary>Feineinstellung (optional)</summary>
+      <label>Dein Ziel bei jeder Nachricht</label>
+      <textarea id="ziel">${esc(p.ziel)}</textarea>
+      <label>Tabus <span class="opt">– was der Bot NIE tun darf</span></label>
+      <textarea id="tabus">${esc(p.tabus)}</textarea>
+      <label>Stil-Regeln <span class="opt">– eine pro Zeile</span></label>
+      <textarea id="stil" style="min-height:120px">${esc(p.stilRegeln.join("\n"))}</textarea>
+      <label>Ansprache Azubis/Berufseinsteiger <span class="opt">– woran knüpfst du an?</span></label>
+      <textarea id="wazubi" placeholder="Nur behaupten, was du wirklich erlebt hast.">${esc(p.winkel.azubi)}</textarea>
+      <label>Ansprache Studenten</label>
+      <textarea id="wstudent" placeholder="Nur behaupten, was du wirklich erlebt hast.">${esc(p.winkel.student)}</textarea>
+    </details>
+    <div class="status" id="status"></div>
+    <div class="foot">
+      <button class="btn ghost" id="back">Zurück</button>
+      <button class="btn primary" id="next">Weiter</button>
+    </div>`;
+}
+
+// ---- Schritt 3: LinkedIn verbinden ----
+function viewLinkedIn() {
+  return `
+    <p class="eyebrow">Schritt 3 von 4</p>
+    <h1>LinkedIn verbinden</h1>
+    <p class="lead">Der Bot arbeitet mit deinem echten LinkedIn-Konto – direkt auf deinem Rechner, nichts wird irgendwo gespeichert. Du loggst dich einmal ein.</p>
+    <div class="li-box"><span class="n">1</span><p>Klick auf <b>„Login-Fenster öffnen"</b>. Es öffnet sich ein Browser-Fenster mit LinkedIn.</p></div>
+    <div class="li-box"><span class="n">2</span><p>Logg dich dort ganz normal ein (inkl. Bestätigung/2FA, falls gefragt).</p></div>
+    <div class="li-box"><span class="n">3</span><p>Komm zurück und klick <b>„Verbindung prüfen"</b>. Das Fenster schließt sich dann.</p></div>
+    <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap">
+      <button class="btn ghost" id="open">Login-Fenster öffnen</button>
+      <button class="btn primary" id="verify">Verbindung prüfen</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="foot">
+      <button class="btn ghost" id="back">Zurück</button>
+      <button class="btn primary" id="next">Weiter (überspringen)</button>
+    </div>`;
+}
+
+// ---- Schritt 4: Fertig ----
+function viewFertig() {
+  return `
+    <div class="center">
+      <div class="done-check">✓</div>
+      <h1>Fast fertig!</h1>
+      <p class="lead">Ich speichere jetzt deine Angaben und starte den Bot. Danach landest du im Dashboard.</p>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="foot">
+      <button class="btn ghost" id="back">Zurück</button>
+      <button class="btn primary" id="finish">Speichern & starten</button>
+    </div>`;
+}
+
+function setStatus(txt, kind) {
+  const s = document.getElementById("status");
+  if (!s) return;
+  s.className = "status show " + (kind||"wait");
+  s.textContent = txt;
+}
+
+async function post(path, body) {
+  try { const r = await fetch(path, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body||{}) }); return await r.json(); }
+  catch(e){ return { ok:false, error:String(e) }; }
+}
+
+function wire() {
+  const next = document.getElementById("next");
+  const back = document.getElementById("back");
+  if (back) back.onclick = () => { collect(); step--; render(); };
+
+  if (step === 0) {
+    const g = document.getElementById("gemini");
+    const upd = () => { next.disabled = g.value.trim().length < 10; };
+    g.oninput = upd; upd();
+    next.onclick = () => { collect(); step++; render(); };
+  }
+  if (step === 1) {
+    next.onclick = () => {
+      collect();
+      if (!data.profil.name.trim() || !data.profil.persona.trim()) { setStatus("Bitte mindestens Vorname und das Über-dich-Feld ausfüllen.", "err"); return; }
+      step++; render();
+    };
+  }
+  if (step === 2) {
+    document.getElementById("open").onclick = async () => {
+      setStatus("Öffne das Login-Fenster … es kann ein paar Sekunden dauern.", "wait");
+      await post("/api/setup/login");
+      setStatus("Fenster geöffnet. Logg dich bei LinkedIn ein und klick danach auf Verbindung prüfen.", "wait");
+    };
+    document.getElementById("verify").onclick = async () => {
+      setStatus("Prüfe die Verbindung … (schließt das Login-Fenster, kann bis zu 30 Sek dauern)", "wait");
+      const r = await post("/api/setup/verify-login");
+      if (r.ok) setStatus("✓ LinkedIn verbunden!", "ok");
+      else setStatus("Noch nicht eingeloggt. Öffne das Fenster, logg dich ein und prüf erneut.", "err");
+    };
+    next.onclick = () => { step++; render(); };
+  }
+  if (step === 3) {
+    document.getElementById("finish").onclick = async () => {
+      collect();
+      setStatus("Speichere …", "wait");
+      const save = await post("/api/setup/save", { keys: cleanKeys(), profil: data.profil });
+      if (!save.ok) { setStatus("Speichern fehlgeschlagen: " + (save.error||""), "err"); return; }
+      setStatus("Starte den Bot …", "wait");
+      await post("/api/engine", { action:"start" });
+      setStatus("Fertig! Weiter zum Dashboard …", "ok");
+      setTimeout(() => location.href = "/", 1400);
+    };
+  }
+}
+
+function collect() {
+  if (step === 0) {
+    data.keys.GEMINI_API_KEY = val("gemini");
+    data.keys.ANTHROPIC_API_KEY = val("anthropic");
+    data.keys.TELEGRAM_BOT_TOKEN = val("tg");
+  }
+  if (step === 1) {
+    const p = data.profil;
+    p.name = val("name"); p.persona = val("persona");
+    p.beispielNachrichten = val("beispiele").split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
+    p.ziel = val("ziel") || p.ziel; p.tabus = val("tabus") || p.tabus;
+    const stil = val("stil"); if (stil) p.stilRegeln = stil.split("\n").map(s=>s.trim()).filter(Boolean);
+    p.winkel.azubi = val("wazubi"); p.winkel.student = val("wstudent");
+  }
+}
+function val(id){ const e=document.getElementById(id); return e ? e.value.trim() : ""; }
+function cleanKeys(){ const o={}; for(const[k,v]of Object.entries(data.keys)) if(v) o[k]=v; return o; }
+
+// Falls schon ein Profil existiert (z.B. Wiederholung), vorbefüllen.
+fetch("/api/setup/profil").then(r=>r.json()).then(p=>{
+  if (p && p.name) Object.assign(data.profil, { ...data.profil, ...p, winkel:{...data.profil.winkel, ...(p.winkel||{})} });
+}).finally(render);
+</script>
+</body>
+</html>

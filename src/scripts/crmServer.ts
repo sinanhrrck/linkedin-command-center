@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { spawn, execFile } from "node:child_process";
-import { readFileSync, openSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, openSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
@@ -17,8 +17,44 @@ import { LIVE_SHOT_PATH } from "../core/session.js";
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HTML_PATH = join(__dirname, "..", "web", "crm.html");
+const SETUP_PATH = join(__dirname, "..", "web", "setup.html");
 const PROJECT_ROOT = join(__dirname, "..", "..");
+const ENV_PATH = join(PROJECT_ROOT, ".env");
+const PROFIL_PATH = join(PROJECT_ROOT, "profil.local.json");
 const PORT = Number(process.env.CRM_PORT ?? 4321);
+
+/** .env als Key→Value lesen (frisch von Platte, damit Änderungen ohne Neustart sichtbar sind). */
+function readEnvFile(): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!existsSync(ENV_PATH)) return out;
+  for (const line of readFileSync(ENV_PATH, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
+    if (m) out[m[1]] = m[2].trim();
+  }
+  return out;
+}
+
+/** Einzelne Keys in .env setzen – bestehende Zeilen ersetzen, Rest (Kommentare/Struktur) bleibt. */
+function updateEnv(updates: Record<string, string>) {
+  let lines = existsSync(ENV_PATH) ? readFileSync(ENV_PATH, "utf8").split("\n") : [];
+  for (const [k, v] of Object.entries(updates)) {
+    const line = `${k}=${v}`;
+    const idx = lines.findIndex((l) => new RegExp(`^\\s*${k}\\s*=`).test(l));
+    if (idx >= 0) lines[idx] = line;
+    else lines.push(line);
+  }
+  writeFileSync(ENV_PATH, lines.join("\n"));
+}
+
+/** Ist das Tool eingerichtet? (Gemini-Key + Profil vorhanden). Steuert die Setup-Weiche. */
+function setupStatus() {
+  const env = readEnvFile();
+  const hasGemini = !!(env.GEMINI_API_KEY || process.env.GEMINI_API_KEY);
+  const hasProfile = existsSync(PROFIL_PATH);
+  const hasPosting = !!(env.LINKEDIN_ACCESS_TOKEN || env.LINKEDIN_CLIENT_ID);
+  const linkedInConnected = getState("linkedin_connected") === "1";
+  return { configured: hasGemini && hasProfile, hasGemini, hasProfile, hasPosting, linkedInConnected };
+}
 
 /**
  * SENDE-WARTESCHLANGE. Klickt Sinan mehrere "Senden"-Knöpfe, kommen mehrere HTTP-Requests
@@ -53,6 +89,83 @@ function engineAlive(): boolean {
 
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+
+  // ===== SETUP-ASSISTENT (Onboarding ohne Terminal, für Laien) =====
+  // Status: ist alles eingerichtet? Steuert die Weiche "/" → Dashboard oder Setup.
+  if (url.pathname === "/api/setup/status") {
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(setupStatus()));
+    return;
+  }
+
+  // Keys + Profil speichern. Keys → .env (strukturschonend), Profil → profil.local.json.
+  if (url.pathname === "/api/setup/save" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { keys, profil } = JSON.parse(body || "{}") as { keys?: Record<string, string>; profil?: unknown };
+        if (keys && typeof keys === "object") {
+          const erlaubt = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "LINKEDIN_ACCESS_TOKEN", "LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET", "LINKEDIN_PERSON_URN"];
+          const upd: Record<string, string> = {};
+          for (const [k, v] of Object.entries(keys)) if (erlaubt.includes(k) && typeof v === "string" && v.trim()) upd[k] = v.trim();
+          if (Object.keys(upd).length) updateEnv(upd);
+        }
+        if (profil && typeof profil === "object") {
+          writeFileSync(PROFIL_PATH, JSON.stringify(profil, null, 2));
+        }
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...setupStatus() }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // Aktuelles Profil laden (fürs Vorbefüllen des Formulars, falls schon eins existiert).
+  if (url.pathname === "/api/setup/profil") {
+    try {
+      const roh = existsSync(PROFIL_PATH) ? readFileSync(PROFIL_PATH, "utf8") : "{}";
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }).end(roh);
+    } catch {
+      res.writeHead(200, { "Content-Type": "application/json" }).end("{}");
+    }
+    return;
+  }
+
+  // LinkedIn verbinden: öffnet ein SICHTBARES Browserfenster zum Einloggen (wie `npm run login`).
+  if (url.pathname === "/api/setup/login" && req.method === "POST") {
+    try {
+      const logFd = openSync(join(PROJECT_ROOT, "engine.log"), "a");
+      const child = spawn("npx", ["tsx", "src/scripts/login.ts"], {
+        cwd: PROJECT_ROOT, detached: true, stdio: ["ignore", logFd, logFd],
+        env: { ...process.env, BROWSER_MODE: "visible" },
+      });
+      child.unref();
+      res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String(e) }));
+    }
+    return;
+  }
+
+  // Login prüfen: schließt das Login-Fenster, öffnet versteckt den Feed und prüft, ob eingeloggt.
+  if (url.pathname === "/api/setup/verify-login" && req.method === "POST") {
+    execFile("pkill", ["-f", "tsx src/scripts/login.ts"], () => {
+      try { rmSync(join(PROJECT_ROOT, ".session", "SingletonLock"), { force: true }); } catch { /* egal */ }
+      setTimeout(() => {
+        const child = spawn("npx", ["tsx", "src/scripts/checkLogin.ts"], { cwd: PROJECT_ROOT, env: process.env });
+        let ausgabe = "";
+        child.stdout?.on("data", (d) => (ausgabe += d));
+        child.stderr?.on("data", (d) => (ausgabe += d));
+        child.on("exit", (code) => {
+          const ok = code === 0;
+          setState("linkedin_connected", ok ? "1" : "0");
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok, hinweis: ok ? "" : ausgabe.slice(-200) }));
+        });
+      }, 2000);
+    });
+    return;
+  }
 
   // Entwurf editieren, verwerfen ODER senden. Der Versand lief früher bewusst nur per CLI
   // (`npm run send -- <id>`), weil dem Sendeweg nicht zu trauen war. Seit er verifiziert ist
@@ -283,7 +396,18 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // Setup-Seite (der Assistent selbst).
+  if (url.pathname === "/setup") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(readFileSync(SETUP_PATH, "utf-8"));
+    return;
+  }
+
   if (url.pathname === "/" || url.pathname === "/index.html") {
+    // Weiche: noch nicht eingerichtet → Setup-Assistent, sonst das Dashboard.
+    if (!setupStatus().configured) {
+      res.writeHead(302, { Location: "/setup" }).end();
+      return;
+    }
     // In dev bei jedem Request frisch lesen, damit Design-Änderungen sofort greifen.
     const html = readFileSync(HTML_PATH, "utf-8");
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(html);
