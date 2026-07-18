@@ -1,6 +1,7 @@
 import { db, getState, getMode, getFocus } from "../db/index.js";
 import { governor } from "../core/safetyGovernor.js";
 import { pendingDrafts } from "./drafts.js";
+import { pendingPosts } from "./content.js";
 import { hotLeads } from "./crm.js";
 
 /**
@@ -95,6 +96,7 @@ export function getDashboardData() {
     actionsToday: Object.fromEntries(actionsToday.map((a) => [a.type, a.n])),
     posts: Object.fromEntries(posts.map((p) => [p.status, p.n])),
     drafts: pendingDrafts(),
+    postDrafts: pendingPosts(),
     hotLeads: hotLeads(),
     mode: getMode(),
     focus: getFocus(),

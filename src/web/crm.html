@@ -524,6 +524,11 @@
     <div class="drafts-grid" id="drafts-grid"></div>
   </section>
 
+  <section id="posts-section" style="display:none">
+    <p class="eyebrow" style="font-family:var(--disp);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);font-weight:600;margin:26px 4px 10px">Post-Entwürfe · Freigabe <span id="posts-count" style="color:var(--amber)"></span></p>
+    <div class="drafts-grid" id="posts-grid"></div>
+  </section>
+
   <!-- Pipeline -->
   <p class="eyebrow" style="font-family:var(--disp);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);font-weight:600;margin:26px 4px 10px">Pipeline</p>
   <div class="funnel" id="funnel"></div>
@@ -688,6 +693,7 @@ function render() {
   renderTermine();
   renderHotLeads();
   renderDrafts();
+  renderPosts();
 
   // Chips
   const counts = Object.fromEntries(state.pipeline.map(p => [p.stage, p.count]));
@@ -707,12 +713,14 @@ const ICONS = {
   connect: SVG('<circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.8 5.8 0 0 1 11 0"/><path d="M18.5 8v5M16 10.5h5"/>'),
   message: SVG('<path d="M4 5h16v11H9l-4 3.2V16H4z"/>'),
   comment: SVG('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/>'),
+  like: SVG('<path d="M20.8 5.6a5 5 0 0 0-7.1 0L12 7.3l-1.7-1.7a5 5 0 1 0-7.1 7.1L12 21l8.8-8.3a5 5 0 0 0 0-7.1z"/>'),
   view: SVG('<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/>'),
 };
 const ACT_META = {
   connect: { icon: ICONS.connect, verb: "vernetzt mit", color: "var(--amber)", bg: "rgba(247,193,75,.13)" },
   message: { icon: ICONS.message, verb: "Nachricht an", color: "var(--accent)", bg: "rgba(139,123,255,.15)" },
   comment: { icon: ICONS.comment, verb: "kommentiert bei", color: "#c4b5fd", bg: "rgba(167,139,250,.14)" },
+  like: { icon: ICONS.like, verb: "Beitrag geliked", color: "#f472b6", bg: "rgba(244,114,182,.13)" },
   profileView: { icon: ICONS.view, verb: "Profil besucht", color: "var(--ink-dim)", bg: "rgba(255,255,255,.06)" },
 };
 function slugOf(url) { return (url || "").split("/in/")[1]?.replace(/\/$/, "") || (url || "").slice(0, 24); }
@@ -905,8 +913,10 @@ function renderDrafts() {
   sec.style.display = "block";
   grid.innerHTML = list.map(d => `
     <div class="draft-card" data-id="${d.id}">
-      <div class="dc-top"><span class="dc-name">${esc(d.participant || "—")}</span><span class="dc-kind">${d.kind === "first" ? "Erstnachricht" : d.kind === "followup" ? "Follow-up" : "Antwort"}</span></div>
-      ${d.incoming ? `<div class="dc-in">Auf: „${esc(d.incoming.slice(0, 140))}"</div>` : (d.kind === "first" ? `<div class="dc-in" style="color:var(--green)">✅ ${esc(d.participant || "")} hat deine Vernetzungsanfrage angenommen</div>` : d.kind === "followup" ? `<div class="dc-in">Noch keine Antwort auf deine Erstnachricht</div>` : "")}
+      <div class="dc-top"><span class="dc-name">${esc(d.participant || "—")}</span><span class="dc-kind">${d.kind === "first" ? "Erstnachricht" : d.kind === "followup" ? "Follow-up" : d.kind === "comment" ? "Kommentar" : "Antwort"}</span></div>
+      ${d.kind === "comment"
+        ? (d.incoming ? `<div class="dc-in">Unter Post: „${esc(d.incoming.slice(0, 160))}"</div>` : "")
+        : d.incoming ? `<div class="dc-in">Auf: „${esc(d.incoming.slice(0, 140))}"</div>` : (d.kind === "first" ? `<div class="dc-in" style="color:var(--green)">✅ ${esc(d.participant || "")} hat deine Vernetzungsanfrage angenommen</div>` : d.kind === "followup" ? `<div class="dc-in">Noch keine Antwort auf deine Erstnachricht</div>` : "")}
       <textarea spellcheck="false">${esc(d.draft)}</textarea>
       <div class="dc-foot">
         <button class="dc-send" title="Jetzt über LinkedIn senden (governor-gedrosselt)">Senden</button>
@@ -968,6 +978,60 @@ function renderDrafts() {
       await postDraft({ id, action: "discard" }); load();
     });
   });
+}
+
+/**
+ * Eigene Post-Entwuerfe. Anders als DMs geht Freigeben NICHT ueber den Governor, sondern ueber
+ * die offizielle LinkedIn-API (index.ts-Cron) – deshalb "Freigeben & posten" statt "Senden".
+ * Kein Empfaenger, kein Verlaufs-Beleg: der Post erscheint einfach im Feed.
+ */
+function renderPosts() {
+  const list = state.postDrafts || [];
+  const sec = document.getElementById("posts-section");
+  const grid = document.getElementById("posts-grid");
+  document.getElementById("posts-count").textContent = list.length ? list.length : "";
+  if (!list.length) { sec.style.display = "none"; return; }
+  if (grid.contains(document.activeElement)) return;
+  sec.style.display = "block";
+  grid.innerHTML = list.map(p => `
+    <div class="draft-card" data-id="${p.id}">
+      <div class="dc-top"><span class="dc-name">Eigener Post</span><span class="dc-kind">Beitrag</span></div>
+      <textarea spellcheck="false">${esc(p.body)}</textarea>
+      <div class="dc-foot">
+        <button class="dc-send" title="Über die offizielle LinkedIn-API veröffentlichen">Freigeben & posten</button>
+        <span class="draft-saved">gespeichert ✓</span>
+        <button class="dc-discard">Verwerfen</button>
+      </div>
+    </div>`).join("");
+  grid.querySelectorAll(".draft-card").forEach(card => {
+    const id = Number(card.dataset.id);
+    const ta = card.querySelector("textarea");
+    const saved = card.querySelector(".draft-saved");
+    ta.addEventListener("blur", async () => {
+      await postPost({ id, action: "save", text: ta.value });
+      saved.classList.add("show"); setTimeout(() => saved.classList.remove("show"), 1500);
+    });
+    card.querySelector(".dc-send").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      if (btn.disabled) return;
+      if (!confirm("Diesen Post öffentlich unter deinem Namen veröffentlichen?")) return;
+      btn.disabled = true; btn.textContent = "wird gepostet …";
+      const r = await postPost({ id, action: "approve", text: ta.value });
+      if (r && r.ok) { btn.textContent = "freigegeben ✓"; btn.classList.add("ok"); setTimeout(load, 1200); }
+      else { btn.textContent = "Fehler"; btn.disabled = false; setTimeout(() => (btn.textContent = "Freigeben & posten"), 3000); }
+    });
+    card.querySelector(".dc-discard").addEventListener("click", async () => {
+      if (!confirm("Post-Entwurf verwerfen?")) return;
+      await postPost({ id, action: "discard" }); load();
+    });
+  });
+}
+
+async function postPost(payload) {
+  try {
+    const r = await fetch("/api/post", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    return await r.json();
+  } catch { return { ok: false }; }
 }
 /**
  * Spiegel der Server-Warteschlange. Der crmServer haengt jeden Versand hinten an eine

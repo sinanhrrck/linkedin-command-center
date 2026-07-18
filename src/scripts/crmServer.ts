@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
 import { getDraft, setDraftStatus, sendDraft } from "../modules/drafts.js";
+import { getPost, approvePost, discardPost } from "../modules/content.js";
 import { deleteContact } from "../modules/crm.js";
 import { db, getState, setState, setMode, setFocus, getFocus, type Mode, type Focus } from "../db/index.js";
 import { LIVE_SHOT_PATH } from "../core/session.js";
@@ -96,6 +97,41 @@ const server = createServer((req, res) => {
           return;
         }
         res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // Eigene Post-Entwuerfe freigeben/verwerfen. Freigabe setzt 'approved' + faellig ab jetzt;
+  // der Cron in index.ts veroeffentlicht ihn ueber die OFFIZIELLE API (kein Governor noetig,
+  // kein Selektor-Risiko). Editierter Text wird vorher gespeichert.
+  if (url.pathname === "/api/post" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { id, action, text } = JSON.parse(body || "{}");
+        const p = getPost(Number(id));
+        if (!p) {
+          res.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "not found" }));
+          return;
+        }
+        if (typeof text === "string" && text.trim() && p.status === "draft") {
+          db.prepare("UPDATE posts SET body=? WHERE id=? AND status='draft'").run(text.trim(), Number(id));
+        }
+        if (action === "approve") {
+          const ok = approvePost(Number(id));
+          res.writeHead(ok ? 200 : 409, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else if (action === "discard") {
+          const ok = discardPost(Number(id));
+          res.writeHead(ok ? 200 : 409, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else if (action === "save") {
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
+        }
       } catch (e) {
         res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
       }
