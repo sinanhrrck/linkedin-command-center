@@ -33,6 +33,18 @@ try {
   /* Spalte existiert schon */
 }
 try {
+  // Lead-Score aus Name+Headline (kein Profilbesuch -> kein profileView-Risiko). Priorisiert
+  // die begrenzten Tages-Anfragen auf die besten Leads und sortiert echten Muell aus.
+  db.exec("ALTER TABLE contacts ADD COLUMN lead_score INTEGER");
+} catch {
+  /* Spalte existiert schon */
+}
+try {
+  db.exec("ALTER TABLE contacts ADD COLUMN score_grund TEXT");
+} catch {
+  /* Spalte existiert schon */
+}
+try {
   db.exec("ALTER TABLE lead_sources ADD COLUMN zielgruppe TEXT"); // azubi | student -> Fokus-Steuerung
 } catch {
   /* Spalte existiert schon */

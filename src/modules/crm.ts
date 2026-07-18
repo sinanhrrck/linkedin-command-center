@@ -17,21 +17,47 @@ export function upsertContact(c: { profileUrl: string; fullName?: string; headli
   // Erstnachricht (Azubi vs. Student). Aus der Headline, nicht aus der Quelle: eine Suche
   // liefert gemischte Ergebnisse, die Headline ist die Wahrheit über die Person.
   const zg = zielgruppeAusHeadline(c.headline);
+  const { score, grund } = scoreLead(c.fullName, c.headline);
   db.prepare(
-    `INSERT INTO contacts(profile_url, full_name, headline, zielgruppe)
-     VALUES(?,?,?,?)
+    `INSERT INTO contacts(profile_url, full_name, headline, zielgruppe, lead_score, score_grund)
+     VALUES(?,?,?,?,?,?)
      ON CONFLICT(profile_url) DO UPDATE SET
-       full_name  = COALESCE(excluded.full_name, contacts.full_name),
-       headline   = COALESCE(excluded.headline,  contacts.headline),
-       zielgruppe = COALESCE(excluded.zielgruppe, contacts.zielgruppe)`,
-  ).run(c.profileUrl, c.fullName ?? null, c.headline ?? null, zg);
+       full_name   = COALESCE(excluded.full_name, contacts.full_name),
+       headline    = COALESCE(excluded.headline,  contacts.headline),
+       zielgruppe  = COALESCE(excluded.zielgruppe, contacts.zielgruppe),
+       lead_score  = excluded.lead_score,
+       score_grund = excluded.score_grund`,
+  ).run(c.profileUrl, c.fullName ?? null, c.headline ?? null, zg, score, grund);
 }
 
 /** Nächste noch nicht kontaktierte Leads. */
+/**
+ * Die nächsten Leads zum Vernetzen – BESTE ZUERST. Bei begrenztem Tages-Cap (12-20) sollen
+ * die knappen Anfragen an die Leads mit der höchsten ICP-Passung gehen, nicht an die ältesten.
+ * Genau Sinans "Priorisierung, wer heute Aufmerksamkeit braucht".
+ * Leads unter der Müll-Schwelle (SCORE_MIN) werden GAR NICHT angeschrieben – sie kosten sonst
+ * Kontingent für nichts. `markSkippedLowScore` hat sie vorher auf 'skipped' gesetzt.
+ */
+export const SCORE_MIN = 25;
+
 export function nextNewContacts(limit: number): Contact[] {
   return db
-    .prepare("SELECT * FROM contacts WHERE status = 'new' ORDER BY created_at LIMIT ?")
+    .prepare(
+      "SELECT * FROM contacts WHERE status = 'new' ORDER BY COALESCE(lead_score, 50) DESC, created_at LIMIT ?",
+    )
     .all(limit) as Contact[];
+}
+
+/**
+ * Sortiert schwache Leads aus, BEVOR sie Kontingent kosten: status 'new' → 'skipped', wenn der
+ * Score unter SCORE_MIN liegt. Rein lesend auf der DB, kein Governor. Nachvollziehbar über
+ * score_grund. Wird vor dem Outreach-Tick aufgerufen.
+ */
+export function markSkippedLowScore(): number {
+  const r = db
+    .prepare("UPDATE contacts SET status='skipped' WHERE status='new' AND lead_score IS NOT NULL AND lead_score < ?")
+    .run(SCORE_MIN);
+  return r.changes;
 }
 
 export function setStatus(profileUrl: string, status: string) {
@@ -77,6 +103,58 @@ export function countContacts(): number {
  * Reihenfolge zählt: "dualer Student" ist beides, gilt aber als Azubi – dual Studierende
  * sind im Betrieb und leben faktisch die Azubi-Lebenslage, da passt Sinans Geschichte.
  */
+/**
+ * LEAD-SCORING aus Name + Headline (0-100). Bewusst OHNE Profilbesuch: jedes Profil einzeln
+ * zu öffnen wären teure, rate-limitierte profileViews mit Ban-Risiko (siehe CLAUDE.md). Die
+ * Headline ist das Maximum an gratis Signal – reicht für zwei Dinge, die das Zielbild fordert:
+ * die knappen Tages-Anfragen auf die BESTEN Leads priorisieren und echten Müll aussortieren,
+ * bevor er Kontingent kostet.
+ *
+ * Regelbasiert (kein KI-Call, läuft bei jedem Lead): Signale, die Sinans ICP treffen, geben
+ * Punkte; Signale für schlechte Leads ziehen ab. Konservativ kalibriert – im Zweifel lieber
+ * mittelmäßig einstufen als einen echten Azubi rauswerfen.
+ */
+export function scoreLead(name?: string | null, headline?: string | null): { score: number; grund: string } {
+  const h = (headline ?? "").toLowerCase();
+  if (!h) return { score: 30, grund: "keine Headline, wenig Anhaltspunkt" };
+
+  let score = 50;
+  const plus: string[] = [];
+  const minus: string[] = [];
+
+  // + Klarer kaufmännischer Ausbildungsberuf (genau Sinans ICP)
+  if (/bankkauf|industriekauf|büromanagement|einzelhandel|groß.?\s?und\s?außenhandel|versicherungskauf|kauffrau|kaufmann|steuerfachang/i.test(h)) {
+    score += 20; plus.push("klarer kaufm. Beruf");
+  }
+  // + Ausbildung/Lehre ausdrücklich genannt (in der Lebenslage, nicht schon fertig)
+  if (/auszubild|ausbildung|azubi|lehrjahr|dual/i.test(h)) { score += 12; plus.push("in Ausbildung"); }
+  // + Region in Sinans Nähe (laut Über mich: regionale Nähe hilft der Annahme)
+  if (/heidelberg|mannheim|ludwigshafen|frankfurt|karlsruhe|speyer|worms|darmstadt|rhein.?neckar/i.test(h)) {
+    score += 12; plus.push("Region nah");
+  }
+  // + Namhafter/seriöser Betrieb genannt = echtes Profil, kein Fake
+  if (/sparkasse|volksbank|targobank|commerzbank|deutsche bank|bosch|basf|sap|dm |rewe|edeka|siemens|daimler|mercedes/i.test(h)) {
+    score += 8; plus.push("seriöser Betrieb");
+  }
+
+  // − Sucht selbst einen Job → anderer Kontext, nicht Sinans Winkel ("was nach der Ausbildung")
+  if (/open to work|#opentowork|auf (job|arbeits)?suche|suche (eine )?stelle|bewerbe mich/i.test(h)) {
+    score -= 25; minus.push("sucht selbst Job");
+  }
+  // − Schon fertig / nicht mehr in der Ausbildungs-Lebenslage
+  if (/ehemalig|ex-azubi|abgeschlossen|a\.d\.|ausgelernt|fertig mit/i.test(h)) { score -= 20; minus.push("schon fertig"); }
+  // − Influencer/Content-Sprech → meist unpassend, oft Fake-Reichweite
+  if (/content creator|influencer|coach|mindset|umsatz|\d+k follower|link in bio/i.test(h)) { score -= 20; minus.push("Influencer-Sprech"); }
+  // − Emoji-Wüste (mehr als 4) → selten seriöses Azubi-Profil
+  const emojis = (headline ?? "").match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu)?.length ?? 0;
+  if (emojis > 4) { score -= 10; minus.push("Emoji-Wüste"); }
+
+  score = Math.max(0, Math.min(100, score));
+  const grund = [plus.length ? "+ " + plus.join(", ") : "", minus.length ? "− " + minus.join(", ") : ""]
+    .filter(Boolean).join("  ") || "durchschnittlich";
+  return { score, grund };
+}
+
 export function zielgruppeAusHeadline(headline?: string | null): "azubi" | "student" | null {
   const h = (headline ?? "").toLowerCase();
   if (!h) return null;

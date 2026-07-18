@@ -1,4 +1,4 @@
-import { nextNewContacts } from "./crm.js";
+import { nextNewContacts, markSkippedLowScore } from "./crm.js";
 import { connectionNote } from "./personalize.js";
 import { sendConnectionRequest } from "./outreach.js";
 import { governor } from "../core/safetyGovernor.js";
@@ -13,6 +13,9 @@ export async function outreachTick() {
   if (governor.isPaused()) return;
   if (!governor.canDoAction("connect").ok) return;
 
+  // Erst den Müll aussortieren (kostet kein Kontingent), dann die BESTEN Leads zuerst.
+  const aussortiert = markSkippedLowScore();
+  if (aussortiert) console.info(`[outreach] ${aussortiert} schwache Lead(s) aussortiert (Score zu niedrig)`);
   // Bewusst nur wenige pro Tick anfassen; der Governor bremst zusätzlich zwischen den Sends.
   const contacts = nextNewContacts(3);
   for (const c of contacts) {

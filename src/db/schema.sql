@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS contacts (
   messaged_at   TEXT,   -- wann Erstnachricht raus (Follow-up-Timing)
   replied_at    TEXT,   -- wann der Kontakt geantwortet hat (Hot Lead)
   zielgruppe    TEXT,   -- azubi | student : steuert den Winkel der Erstnachricht (Sinan hat NICHT studiert)
+  lead_score    INTEGER, -- 0-100: ICP-Passung aus Name+Headline (Priorisierung); NULL = noch nicht bewertet
+  score_grund   TEXT,    -- kurze Begruendung des Scores (nachvollziehbar im Dashboard)
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
