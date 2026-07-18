@@ -17,7 +17,8 @@
     "post": "tsx src/scripts/postNow.ts",
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "bilanz": "tsx src/scripts/bilanz.ts"
+    "bilanz": "tsx src/scripts/bilanz.ts",
+    "app": "electron desktop/main.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
