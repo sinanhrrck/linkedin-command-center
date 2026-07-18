@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { db, setState, getMode } from "./db/index.js";
 import { governor } from "./core/safetyGovernor.js";
+import { events } from "./core/events.js";
 import { publishPost } from "./modules/posting.js";
 import { outreachTick } from "./modules/outreachTick.js";
 import { checkAcceptances } from "./modules/acceptance.js";
@@ -121,6 +122,11 @@ cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4,
 cron.schedule(`*/${config.autopilot.intervalMinutes} * * * *`, () =>
   einzeln("autopilot", () => runAutopilot()),
 );
+
+// WOCHEN-BILANZ automatisch: Montag 9:05 Uhr per Telegram, ohne dass Sinan etwas tippt.
+// "sowas muss automatisch passieren" – der Report kommt von allein, reife Kategorien
+// mit Tap-Button zum Freischalten. events statt Direktaufruf (kein Import-Zyklus zu telegram).
+cron.schedule("5 9 * * 1", () => events.emit("bilanz:woche"));
 
 // Statusausgabe alle 15 Min (später via Telegram)
 cron.schedule("*/15 * * * *", () => {

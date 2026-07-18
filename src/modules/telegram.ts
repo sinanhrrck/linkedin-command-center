@@ -1,10 +1,11 @@
 import { Bot, InlineKeyboard } from "grammy";
 import { config } from "../config.js";
-import { db } from "../db/index.js";
+import { db, setAutonomy, type IntentKat } from "../db/index.js";
 import { events } from "../core/events.js";
 import { governor } from "../core/safetyGovernor.js";
 import { countByStatus, hotLeads } from "./crm.js";
 import { pendingDrafts, sendDraft, setDraftStatus, type Draft } from "./drafts.js";
+import { computeBilanz } from "./bilanz.js";
 
 /**
  * Telegram-Steuerung: Entwürfe freigeben/senden, offene Nachrichten sehen, Tages-Status.
@@ -314,6 +315,61 @@ export function startTelegram() {
           `💬 Chat: ${l.threadUrl}\n\nAb hier übernimmst du. 🤝`,
       )
       .catch(() => {});
+  });
+
+  /**
+   * WOCHEN-BILANZ automatisch. Sinans Ansage: "sowas muss automatisch passieren, ich will
+   * dafuer nichts tippen." Der Cron feuert Montag 9:05, hier wird formatiert. Reife Kategorien
+   * bekommen einen Tap-Button zum Freischalten – ein Antippen, keine Kommandozeile.
+   */
+  const bilanzText = () => {
+    const b = computeBilanz();
+    if (!b.length) return { text: "📊 *Wochen-Bilanz*\n\nNoch keine Daten – der Bot sammelt sie ab jetzt.", kb: undefined as InlineKeyboard | undefined };
+    let text = "📊 *Wochen-Bilanz* · wie gut trifft die KI deinen Ton?\n";
+    const kb = new InlineKeyboard();
+    for (const k of b) {
+      const badge = k.autonom ? "🤖 autonom" : "✋ Freigabe";
+      text += `\n*${k.intent}* ${badge}\n`;
+      if (k.entschieden) text += `${k.entschieden} entschieden · ${k.quote}% unverändert`;
+      else text += `noch keine Entscheidung`;
+      if (k.korrekturen) text += `\n_du änderst: ${k.korrekturen}_`;
+      if (k.reif) {
+        text += `\n✅ *reif zum Freischalten*`;
+        kb.text(`🤖 ${k.intent} autonom`, `frei:${k.intent}`).row();
+      }
+      text += "\n";
+    }
+    text += "\nReife Kategorien kannst du hier antippen. Zurücknehmen jederzeit im Chat: /freigabe";
+    return { text, kb: kb.inline_keyboard.length ? kb : undefined };
+  };
+
+  events.on("bilanz:woche", () => {
+    if (!bot || !config.telegram.chatId) return;
+    const { text, kb } = bilanzText();
+    bot.api.sendMessage(config.telegram.chatId, text, { parse_mode: "Markdown", ...(kb ? { reply_markup: kb } : {}) }).catch(() => {});
+  });
+
+  // Bilanz auch auf Zuruf.
+  bot.command(["bilanz", "woche"], (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    const { text, kb } = bilanzText();
+    ctx.reply(text, { parse_mode: "Markdown", ...(kb ? { reply_markup: kb } : {}) });
+  });
+
+  // Tap-Button: Kategorie autonom schalten (Stufe 2, per Antippen statt Tippen).
+  bot.callbackQuery(/^frei:(\w+)$/, async (ctx) => {
+    if (!allowed(ctx.chat?.id)) return ctx.answerCallbackQuery("Nicht erlaubt.");
+    const kat = ctx.match[1] as IntentKat;
+    setAutonomy(kat, "auto");
+    await ctx.answerCallbackQuery(`${kat} läuft jetzt autonom`);
+    await ctx.editMessageText(`✅ *${kat}* fährt der Bot ab jetzt selbst. Zurücknehmen: /freigabe`, { parse_mode: "Markdown" }).catch(() => {});
+  });
+
+  // Alles zurück auf Freigabe (Notbremse).
+  bot.command("freigabe", (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    (["chance", "einwand", "positive", "neutral"] as IntentKat[]).forEach((k) => setAutonomy(k, "ask"));
+    ctx.reply("✋ Alle heiklen Kategorien gehen wieder über deine Freigabe.");
   });
 
   bot.catch((err) => console.error("[telegram] Fehler:", err.message));
