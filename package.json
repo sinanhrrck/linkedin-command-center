@@ -1,6 +1,6 @@
 {
   "name": "linkedin-command-center",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "description": "Lokales All-in-One LinkedIn-Tool: Posting, Outreach, Inbox, CRM, Analytics",
@@ -69,7 +69,8 @@
       "**/node_modules/playwright/**",
       "**/node_modules/playwright-core/.local-browsers/**",
       "**/*.local-browsers/**"
-    ]
+    ],
+    "afterPack": "desktop/afterPack.cjs"
   },
   "author": "NextLead"
 }
