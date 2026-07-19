@@ -129,6 +129,24 @@
   .ps-arrow{display:grid;place-items:center;color:var(--ink-faint);}
   .ps-arrow svg{width:20px;height:20px;}
   @media(max-width:720px){.ps-row{grid-template-columns:1fr;gap:8px;}.ps-arrow{transform:rotate(90deg);height:20px;}}
+  /* Ergebnis-Rechner */
+  .calc{max-width:720px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:34px 32px;box-shadow:var(--shadow);text-align:center;}
+  .calc-top{font-size:15px;color:var(--ink-dim);margin-bottom:18px;}
+  .calc-top b{font-family:var(--display);font-size:24px;color:var(--accent);}
+  .calc-range{-webkit-appearance:none;appearance:none;width:100%;max-width:520px;height:8px;border-radius:20px;background:linear-gradient(90deg,var(--accent) 0%,var(--accent) 42%,var(--panel-2) 42%);outline:none;cursor:pointer;}
+  .calc-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;border-radius:50%;background:#fff;border:5px solid var(--accent);box-shadow:0 4px 12px -2px rgba(20,80,50,.5);cursor:pointer;}
+  .calc-range::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:5px solid var(--accent);cursor:pointer;}
+  .calc-scale{display:flex;justify-content:space-between;max-width:520px;margin:8px auto 0;font-size:11px;color:var(--ink-faint);}
+  .calc-out{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:28px;}
+  .calc-card{background:var(--panel-2);border-radius:14px;padding:18px 12px;}
+  .calc-card.hot{background:var(--hero);}
+  .calc-num{font-family:var(--display);font-weight:700;font-size:32px;letter-spacing:-.02em;color:var(--accent);font-variant-numeric:tabular-nums;}
+  .calc-card.hot .calc-num{color:#fff;}
+  .calc-lab{font-size:11.5px;color:var(--ink-dim);margin-top:5px;line-height:1.3;}
+  .calc-card.hot .calc-lab{color:rgba(255,255,255,.82);}
+  .calc-note{font-size:11.5px;color:var(--ink-faint);margin:18px 0 0;line-height:1.5;}
+  .calc-cta{display:inline-flex;align-items:center;gap:7px;margin-top:22px;font-weight:600;font-size:14px;text-decoration:none;color:var(--accent);}
+  @media(max-width:560px){.calc-out{grid-template-columns:1fr;}}
   /* Sektionen */
   section{padding:52px 0;}
   h2{font-family:var(--display);font-size:clamp(24px,4vw,32px);font-weight:700;letter-spacing:-.02em;text-align:center;margin:0 0 10px;}
@@ -375,6 +393,25 @@
     </div>
   </section>
 
+  <section id="rechner">
+    <h2>Was bringt dir das?</h2>
+    <p class="lead">Schieb den Regler auf dein Wunsch-Tempo — und sieh, was NextLead pro Woche daraus macht.</p>
+    <div class="calc">
+      <div class="calc-top"><b id="calc-v">50</b> Vernetzungen pro Woche</div>
+      <input type="range" id="calc-range" class="calc-range" min="20" max="100" step="5" value="50" aria-label="Vernetzungen pro Woche" />
+      <div class="calc-scale"><span>20</span><span>100</span></div>
+      <div class="calc-out">
+        <div class="calc-card"><div class="calc-num" id="calc-acc">20</div><div class="calc-lab">Angenommene Kontakte / Woche</div></div>
+        <div class="calc-card"><div class="calc-num" id="calc-leads">8</div><div class="calc-lab">Warme Leads / Woche</div></div>
+        <div class="calc-card hot"><div class="calc-num" id="calc-term">16</div><div class="calc-lab">Termine / Monat (geschätzt)</div></div>
+      </div>
+      <p class="calc-note">Beispielrechnung mit ~40 % Annahme- und ~40 % Antwortquote. Deine echten Werte misst NextLead später live im Dashboard — nach oben wie unten.</p>
+      <a class="calc-cta" href="#download">Klingt gut? Sei beim Start dabei
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+  </section>
+
   <section id="so">
     <h2>In 4 Schritten startklar</h2>
     <p class="lead">Kein Programmieren, kein Server. Herunterladen, dem Assistenten folgen, fertig.</p>
@@ -406,7 +443,11 @@
         <span class="soon-os"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2-.05 1.6-.75 3-.75s1.8.75 3 .73c1.2-.02 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.3-2.6-.03-.01-2.5-.96-2.5-3.8zM14.1 6.1c.65-.8 1.1-1.9.98-3-.94.04-2.1.63-2.77 1.42-.6.7-1.13 1.83-.99 2.9 1.05.08 2.13-.53 2.78-1.32z"/></svg>Mac<span class="tag">Bald</span></span>
         <span class="soon-os"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.4v7.1H3zM11.5 4.3 21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg>Windows<span class="tag">Bald</span></span>
       </div>
-      <p class="cta-note" style="margin-top:22px">Du siehst gerade eine frühe Vorschau. Willst du NextLead als Erstes testen oder Feedback geben? Melde dich einfach bei mir.</p>
+      <a class="btn primary" style="margin-top:26px" href="mailto:sinan.harrack@koenigswege.com?subject=NextLead%20Fr%C3%BCh-Zugang&amp;body=Hi%20Sinan%2C%20ich%20m%C3%B6chte%20NextLead%20testen%2C%20sobald%20es%20startet.">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"/><path d="m4 7 8 6 8-6"/></svg>
+        Früh-Zugang sichern
+      </a>
+      <p class="cta-note" style="margin-top:16px">Trag dich ein und sei dabei, sobald NextLead startet — oder gib mir Feedback zur Vorschau.</p>
     </div>
   </section>
 
@@ -430,5 +471,28 @@
 <footer>
   NextLead · läuft lokal, gehört dir · <a href="https://github.com/sinanhrrck/linkedin-command-center">Quellcode auf GitHub</a>
 </footer>
+
+<script>
+  // Ergebnis-Rechner: Vernetzungen/Woche → Annahmen, warme Leads, Termine.
+  (function () {
+    var r = document.getElementById("calc-range");
+    if (!r) return;
+    var ANNAHME = 0.40, ANTWORT = 0.40, TERMIN = 0.40; // Quoten der Beispielrechnung
+    function upd() {
+      var v = +r.value;
+      var acc = Math.round(v * ANNAHME);
+      var leads = Math.round(v * ANNAHME * ANTWORT);
+      var term = Math.round(leads * 4 * TERMIN); // warme Leads/Woche × 4 Wochen × Termin-Quote
+      document.getElementById("calc-v").textContent = v;
+      document.getElementById("calc-acc").textContent = acc;
+      document.getElementById("calc-leads").textContent = leads;
+      document.getElementById("calc-term").textContent = term;
+      var pct = Math.round((v - r.min) / (r.max - r.min) * 100);
+      r.style.background = "linear-gradient(90deg,var(--accent) 0%,var(--accent) " + pct + "%,var(--panel-2) " + pct + "%)";
+    }
+    r.addEventListener("input", upd);
+    upd();
+  })();
+</script>
 </body>
 </html>
