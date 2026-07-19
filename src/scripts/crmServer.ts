@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, existsSync, openSync, rmSync } from "node:
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
+import { getAnalytics } from "../modules/analytics.js";
 import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft } from "../modules/drafts.js";
 import { getPost, approvePost, discardPost } from "../modules/content.js";
 import { addSource, deleteSource } from "../modules/leadFeed.js";
@@ -441,6 +442,15 @@ const server = createServer((req, res) => {
         .end(img);
     } catch {
       res.writeHead(404, { "Content-Type": "text/plain" }).end("noch kein Bild");
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/analytics") {
+    try {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify(getAnalytics()));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
     }
     return;
   }

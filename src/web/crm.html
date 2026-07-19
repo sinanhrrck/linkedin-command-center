@@ -368,6 +368,40 @@
   .score-pill.mid { color: var(--amber); background: rgba(192,122,18,.12); }
   .score-pill.low { color: var(--ink-faint); background: var(--panel-2); }
 
+  /* ---------- Analytics-Seite ---------- */
+  .an-quoten { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .an-qcard { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .an-qtop { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .an-qlab { font-size: 12px; font-weight: 600; color: var(--ink-dim); }
+  .an-tier { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 20px; }
+  .an-tier.good { color: #12855a; background: rgba(31,157,99,.13); }
+  .an-tier.mid { color: var(--amber); background: rgba(192,122,18,.12); }
+  .an-tier.low { color: #c23940; background: rgba(220,75,82,.12); }
+  .an-tier.none { color: var(--ink-faint); background: var(--panel-2); }
+  .an-qval { font-family: var(--display); font-size: 34px; font-weight: 700; letter-spacing: -.02em; margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
+  .an-qsub { font-size: 11.5px; color: var(--ink-faint); line-height: 1.4; }
+  .an-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .an-tempo-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .an-tempo-row:last-of-type { border-bottom: none; }
+  .an-tempo-row span { font-size: 13.5px; color: var(--ink-dim); }
+  .an-tempo-row b { font-family: var(--display); font-size: 18px; color: var(--ink); }
+  .an-note { font-size: 11.5px; color: var(--ink-faint); line-height: 1.5; margin: 12px 0 0; }
+  .an-wd-row { display: grid; grid-template-columns: 32px 1fr 44px 44px; align-items: center; gap: 10px; padding: 6px 0; }
+  .an-wd-tag { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+  .an-wd-track { height: 9px; border-radius: 20px; background: var(--panel-2); overflow: hidden; }
+  .an-wd-fill { height: 100%; border-radius: 20px; background: var(--green); }
+  .an-wd-pct { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink); text-align: right; }
+  .an-wd-n { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); text-align: right; }
+  .an-qtable { width: 100%; border-collapse: collapse; }
+  .an-qtable th { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-faint); text-align: right; padding: 6px 10px 10px; border-bottom: 1px solid var(--line); }
+  .an-qtable th:first-child { text-align: left; }
+  .an-qtable td { font-size: 13px; text-align: right; padding: 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  .an-qtable td:first-child { text-align: left; }
+  .an-qtable tr:last-child td { border-bottom: none; }
+  .an-qname { font-weight: 600; color: var(--ink); }
+  #analytics-view .an-grid2 > div > .section-head { margin-top: 0; }
+  @media (max-width: 720px) { .an-grid2 { grid-template-columns: 1fr; } }
+
   /* ---------- Controls / Suche / Chips ---------- */
   .controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
   .search { display: flex; align-items: center; gap: 9px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; box-shadow: var(--shadow-sm); flex: 1; min-width: 240px; color: var(--ink-faint); }
@@ -435,9 +469,12 @@
     </div>
     <div class="side-lab">Menü</div>
     <nav class="side-nav">
-      <a class="nav-item active" data-jump="__top">
+      <a class="nav-item active" data-view="dashboard" data-jump="__top">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
         Übersicht</a>
+      <a class="nav-item" data-view="analytics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19V5M4 19h16M8 16v-5M13 16V8M18 16v-8"/></svg>
+        Analytics</a>
       <a class="nav-item" data-jump="drafts-section">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 5h16M4 12h16M4 19h10"/></svg>
         Entwürfe<span class="n-badge" id="nav-drafts">0</span></a>
@@ -463,11 +500,13 @@
   <main class="wrap">
   <header class="topbar">
     <div class="tb-title">
-      <h1>Übersicht</h1>
-      <p>Dein LinkedIn-Autopilot auf einen Blick</p>
+      <h1 id="page-title">Übersicht</h1>
+      <p id="page-sub">Dein LinkedIn-Autopilot auf einen Blick</p>
     </div>
     <div class="clock"><span class="pulse" id="pulse"></span><span id="clock">—</span></div>
   </header>
+
+  <div id="dashboard-view">
 
   <!-- Hero-Kommandozeile -->
   <section class="command">
@@ -692,6 +731,36 @@
     </table>
     <div id="empty"></div>
   </div>
+
+  </div><!-- /#dashboard-view -->
+
+  <div id="analytics-view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Kernquoten</p><span class="sec-hint">kumulativ über alle Kontakte · mit Einordnung</span></div>
+    <div class="an-quoten" id="an-quoten"></div>
+
+    <div class="section-head"><p class="sec-title">Conversion-Funnel</p><span class="sec-hint">wer je diese Stufe erreicht hat</span></div>
+    <div class="panel funnel" id="an-funnel"></div>
+
+    <div class="an-grid2">
+      <div>
+        <div class="section-head"><p class="sec-title">Tempo</p><span class="sec-hint">Ø Tage je Übergang</span></div>
+        <div class="panel" id="an-tempo"></div>
+      </div>
+      <div>
+        <div class="section-head"><p class="sec-title">Beste Wochentage</p><span class="sec-hint">Annahmequote je Einlade-Tag</span></div>
+        <div class="panel" id="an-weekday"></div>
+      </div>
+    </div>
+
+    <div class="section-head"><p class="sec-title">Verlauf · 6 Wochen</p><span class="sec-hint">Vernetzt · Angenommen · Geantwortet pro Tag</span></div>
+    <div class="panel" id="an-verlauf"></div>
+
+    <div class="section-head"><p class="sec-title">Lead-Quellen im Vergleich</p><span class="sec-hint" id="an-quellen-hint"></span></div>
+    <div class="panel" id="an-quellen"></div>
+
+    <div class="section-head"><p class="sec-title">Skalierungs-Rechner</p><span class="sec-hint">erwartete Hot Leads je Vernetzungs-Volumen</span></div>
+    <div class="panel" id="an-projektion"></div>
+  </div><!-- /#analytics-view -->
 
   <div class="foot" id="foot">—</div>
   </main>
@@ -1509,18 +1578,163 @@ async function load() {
 tick(); setInterval(tick, 1000);
 load(); setInterval(load, 20000);
 
-// Sidebar-Navigation: sanft zur Sektion scrollen, aktiven Punkt markieren.
+// Sidebar-Navigation: Ansicht umschalten (Dashboard/Analytics) ODER zur Sektion scrollen.
+function zeigeAnsicht(view) {
+  const dash = document.getElementById("dashboard-view");
+  const ana = document.getElementById("analytics-view");
+  const analytics = view === "analytics";
+  dash.style.display = analytics ? "none" : "";
+  ana.style.display = analytics ? "block" : "none";
+  document.getElementById("page-title").textContent = analytics ? "Analytics" : "Übersicht";
+  document.getElementById("page-sub").textContent = analytics ? "Zahlen für Strategie & Skalierung" : "Dein LinkedIn-Autopilot auf einen Blick";
+  window.scrollTo(0, 0);
+  if (analytics) ladeAnalytics();
+}
 document.querySelectorAll(".nav-item").forEach(item => {
   item.addEventListener("click", (ev) => {
     ev.preventDefault();
     document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
     item.classList.add("active");
+    // View-Umschalter (Analytics vs. Dashboard)
+    if (item.dataset.view) { zeigeAnsicht(item.dataset.view); return; }
+    // Sonst: Dashboard sicherstellen + zur Sektion scrollen.
+    zeigeAnsicht("dashboard");
     const id = item.dataset.jump;
     if (id === "__top") { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
   });
 });
+
+// ===== ANALYTICS =====
+const TIER = { good: "var(--green)", mid: "var(--amber)", low: "var(--red)", none: "var(--ink-faint)" };
+const TIER_WORT = { good: "stark", mid: "okay", low: "schwach", none: "zu wenig Daten" };
+function tierPill(t) { return `<span class="an-tier ${t}">${TIER_WORT[t] || ""}</span>`; }
+
+async function ladeAnalytics() {
+  const root = document.getElementById("analytics-view");
+  try {
+    const a = await fetch("/api/analytics").then(r => r.json());
+    renderAnalytics(a);
+  } catch (e) {
+    document.getElementById("an-quoten").innerHTML = `<div class="src-empty">Analytics konnten nicht geladen werden.</div>`;
+  }
+}
+
+function renderAnalytics(a) {
+  // --- Kernquoten-Karten ---
+  const q = a.quoten;
+  const karten = [
+    { t: "Annahmequote (gesamt)", q: q.annahmeGesamt, sub: `${q.annahmeGesamt.n} von ${q.annahmeGesamt.von} eingeladenen` },
+    { t: "Annahmequote (7 Tage)", q: q.annahme7d, sub: `${q.annahme7d.n} von ${q.annahme7d.von} reifen Einladungen · Breaker-Wert` },
+    { t: "Antwortquote", q: q.antwortGesamt, sub: `${q.antwortGesamt.n} von ${q.antwortGesamt.von} angeschrieben` },
+    { t: "Hot-Lead-Quote", q: q.endToEnd, sub: `${q.endToEnd.n} Antworten aus ${q.endToEnd.von} Einladungen (Ende-zu-Ende)` },
+  ];
+  document.getElementById("an-quoten").innerHTML = karten.map(k => `
+    <div class="an-qcard">
+      <div class="an-qtop"><span class="an-qlab">${k.t}</span>${tierPill(k.q.tier)}</div>
+      <div class="an-qval" style="color:${TIER[k.q.tier]}">${k.q.tier === "none" ? "—" : k.q.pct + " %"}</div>
+      <div class="an-qsub">${k.sub}</div>
+    </div>`).join("");
+
+  // --- Funnel (kumulativ) ---
+  const FC = ["var(--ink-faint)", "var(--amber)", "var(--green)", "var(--cyan)", "#a78bfa"];
+  const fmax = Math.max(1, ...a.funnel.map(s => s.count));
+  document.getElementById("an-funnel").innerHTML = a.funnel.map((s, i) => {
+    const w = Math.round(s.count / fmax * 100);
+    const prev = i === 0 ? null : a.funnel[i - 1];
+    const conv = prev && prev.count > 0 ? Math.round(s.count / prev.count * 100) : null;
+    const cls = conv === null ? "" : conv >= 50 ? "good" : conv >= 25 ? "mid" : "low";
+    return `<div class="frow">
+      <div class="frow-lab">${esc(s.label)}</div>
+      <div class="frow-track"><div class="frow-fill" style="width:${w}%;background:${FC[i]}"></div></div>
+      <div class="frow-num">${s.count}</div>
+      <div class="frow-conv">${conv !== null ? `<span class="conv-pill ${cls}">${conv}%</span>` : `<span class="conv-end">Start</span>`}</div>
+    </div>`;
+  }).join("");
+
+  // --- Tempo ---
+  const t = a.tempo;
+  document.getElementById("an-tempo").innerHTML = `
+    <div class="an-tempo-row"><span>Einladung → Annahme</span><b>${t.tageBisAnnahme != null ? t.tageBisAnnahme + " Tage" : "—"}</b></div>
+    <div class="an-tempo-row"><span>Nachricht → Antwort</span><b>${t.tageBisAntwort != null ? t.tageBisAntwort + " Tage" : "—"}</b></div>
+    <p class="an-note">Ø-Werte. „Annahme" ist der Erkennungszeitpunkt des Bots (stündlich), daher grobe Näherung.</p>`;
+
+  // --- Beste Wochentage (Annahmequote je Einlade-Tag) ---
+  const wd = a.wochentage.filter(d => d.eingeladen > 0);
+  const wdMax = Math.max(1, ...wd.map(d => d.pct || 0));
+  document.getElementById("an-weekday").innerHTML = wd.length
+    ? wd.map(d => `
+      <div class="an-wd-row">
+        <span class="an-wd-tag">${d.tag}</span>
+        <div class="an-wd-track"><div class="an-wd-fill" style="width:${Math.round((d.pct || 0) / wdMax * 100)}%"></div></div>
+        <span class="an-wd-pct">${d.pct != null ? d.pct + "%" : "–"}</span>
+        <span class="an-wd-n">${d.angenommen}/${d.eingeladen}</span>
+      </div>`).join("")
+    : `<div class="src-empty">Noch keine Einladungen ausgewertet.</div>`;
+
+  // --- Verlauf (SVG-Balken pro Tag, 3 Serien gestapelt: geantwortet+angenommen+eingeladen) ---
+  renderVerlauf(a.verlauf);
+
+  // --- Lead-Quellen-Tabelle ---
+  const hint = document.getElementById("an-quellen-hint");
+  hint.textContent = a.kontakteOhneQuelle ? `${a.kontakteOhneQuelle} Alt-Kontakte ohne Quelle (füllt sich ab jetzt)` : "";
+  const qs = a.quellen.filter(x => x.kontakte > 0);
+  document.getElementById("an-quellen").innerHTML = qs.length ? `
+    <table class="an-qtable">
+      <thead><tr><th>Quelle</th><th>Kontakte</th><th>Eingeladen</th><th>Annahme</th><th>Antwort</th></tr></thead>
+      <tbody>${qs.map(x => `<tr>
+        <td class="an-qname">${esc(x.label)}</td>
+        <td>${x.kontakte}</td>
+        <td>${x.eingeladen}</td>
+        <td>${x.annahmePct != null ? `<b>${x.annahmePct}%</b>` : "–"}</td>
+        <td>${x.antwortPct != null ? `<b>${x.antwortPct}%</b>` : "–"}</td>
+      </tr>`).join("")}</tbody>
+    </table>` : `<div class="src-empty">Sobald der Bot neue Leads aus deinen Quellen holt, siehst du hier, welche Suche am besten konvertiert.</div>`;
+
+  // --- Skalierungs-Rechner ---
+  const p = a.projektion;
+  document.getElementById("an-projektion").innerHTML = `
+    <p class="an-note" style="margin-top:0">Basis: Annahmequote <b>${p.annahmeRate}%</b> × Antwortquote <b>${p.antwortRate}%</b>.
+    ${p.vernetzungenProHotLead ? `Grob <b>${p.vernetzungenProHotLead} Vernetzungen</b> pro Hot Lead.` : ""}</p>
+    <table class="an-qtable">
+      <thead><tr><th>Vernetzungen/Woche</th><th>→ Annahmen</th><th>→ Hot Leads/Woche</th><th>→ pro Monat</th></tr></thead>
+      <tbody>${p.szenarien.map(s => `<tr>
+        <td class="an-qname">${s.vernetzungen}${s.vernetzungen === p.weeklyCap ? " (Max)" : ""}</td>
+        <td>${s.angenommen}</td>
+        <td><b>${s.hotLeads}</b></td>
+        <td><b style="color:var(--accent)">${Math.round(s.hotLeads * 4.3 * 10) / 10}</b></td>
+      </tr>`).join("")}</tbody>
+    </table>
+    <p class="an-note">Der Hebel ist selten das Tempo (der Cap schützt deinen Account), sondern die <b>Quoten</b>: bessere Zielgruppen/Quellen und bessere Nachrichten heben die ganze Tabelle.</p>`;
+}
+
+function renderVerlauf(verlauf) {
+  const W = 900, H = 150, padB = 4, padT = 8, n = verlauf.length;
+  const max = Math.max(1, ...verlauf.map(d => d.eingeladen));
+  const bw = W / n * 0.62;
+  const x = i => (i + 0.5) / n * W;
+  const y = v => padT + (1 - v / max) * (H - padT - padB);
+  const bars = verlauf.map((d, i) => {
+    const cx = x(i);
+    const h1 = (H - padT - padB) * (d.eingeladen / max);
+    const h2 = (H - padT - padB) * (d.angenommen / max);
+    const h3 = (H - padT - padB) * (d.geantwortet / max);
+    return `
+      <rect x="${cx - bw / 2}" y="${H - padB - h1}" width="${bw}" height="${h1}" rx="2" fill="var(--green)" opacity=".25"/>
+      <rect x="${cx - bw / 2}" y="${H - padB - h2}" width="${bw}" height="${h2}" rx="2" fill="var(--green)" opacity=".6"/>
+      <rect x="${cx - bw / 2}" y="${H - padB - h3}" width="${bw}" height="${h3}" rx="2" fill="#e0a33a"/>`;
+  }).join("");
+  const labs = [0, Math.floor(n / 3), Math.floor(2 * n / 3), n - 1].map(i => verlauf[i] ? `<span>${verlauf[i].label}</span>` : "").join("");
+  document.getElementById("an-verlauf").innerHTML = `
+    <div class="chart-legend" style="flex-direction:row;gap:16px;margin-bottom:10px">
+      <span><i style="background:var(--green);opacity:.25"></i>Eingeladen</span>
+      <span><i style="background:var(--green);opacity:.6"></i>Angenommen</span>
+      <span><i style="background:#e0a33a"></i>Geantwortet</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="150">${bars}</svg>
+    <div class="trend-x">${labs}</div>`;
+}
 </script>
 </body>
 </html>

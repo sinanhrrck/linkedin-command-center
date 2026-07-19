@@ -16,6 +16,7 @@ export async function scrapeSearch(
   searchUrl: string,
   maxProfiles = 25,
   keepFilter?: string,
+  sourceId?: number,
 ): Promise<number> {
   const page = await newPage();
   await page.goto(searchUrl, { waitUntil: "domcontentloaded" });
@@ -64,7 +65,7 @@ export async function scrapeSearch(
   for (const r of results.slice(0, maxProfiles)) {
     if (!r.name) continue; // leere Karten überspringen
     if (rx && !rx.test(`${r.name} ${r.headline}`)) continue; // passt nicht zum Filter → skip
-    upsertContact({ profileUrl: r.url, fullName: r.name, headline: r.headline || undefined });
+    upsertContact({ profileUrl: r.url, fullName: r.name, headline: r.headline || undefined, sourceId });
     count++;
   }
   console.info(

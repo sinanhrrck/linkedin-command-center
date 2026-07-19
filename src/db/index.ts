@@ -63,6 +63,14 @@ try {
 } catch {
   /* Spalte existiert bereits */
 }
+try {
+  // Aus welcher Lead-Quelle stammt der Kontakt? Fuer den Quellen-Vergleich in der Analytics
+  // (welche Suche bringt die besten Annahme-/Antwortquoten). Wird beim Scrapen gesetzt;
+  // Altbestand bleibt NULL (unbekannt).
+  db.exec("ALTER TABLE contacts ADD COLUMN source_id INTEGER");
+} catch {
+  /* Spalte existiert bereits */
+}
 
 /** Key/Value-State */
 export const getState = (key: string): string | undefined =>

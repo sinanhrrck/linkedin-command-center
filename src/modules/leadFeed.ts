@@ -74,7 +74,7 @@ export async function feedTick(maxPerSource = 25): Promise<number> {
   for (const s of sources) {
     const before = countContacts();
     // Rückgabe = Anzahl gefundener Profile auf der Seite (vor Filter, inkl. Duplikate).
-    const found = await scrapeSearch(pagedUrl(s.search_url, s.cursor_page), maxPerSource, s.keep_filter ?? undefined);
+    const found = await scrapeSearch(pagedUrl(s.search_url, s.cursor_page), maxPerSource, s.keep_filter ?? undefined, s.id);
     const added = countContacts() - before;
     // Solange die Seite Profile hat: weiterblättern (auch wenn nur Duplikate).
     // Erst wenn eine Seite LEER ist (Ende der Ergebnisse): zurück auf Seite 1.

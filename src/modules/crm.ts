@@ -12,22 +12,25 @@ export type Contact = {
 };
 
 /** Kontakt anlegen oder ergänzen (kein Duplikat pro Profil-URL). */
-export function upsertContact(c: { profileUrl: string; fullName?: string; headline?: string }) {
+export function upsertContact(c: { profileUrl: string; fullName?: string; headline?: string; sourceId?: number }) {
   // Zielgruppe direkt beim Anlegen bestimmen – sie entscheidet später den Winkel der
   // Erstnachricht (Azubi vs. Student). Aus der Headline, nicht aus der Quelle: eine Suche
   // liefert gemischte Ergebnisse, die Headline ist die Wahrheit über die Person.
   const zg = zielgruppeAusHeadline(c.headline);
   const { score, grund } = scoreLead(c.fullName, c.headline);
+  // source_id nur beim ANLEGEN setzen (COALESCE): der erste Fund bestimmt die Quelle des
+  // Kontakts – für den Quellen-Vergleich in der Analytics. Spätere Duplikate ändern sie nicht.
   db.prepare(
-    `INSERT INTO contacts(profile_url, full_name, headline, zielgruppe, lead_score, score_grund)
-     VALUES(?,?,?,?,?,?)
+    `INSERT INTO contacts(profile_url, full_name, headline, zielgruppe, lead_score, score_grund, source_id)
+     VALUES(?,?,?,?,?,?,?)
      ON CONFLICT(profile_url) DO UPDATE SET
        full_name   = COALESCE(excluded.full_name, contacts.full_name),
        headline    = COALESCE(excluded.headline,  contacts.headline),
        zielgruppe  = COALESCE(excluded.zielgruppe, contacts.zielgruppe),
        lead_score  = excluded.lead_score,
-       score_grund = excluded.score_grund`,
-  ).run(c.profileUrl, c.fullName ?? null, c.headline ?? null, zg, score, grund);
+       score_grund = excluded.score_grund,
+       source_id   = COALESCE(contacts.source_id, excluded.source_id)`,
+  ).run(c.profileUrl, c.fullName ?? null, c.headline ?? null, zg, score, grund, c.sourceId ?? null);
 }
 
 /** Nächste noch nicht kontaktierte Leads. */
