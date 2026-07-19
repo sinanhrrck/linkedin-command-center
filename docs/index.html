@@ -171,6 +171,9 @@
   .soon-os{display:inline-flex;align-items:center;gap:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:13px;padding:14px 20px;font-size:15px;font-weight:600;color:var(--ink-dim);}
   .soon-os svg{width:22px;height:22px;color:var(--ink-faint);}
   .soon-os .tag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:rgba(31,157,99,.12);padding:3px 9px;border-radius:20px;}
+  /* Feedback-Formular (eingebettet) */
+  .feedback-wrap{max-width:680px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;}
+  .feedback-wrap iframe{width:100%;border:0;display:block;background:var(--panel);}
   /* Beim ersten Start */
   .firstrun{max-width:760px;margin:26px auto 0;background:var(--panel-2);border:1px solid var(--line);border-radius:18px;padding:26px 26px 22px;text-align:left;}
   .firstrun h3{margin:0 0 6px;font-size:17px;font-weight:700;}
@@ -443,11 +446,19 @@
         <span class="soon-os"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2-.05 1.6-.75 3-.75s1.8.75 3 .73c1.2-.02 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.3-2.6-.03-.01-2.5-.96-2.5-3.8zM14.1 6.1c.65-.8 1.1-1.9.98-3-.94.04-2.1.63-2.77 1.42-.6.7-1.13 1.83-.99 2.9 1.05.08 2.13-.53 2.78-1.32z"/></svg>Mac<span class="tag">Bald</span></span>
         <span class="soon-os"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.4v7.1H3zM11.5 4.3 21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg>Windows<span class="tag">Bald</span></span>
       </div>
-      <a class="btn primary" style="margin-top:26px" href="mailto:sinan.harrack@koenigswege.com?subject=NextLead%20Fr%C3%BCh-Zugang&amp;body=Hi%20Sinan%2C%20ich%20m%C3%B6chte%20NextLead%20testen%2C%20sobald%20es%20startet.">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"/><path d="m4 7 8 6 8-6"/></svg>
-        Früh-Zugang sichern
+      <a class="btn primary" style="margin-top:26px" href="#feedback">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg>
+        Feedback geben &amp; dabei sein
       </a>
-      <p class="cta-note" style="margin-top:16px">Trag dich ein und sei dabei, sobald NextLead startet — oder gib mir Feedback zur Vorschau.</p>
+      <p class="cta-note" style="margin-top:16px">Du siehst eine frühe Vorschau. Sag mir unten in 1 Minute, was du denkst — und sei dabei, sobald NextLead startet.</p>
+    </div>
+  </section>
+
+  <section id="feedback">
+    <h2>Deine Meinung zählt</h2>
+    <p class="lead">1 Minute, ehrlich — was überzeugt dich, was fehlt dir noch? So wird NextLead genau das, was du im Vertrieb wirklich brauchst.</p>
+    <div class="feedback-wrap">
+      <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSf-eWjXrQ3qSfq9vU3E0FukZj4Yz-zzin2jU_NhhyzF4uch2g/viewform?embedded=true" height="880" title="NextLead – Feedback zur Vorschau" loading="lazy">Formular wird geladen …</iframe>
     </div>
   </section>
 
