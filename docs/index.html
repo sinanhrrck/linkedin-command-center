@@ -71,6 +71,20 @@
   /* Download-Block */
   .download{background:var(--panel);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:44px 30px;text-align:center;}
   .os{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--ink-dim);}
+  /* Beim ersten Start */
+  .firstrun{max-width:760px;margin:26px auto 0;background:var(--panel-2);border:1px solid var(--line);border-radius:18px;padding:26px 26px 22px;text-align:left;}
+  .firstrun h3{margin:0 0 6px;font-size:17px;font-weight:700;}
+  .firstrun .fr-intro{font-size:13.5px;color:var(--ink-dim);margin:0 0 20px;}
+  .fr-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .fr-col{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow);}
+  .fr-os{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14.5px;margin-bottom:12px;}
+  .fr-os svg{width:18px;height:18px;color:var(--accent);}
+  .fr-col ol{margin:0;padding-left:20px;}
+  .fr-col li{font-size:13.5px;color:var(--ink-dim);margin-bottom:8px;line-height:1.5;}
+  .fr-col li:last-child{margin-bottom:0;}
+  .fr-col li b{color:var(--ink);}
+  .fr-foot{font-size:13px;color:var(--ink-faint);margin:18px 0 0;}
+  @media(max-width:640px){.fr-cols{grid-template-columns:1fr;}}
   /* FAQ */
   details{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px 20px;margin-bottom:10px;box-shadow:var(--shadow);}
   details summary{font-weight:600;cursor:pointer;font-size:15px;}
@@ -149,7 +163,31 @@
           <span>Für Windows laden<small>.exe · Installer</small></span>
         </a>
       </div>
-      <p class="cta-note" style="margin-top:22px">Beim ersten Öffnen zeigt dein System eine Warnung (die App ist nicht kommerziell signiert). <b>Mac:</b> Rechtsklick → Öffnen → Öffnen. <b>Windows:</b> „Weitere Informationen" → „Trotzdem ausführen". Danach läuft alles normal.<br>Alle Versionen &amp; Windows/Intel: <a href="https://github.com/sinanhrrck/linkedin-command-center/releases">Releases</a> · <a href="https://github.com/sinanhrrck/linkedin-command-center#readme">Anleitung</a></p>
+      <div class="firstrun">
+        <h3>Beim ersten Start</h3>
+        <p class="fr-intro">NextLead ist nicht kommerziell signiert, darum warnt dein System einmal, dass es die App nicht prüfen konnte. Das ist normal und kein Fehler — so öffnest du sie trotzdem (nur beim ersten Mal nötig):</p>
+        <div class="fr-cols">
+          <div class="fr-col">
+            <div class="fr-os"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2-.05 1.6-.75 3-.75s1.8.75 3 .73c1.2-.02 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.3-2.6-.03-.01-2.5-.96-2.5-3.8zM14.1 6.1c.65-.8 1.1-1.9.98-3-.94.04-2.1.63-2.77 1.42-.6.7-1.13 1.83-.99 2.9 1.05.08 2.13-.53 2.78-1.32z"/></svg>Mac</div>
+            <ol>
+              <li>Doppelklick auf NextLead → Warnung erscheint → auf <b>„Fertig"</b> klicken.</li>
+              <li><b>Systemeinstellungen → Datenschutz &amp; Sicherheit</b> öffnen.</li>
+              <li>Runterscrollen zum Abschnitt <b>Sicherheit</b>: dort steht „NextLead wurde blockiert…" mit dem Knopf <b>„Dennoch öffnen"</b>.</li>
+              <li>Mit Passwort oder Touch ID bestätigen, dann im Dialog nochmal <b>„Öffnen"</b>.</li>
+            </ol>
+          </div>
+          <div class="fr-col">
+            <div class="fr-os"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.4v7.1H3zM11.5 4.3 21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg>Windows</div>
+            <ol>
+              <li>Installer starten → Fenster „Der Computer wurde durch Windows geschützt".</li>
+              <li>Auf <b>„Weitere Informationen"</b> klicken.</li>
+              <li>Auf <b>„Trotzdem ausführen"</b> klicken.</li>
+            </ol>
+          </div>
+        </div>
+        <p class="fr-foot">Die Warnung kommt nur beim allerersten Öffnen. Danach startet NextLead ganz normal per Doppelklick — und meldet sich selbst, sobald eine neue Version da ist.</p>
+      </div>
+      <p class="cta-note" style="margin-top:20px">Alle Versionen &amp; Windows/Intel: <a href="https://github.com/sinanhrrck/linkedin-command-center/releases">Releases</a> · <a href="https://github.com/sinanhrrck/linkedin-command-center#readme">Anleitung</a></p>
     </div>
   </section>
 
