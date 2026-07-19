@@ -405,6 +405,15 @@
   /* Leerzustand einer Seite (wenn eine Reiter-Seite gerade keine Daten hat) */
   .view-empty { background: var(--panel); border: 1px dashed var(--line); border-radius: 16px; padding: 40px 28px; text-align: center; color: var(--ink-faint); font-size: 13.5px; line-height: 1.55; }
 
+  /* Update-Banner (nur in der App) */
+  .update-bar { display: flex; align-items: center; gap: 14px; background: linear-gradient(90deg, rgba(22,133,90,.12), rgba(22,133,90,.05)); border: 1px solid rgba(22,133,90,.28); border-radius: 14px; padding: 13px 16px; margin-bottom: 18px; box-shadow: var(--shadow-sm); animation: rise .5s var(--ease) both; }
+  .update-bar .ub-ic { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 15px; font-weight: 700; flex: 0 0 28px; }
+  .update-bar .ub-text { font-size: 13.5px; color: var(--ink); flex: 1; line-height: 1.45; }
+  .update-bar .ub-text .ub-cur { color: var(--ink-faint); }
+  .update-bar .ub-btn { flex: 0 0 auto; background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: filter .15s; }
+  .update-bar .ub-btn:hover { filter: brightness(1.07); }
+  .update-bar .ub-btn:disabled { opacity: .6; cursor: default; }
+
   /* ---------- Controls / Suche / Chips ---------- */
   .controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
   .search { display: flex; align-items: center; gap: 9px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; box-shadow: var(--shadow-sm); flex: 1; min-width: 240px; color: var(--ink-faint); }
@@ -501,6 +510,12 @@
     </div>
   </aside>
   <main class="wrap">
+  <!-- Update-Banner: nur in der echten App sichtbar (via preload), sonst display:none. -->
+  <div id="update-bar" class="update-bar" style="display:none">
+    <span class="ub-ic">⬆</span>
+    <span class="ub-text" id="update-text"></span>
+    <button class="ub-btn" id="update-btn">Jetzt aktualisieren</button>
+  </div>
   <header class="topbar">
     <div class="tb-title">
       <h1 id="page-title">Übersicht</h1>
@@ -1641,6 +1656,28 @@ function updateEmptyStates() {
   const lE = document.getElementById("live-empty2");
   if (lE) lE.style.display = (s.engine && s.engine.alive) ? "none" : "";
 }
+
+// ===== IN-APP-UPDATE (nur in der echten App via preload.cjs) =====
+(function initUpdate() {
+  if (!window.nextlead || !window.nextlead.isApp) return; // im Browser: kein Banner
+  const bar = document.getElementById("update-bar");
+  const txt = document.getElementById("update-text");
+  const btn = document.getElementById("update-btn");
+  const zeigen = (html, btnLabel) => {
+    bar.style.display = "flex"; txt.innerHTML = html;
+    if (btnLabel) { btn.style.display = ""; btn.textContent = btnLabel; btn.disabled = false; }
+    else btn.style.display = "none";
+  };
+  window.nextlead.onStatus((s) => {
+    if (s.state === "available")        zeigen(`<b>Neue Version ${s.version} verfügbar.</b> <span class="ub-cur">Du hast ${s.current}.</span>`, "Jetzt aktualisieren");
+    else if (s.state === "downloading") zeigen(`Lädt Update… <b>${s.percent || 0}%</b>`, null);
+    else if (s.state === "installing")  zeigen(`Installiere – die App startet gleich neu.`, null);
+    else if (s.state === "downloaded-mac") zeigen(`<b>Update geladen.</b> Das Fenster ist offen: zieh <b>NextLead</b> in den Ordner „Programme" (ersetzen), dann NextLead neu starten.`, null);
+    else if (s.state === "error")       { /* stiller Fehler – kein Störbanner, nächster Check greift */ }
+    else                                { bar.style.display = "none"; } // none/dev → Banner weg
+  });
+  btn.onclick = () => { btn.disabled = true; window.nextlead.install(); };
+})();
 
 // ===== ANALYTICS =====
 const TIER = { good: "var(--green)", mid: "var(--amber)", low: "var(--red)", none: "var(--ink-faint)" };

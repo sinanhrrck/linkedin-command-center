@@ -92,6 +92,22 @@ braucht den Governor NICHT.
   ACHTUNG bei langen Seiten: der In-App-Browser-Pane paintet weit unten nach Scroll teils
   nicht (Artefakt) — DOM/oberer Bereich sind maßgeblich, nicht der Leerscreenshot.
 
+## In-App-Update (desktop/main.cjs + desktop/preload.cjs + Dashboard-Banner)
+Bewusst OHNE electron-updater/Squirrel: lautloses Auto-Update auf macOS bräuchte ein bezahltes
+Apple-Developer-Zertifikat (Squirrel.Mac verifiziert die Signatur; unsere Ad-hoc-Signatur reicht
+NICHT). Stattdessen fragt der Hauptprozess die GitHub-Releases direkt ab (`/releases/latest`,
+`istNeuer()` numerischer Semver-Vergleich gegen `app.getVersion()`) und installiert per Knopf:
+- **Windows**: NSIS-Installer laden + starten (schliesst App, installiert drüber) → echtes Ein-Klick.
+- **macOS**: .dmg laden + öffnen, Nutzer zieht NextLead einmal in „Programme" → Ein-Klick-Download.
+`preload.cjs` gibt dem Dashboard (läuft über http, contextIsolation an) `window.nextlead`
+{isApp, version, check, install, onStatus}. `crm.html` zeigt `#update-bar` nur wenn `window.nextlead`
+existiert (im Browser unsichtbar). Check: 8s nach Start + alle 6h + manuell. Nur `app.isPackaged`.
+WICHTIG für Releases: `mac.artifactName=NextLead-mac-${arch}.${ext}` / `win.artifactName=
+NextLead-Setup-win.${ext}` = STABILE Dateinamen → Landing-Page-Links (`/releases/latest/download/
+NextLead-mac-arm64.dmg` bzw. `-Setup-win.exe`) und der Update-Check (pickt per Endung) brechen NICHT
+mehr beim Versionssprung. Release muss VERÖFFENTLICHT sein (nicht Draft), sonst greift `releases/latest`
+weder für Download noch Update-Check.
+
 ## Automatik-Modi (db state 'mode', default 'manual', umschaltbar im Dashboard)
 - **manual**: vernetzt auto; Erstnachricht + Antworten + Follow-ups = Entwürfe zur Freigabe.
 - **semi**: + Erstnachricht auto (deliverFirstMessage → sendMessage, Fallback Entwurf).
