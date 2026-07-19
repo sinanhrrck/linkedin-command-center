@@ -53,6 +53,54 @@
   .kpi .l{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);}
   .kpi.hot .l{color:rgba(255,255,255,.8);}
   .kpi .n{font-family:var(--display);font-weight:700;font-size:26px;margin-top:6px;}
+  /* Produkt-Showcase (Mockups im echten Tool-Look, Demo-Daten) */
+  .showcase{display:grid;grid-template-columns:1fr 1fr;gap:46px;align-items:center;max-width:940px;margin:0 auto 66px;}
+  .showcase:last-of-type{margin-bottom:0;}
+  .sc-eyebrow{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:11px;}
+  .sc-text h3{font-family:var(--display);font-size:clamp(22px,3.2vw,29px);font-weight:700;letter-spacing:-.02em;margin:0 0 13px;line-height:1.14;}
+  .sc-text p{color:var(--ink-dim);font-size:15.5px;margin:0 0 18px;line-height:1.6;}
+  .sc-list{list-style:none;padding:0;margin:0;display:grid;gap:10px;}
+  .sc-list li{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--ink);}
+  .sc-list li svg{width:18px;height:18px;flex:0 0 18px;color:var(--green);margin-top:1px;}
+  .mock{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:16px;}
+  .mock .mbar{display:flex;gap:6px;margin-bottom:13px;padding:2px 2px 0;}
+  .mock .mbar i{width:9px;height:9px;border-radius:50%;background:#e0e5e2;}
+  /* Freigabe-Karte */
+  .m-draft{background:var(--panel-2);border:1px solid var(--line);border-radius:13px;padding:15px;}
+  .m-drow{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;}
+  .m-name{font-weight:700;font-size:14px;}
+  .m-tag{font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:rgba(31,157,99,.12);padding:3px 8px;border-radius:20px;}
+  .m-quote{font-size:12.5px;color:var(--ink-faint);background:var(--panel);border-radius:9px;padding:9px 11px;margin-bottom:9px;line-height:1.45;}
+  .m-reply{font-size:13px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:11px 12px;line-height:1.55;margin-bottom:13px;}
+  .m-btns{display:flex;gap:9px;}
+  .m-approve{flex:1;background:var(--accent);color:#fff;border-radius:9px;padding:9px;text-align:center;font-size:12.5px;font-weight:600;}
+  .m-reject{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--ink-dim);border-radius:9px;padding:9px;text-align:center;font-size:12.5px;font-weight:600;}
+  /* Analytics */
+  .m-pills{display:flex;gap:8px;margin-bottom:15px;}
+  .m-pill{flex:1;background:var(--panel-2);border-radius:11px;padding:11px 8px;text-align:center;}
+  .m-pill .pv{font-family:var(--display);font-weight:700;font-size:20px;color:var(--green);}
+  .m-pill .pl{font-size:9.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-faint);margin-top:3px;}
+  .m-funnel{display:grid;gap:7px;margin-bottom:14px;}
+  .m-frow{display:grid;grid-template-columns:78px 1fr 26px;align-items:center;gap:9px;}
+  .m-frow>span{font-size:11.5px;color:var(--ink-dim);}
+  .m-ftrack{height:8px;background:var(--panel-2);border-radius:20px;overflow:hidden;}
+  .m-ffill{height:100%;border-radius:20px;}
+  .m-frow b{font-size:12px;text-align:right;font-variant-numeric:tabular-nums;}
+  .m-scale{background:rgba(31,157,99,.08);border:1px solid rgba(31,157,99,.2);border-radius:11px;padding:11px 13px;font-size:12.5px;color:var(--ink);line-height:1.5;}
+  .m-scale b{color:var(--accent);}
+  /* Action-Center + Hot Lead */
+  .m-acts{display:grid;gap:9px;margin-bottom:11px;}
+  .m-acti{display:flex;align-items:center;gap:11px;background:var(--panel-2);border-left:3px solid var(--accent);border-radius:10px;padding:11px 13px;}
+  .m-acti.hot{border-left-color:#dc4b52;}
+  .m-acti .ai{width:26px;height:26px;border-radius:8px;background:rgba(31,157,99,.12);color:var(--accent);display:grid;place-items:center;font-size:13px;flex:0 0 26px;}
+  .m-acti.hot .ai{background:rgba(220,75,82,.12);color:#dc4b52;}
+  .m-acti .at{font-size:12.5px;color:var(--ink);flex:1;line-height:1.35;}
+  .m-acti .ac{font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap;}
+  .m-acti.hot .ac{color:#dc4b52;}
+  .m-hotcard{background:var(--panel-2);border-radius:11px;padding:12px 13px;border-left:3px solid var(--green);}
+  .m-hotcard .hn{font-weight:700;font-size:13.5px;}
+  .m-hotcard .hh{font-size:11.5px;color:var(--ink-faint);margin-top:2px;}
+  @media(max-width:760px){.showcase{grid-template-columns:1fr;gap:24px;}.showcase.rev .sc-text{order:-1;}}
   /* Sektionen */
   section{padding:52px 0;}
   h2{font-family:var(--display);font-size:clamp(24px,4vw,32px);font-weight:700;letter-spacing:-.02em;text-align:center;margin:0 0 10px;}
@@ -111,7 +159,7 @@
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg>
         Jetzt herunterladen
       </a>
-      <a class="btn ghost" href="#so">So funktioniert's</a>
+      <a class="btn ghost" href="#tour">Tool ansehen</a>
     </div>
     <p class="cta-note">Für Mac &amp; Windows · keine Vorkenntnisse nötig</p>
 
@@ -125,6 +173,91 @@
       </div>
     </div>
   </header>
+
+  <section id="tour">
+    <h2>Sieh NextLead bei der Arbeit</h2>
+    <p class="lead">Ein Cockpit für alles: vernetzen, schreiben, nachfassen, messen. So sieht es aus.</p>
+
+    <!-- 1 · Freigabe-Workflow -->
+    <div class="showcase">
+      <div class="sc-text">
+        <div class="sc-eyebrow">Freigabe-Workflow</div>
+        <h3>Fertige Nachrichten. Du klickst nur „Freigeben".</h3>
+        <p>NextLead schreibt jede Antwort personalisiert in deiner Stimme und legt sie dir vor. Nichts geht raus, ohne dass du entschieden hast — Kontrolle bleibt bei dir.</p>
+        <ul class="sc-list">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Persönlich pro Kontakt, kein Copy-Paste</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Genehmigen oder Ablehnen — in Sekunden</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Abgelehnt? Sofort ein frischer Vorschlag</li>
+        </ul>
+      </div>
+      <div class="sc-mock">
+        <div class="mock">
+          <div class="mbar"><i></i><i></i><i></i></div>
+          <div class="m-draft">
+            <div class="m-drow"><span class="m-name">Lena Berger</span><span class="m-tag">Antwort</span></div>
+            <div class="m-quote">„Hey, klingt spannend — was macht ihr denn anders als die üblichen Tools?"</div>
+            <div class="m-reply">Hey Lena, gute Frage. Der Kern: du gibst jede Nachricht frei, bevor sie rausgeht — kein Autopilot-Spam. Magst du dir das kurz ansehen?</div>
+            <div class="m-btns"><div class="m-approve">✓ Genehmigen</div><div class="m-reject">Ablehnen → neu</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 · Analytics & Skalierung -->
+    <div class="showcase rev">
+      <div class="sc-text">
+        <div class="sc-eyebrow">Analytics &amp; Skalierung</div>
+        <h3>Zahlen, die dir zeigen, wo du wächst.</h3>
+        <p>Vom ersten Kontakt bis zur Antwort misst NextLead jede Stufe — und rechnet dir aus, wie viele Hot Leads mehr Volumen bringt. Schluss mit Bauchgefühl.</p>
+        <ul class="sc-list">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Ehrliche Quoten je Stufe, fundiert gerechnet</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Conversion-Funnel auf einen Blick</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Skalierungs-Rechner: mehr Vernetzungen = X Leads</li>
+        </ul>
+      </div>
+      <div class="sc-mock">
+        <div class="mock">
+          <div class="mbar"><i></i><i></i><i></i></div>
+          <div class="m-pills">
+            <div class="m-pill"><div class="pv">42 %</div><div class="pl">Annahme</div></div>
+            <div class="m-pill"><div class="pv">44 %</div><div class="pl">Antwort</div></div>
+            <div class="m-pill"><div class="pv">11 %</div><div class="pl">Hot-Lead</div></div>
+          </div>
+          <div class="m-funnel">
+            <div class="m-frow"><span>Gesammelt</span><div class="m-ftrack"><div class="m-ffill" style="width:100%;background:#c3ccc7"></div></div><b>60</b></div>
+            <div class="m-frow"><span>Eingeladen</span><div class="m-ftrack"><div class="m-ffill" style="width:70%;background:#e0a33a"></div></div><b>42</b></div>
+            <div class="m-frow"><span>Angenommen</span><div class="m-ftrack"><div class="m-ffill" style="width:30%;background:var(--green)"></div></div><b>18</b></div>
+            <div class="m-frow"><span>Geantwortet</span><div class="m-ftrack"><div class="m-ffill" style="width:13%;background:#8b7bff"></div></div><b>8</b></div>
+          </div>
+          <div class="m-scale">Bei <b>50 Vernetzungen/Woche</b> → erwartbar <b>~8 Hot Leads</b> pro Woche.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3 · Tägliches Cockpit -->
+    <div class="showcase">
+      <div class="sc-text">
+        <div class="sc-eyebrow">Dein tägliches Cockpit</div>
+        <h3>NextLead sagt dir, wen du jetzt anrufen sollst.</h3>
+        <p>Wer auf deine Nachricht antwortet, wird zum Hot Lead und rutscht nach oben. Das Action-Center zeigt dir jeden Morgen genau, was ansteht — kein Suchen, kein Vergessen.</p>
+        <ul class="sc-list">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Hot Leads automatisch erkannt</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Klare To-Dos statt endloser Listen</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Ein Klick springt direkt zur Aufgabe</li>
+        </ul>
+      </div>
+      <div class="sc-mock">
+        <div class="mock">
+          <div class="mbar"><i></i><i></i><i></i></div>
+          <div class="m-acts">
+            <div class="m-acti"><span class="ai">✎</span><span class="at">3 Entwürfe genehmigen oder ablehnen</span><span class="ac">Bearbeiten →</span></div>
+            <div class="m-acti hot"><span class="ai">🔥</span><span class="at">2 Hot Leads haben geantwortet</span><span class="ac">Anrufen →</span></div>
+          </div>
+          <div class="m-hotcard"><div class="hn">Jonas Weber · hat geantwortet</div><div class="hh">Vertrieb Edelmetalle &amp; Rohstoffe · vor 2 Std.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <section id="so">
     <h2>In 4 Schritten startklar</h2>
