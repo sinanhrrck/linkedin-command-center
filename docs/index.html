@@ -102,11 +102,14 @@
   .m-hotcard .hh{font-size:11.5px;color:var(--ink-faint);margin-top:2px;}
   @media(max-width:760px){.showcase{grid-template-columns:1fr;gap:24px;}.showcase.rev .sc-text{order:-1;}}
   /* Problem → Lösung */
-  .ps{max-width:900px;margin:0 auto;display:grid;gap:14px;}
-  .ps-row{display:grid;grid-template-columns:1fr 40px 1fr;gap:14px;align-items:stretch;}
-  .ps-prob,.ps-sol{border-radius:15px;padding:17px 19px;font-size:14.5px;line-height:1.5;color:var(--ink);}
-  .ps-prob{background:rgba(220,75,82,.05);border:1px solid rgba(220,75,82,.17);}
-  .ps-sol{background:rgba(31,157,99,.07);border:1px solid rgba(31,157,99,.22);}
+  .ps{max-width:900px;margin:0 auto;display:grid;gap:18px;}
+  .ps-row{display:grid;grid-template-columns:1fr 40px 1fr;gap:18px;align-items:stretch;}
+  .ps-prob,.ps-sol{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px 22px;font-size:14.5px;line-height:1.5;color:var(--ink);transition:transform .16s var(--ease),box-shadow .16s var(--ease);}
+  .ps-prob{border-left:3px solid rgba(220,75,82,.5);box-shadow:0 20px 40px -24px rgba(220,75,82,.55);}
+  .ps-sol{border-left:3px solid var(--green);box-shadow:0 20px 40px -22px rgba(31,157,99,.6);}
+  .ps-prob:hover,.ps-sol:hover{transform:translateY(-3px);}
+  .ps-prob:hover{box-shadow:0 26px 48px -22px rgba(220,75,82,.6);}
+  .ps-sol:hover{box-shadow:0 26px 48px -20px rgba(31,157,99,.65);}
   .ps-lab{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;}
   .ps-prob .ps-lab{color:#c23940;}
   .ps-sol .ps-lab{color:var(--accent);}
@@ -122,7 +125,9 @@
   section{padding:52px 0;}
   h2{font-family:var(--display);font-size:clamp(24px,4vw,32px);font-weight:700;letter-spacing:-.02em;text-align:center;margin:0 0 10px;}
   .lead{text-align:center;color:var(--ink-dim);max-width:600px;margin:0 auto 36px;}
-  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  @media(max-width:860px){.steps{grid-template-columns:1fr 1fr;}}
+  @media(max-width:480px){.steps{grid-template-columns:1fr;}}
   .step{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:var(--shadow);}
   .step .num{width:34px;height:34px;border-radius:10px;background:rgba(31,157,99,.12);color:var(--accent);display:grid;place-items:center;font-family:var(--display);font-weight:700;margin-bottom:14px;}
   .step h3{font-size:16px;margin:0 0 6px;}
@@ -346,7 +351,7 @@
     <h2>In 4 Schritten startklar</h2>
     <p class="lead">Kein Programmieren, kein Server. Herunterladen, dem Assistenten folgen, fertig.</p>
     <div class="steps">
-      <div class="step"><div class="num">1</div><h3>Herunterladen</h3><p>ZIP laden, entpacken, Doppelklick auf den Starter. Beim ersten Mal richtet sich alles selbst ein.</p></div>
+      <div class="step"><div class="num">1</div><h3>Herunterladen</h3><p>App für Mac oder Windows laden und öffnen. Beim ersten Start richtet sich alles von selbst ein.</p></div>
       <div class="step"><div class="num">2</div><h3>Dich vorstellen</h3><p>Der Assistent fragt deinen Namen, ein paar Sätze über dich und Beispiel-Nachrichten. So klingt NextLead wie du.</p></div>
       <div class="step"><div class="num">3</div><h3>LinkedIn verbinden</h3><p>Einmal in deinem Konto einloggen. Alles bleibt auf deinem Rechner, nichts wird gespeichert.</p></div>
       <div class="step"><div class="num">4</div><h3>Freigeben</h3><p>NextLead sammelt Kontakte und schreibt Entwürfe. Du klickst „Genehmigen" oder „Ablehnen".</p></div>
@@ -383,7 +388,7 @@
       <details><summary>Ist das kostenlos?</summary><p>Ja. NextLead selbst ist gratis, und der KI-Dienst (Google Gemini) hat einen kostenlosen Rahmen, der für den Alltag reicht.</p></details>
       <details><summary>Sieht jemand meine Daten?</summary><p>Nein. NextLead läuft komplett auf deinem Rechner mit deinem Konto. Es gibt keinen Server und keine Cloud.</p></details>
       <details><summary>Muss mein Computer anbleiben?</summary><p>Ja, solange NextLead arbeiten soll, muss der Rechner laufen. Auf dem Mac hält das Tool ihn automatisch wach.</p></details>
-      <details><summary>Brauche ich technisches Wissen?</summary><p>Nein. Du musst einmalig Node.js installieren (der Starter zeigt dir wie), der Rest läuft über den Assistenten im Browser.</p></details>
+      <details><summary>Brauche ich technisches Wissen?</summary><p>Nein. App herunterladen, öffnen und dem Assistenten folgen. Kein Programmieren, keine Zusatzsoftware — alles steckt schon in der App.</p></details>
       <details><summary>Arbeitet NextLead automatisch für mich?</summary><p>Ja, genau dafür ist es da. NextLead vernetzt sich vollautomatisch und bereitet Nachrichten für dich vor. Du entscheidest den Automatik-Grad: Nachrichten erst freigeben (Standard, volle Kontrolle) oder komplett automatisch senden lassen. So viel oder so wenig, wie du willst.</p></details>
     </div>
   </section>
