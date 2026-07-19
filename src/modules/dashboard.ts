@@ -38,6 +38,30 @@ export function getDashboardData() {
   const counts: Record<string, number> = Object.fromEntries(PIPELINE.map((s) => [s, 0]));
   for (const c of contacts) counts[c.status] = (counts[c.status] ?? 0) + 1;
 
+  // KUMULATIVER Funnel: wer hat JE diese Stufe erreicht (aus den Zeitstempeln), nicht wer
+  // gerade in dem Status steht. Nur so ist es ein echter Funnel (jede Stufe ⊆ der vorigen)
+  // und die Conversion-Raten stimmen: z.B. Angenommen/Eingeladen = echte Annahmequote.
+  // Vorher zählte der Funnel den AKTUELLEN Status → "Angenommen 9" obwohl 18 angenommen
+  // hatten (9 waren schon weiter zu angeschrieben/geantwortet). Das war der Zahlen-Widerspruch.
+  const f = db
+    .prepare(
+      `SELECT
+         COUNT(*) AS gesammelt,
+         SUM(CASE WHEN invited_at  IS NOT NULL THEN 1 ELSE 0 END) AS eingeladen,
+         SUM(CASE WHEN accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS angenommen,
+         SUM(CASE WHEN messaged_at IS NOT NULL THEN 1 ELSE 0 END) AS angeschrieben,
+         SUM(CASE WHEN replied_at  IS NOT NULL THEN 1 ELSE 0 END) AS geantwortet
+       FROM contacts`,
+    )
+    .get() as { gesammelt: number; eingeladen: number | null; angenommen: number | null; angeschrieben: number | null; geantwortet: number | null };
+  const funnel = [
+    { stage: "gesammelt", label: "Gesammelt", count: f.gesammelt },
+    { stage: "eingeladen", label: "Eingeladen", count: f.eingeladen ?? 0 },
+    { stage: "angenommen", label: "Angenommen", count: f.angenommen ?? 0 },
+    { stage: "angeschrieben", label: "Angeschrieben", count: f.angeschrieben ?? 0 },
+    { stage: "geantwortet", label: "Geantwortet", count: f.geantwortet ?? 0 },
+  ];
+
   // Aktionen heute (lokale Zeit) pro Typ – Aktivitätspuls.
   const actionsToday = db
     .prepare(
@@ -150,7 +174,8 @@ export function getDashboardData() {
     leadSources,
     todayDone: { drafts: draftsToday, posts: postsToday, leads: leadsToday },
     governor: governor.snapshot(),
-    pipeline: PIPELINE.map((stage) => ({ stage, count: counts[stage] ?? 0 })),
+    pipeline: PIPELINE.map((stage) => ({ stage, count: counts[stage] ?? 0 })), // AKTUELLER Status (für Chips/Tabellenfilter)
+    funnel, // KUMULATIV (für den Conversion-Funnel) – echte Stufen-Zählung
     totals: { contacts: contacts.length },
     actionsToday: Object.fromEntries(actionsToday.map((a) => [a.type, a.n])),
     posts: Object.fromEntries(posts.map((p) => [p.status, p.n])),

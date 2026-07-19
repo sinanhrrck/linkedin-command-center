@@ -776,7 +776,7 @@ function render() {
     gv.style.color = healthy ? "var(--ink)" : "var(--red)";
     badge.textContent = healthy ? "Gesund" : "Kritisch";
     badge.className = "accept-badge " + (healthy ? "good" : "bad");
-    sub.textContent = `${accepted} von ${a.sample} haben deine Anfrage angenommen.`;
+    sub.innerHTML = `${accepted} von ${a.sample} haben deine Anfrage angenommen. <span style="color:var(--ink-faint)">(reife Einladungen der letzten 7 Tage – der Wert für den Schutz-Breaker; die Gesamtquote steht im Funnel unten)</span>`;
     gFill.style.width = ratePct + "%";
     gFill.style.background = healthy ? "var(--green)" : "var(--red)";
     document.getElementById("g-note").textContent = healthy
@@ -811,21 +811,26 @@ function render() {
     ? keys.map(k => `<span>${k}: <b style="color:var(--ink)">${acts[k]}</b></span>`).join("")
     : `<span style="color:var(--ink-faint)">Noch keine Sendeaktionen heute.</span>`;
 
-  // Funnel als horizontale Conversion-Balken (Balkenlänge = Anteil an der Top-Stufe;
-  // rechts der Prozentsatz, der von hier die NÄCHSTE Stufe erreicht).
+  // Funnel als horizontale Conversion-Balken. KUMULATIV (state.funnel): jede Stufe zählt, wer
+  // sie JE erreicht hat (aus Zeitstempeln) – nicht den aktuellen Status. So sind die Zahlen
+  // monoton fallend und die %-Werte sind echte Conversions (Angenommen/Eingeladen = Annahmequote).
   const fEl = document.getElementById("funnel");
-  const fmax = Math.max(1, ...state.pipeline.map(p => p.count));
-  fEl.innerHTML = state.pipeline.map((p, i) => {
-    const last = i === state.pipeline.length - 1;
+  const FUNNEL_COLOR = ["var(--ink-faint)", "var(--amber)", "var(--green)", "var(--cyan)", "#a78bfa"];
+  const funnel = state.funnel || [];
+  const fmax = Math.max(1, ...funnel.map(p => p.count));
+  fEl.innerHTML = funnel.map((p, i) => {
+    const last = i === funnel.length - 1;
     const w = Math.round(p.count / fmax * 100);
-    const next = last ? null : state.pipeline[i + 1];
-    const conv = (next && p.count > 0) ? Math.round(next.count / p.count * 100) : null;
+    const prev = i === 0 ? null : funnel[i - 1];
+    // Conversion = Anteil dieser Stufe an der VORIGEN (z.B. Angenommen/Eingeladen). Beim ersten
+    // Balken (Gesammelt) gibt es keine Vorstufe → kein %.
+    const conv = (prev && prev.count > 0) ? Math.round(p.count / prev.count * 100) : null;
     const convCls = conv === null ? "" : conv >= 50 ? "good" : conv >= 25 ? "mid" : "low";
     return `<div class="frow">
-      <div class="frow-lab">${STATUS_LABEL[p.stage] || p.stage}</div>
-      <div class="frow-track"><div class="frow-fill" style="width:${w}%;background:${STAGE_COLOR[p.stage]}"></div></div>
+      <div class="frow-lab">${esc(p.label || p.stage)}</div>
+      <div class="frow-track"><div class="frow-fill" style="width:${w}%;background:${FUNNEL_COLOR[i] || "var(--ink-faint)"}"></div></div>
       <div class="frow-num">${p.count}</div>
-      <div class="frow-conv">${conv !== null ? `<span class="conv-pill ${convCls}">${conv}%</span>` : `<span class="conv-end">Ziel</span>`}</div>
+      <div class="frow-conv">${conv !== null ? `<span class="conv-pill ${convCls}">${conv}%</span>` : `<span class="conv-end">Start</span>`}</div>
     </div>`;
   }).join("");
 
