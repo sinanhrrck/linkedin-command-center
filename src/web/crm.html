@@ -154,10 +154,10 @@
   .bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; align-items: end; height: 168px; padding-top: 6px; }
   .bar-col { display: flex; flex-direction: column; align-items: center; gap: 9px; height: 100%; justify-content: flex-end; }
   .bar-stack { width: 100%; max-width: 34px; display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; flex: 1 1 auto; min-height: 0; position: relative; }
-  .bar-seg { width: 100%; border-radius: 6px; transition: height .5s var(--ease); min-height: 0; }
-  .bar-seg.msg { background: #a9dcc3; }
-  .bar-seg.con { background: var(--accent); }
-  .bar-col.is-today .bar-seg.con { box-shadow: 0 0 0 2px rgba(22,133,90,.25); }
+  .bar-seg { width: 100%; border-radius: 7px; transition: height .5s var(--ease); min-height: 0; }
+  .bar-seg.msg { background: linear-gradient(180deg, #86e0bd, #a9dcc3); }
+  .bar-seg.con { background: linear-gradient(180deg, #2fd27a, #16855a); box-shadow: 0 6px 14px -5px rgba(22,133,90,.55); }
+  .bar-col.is-today .bar-seg.con { box-shadow: 0 6px 16px -4px rgba(22,133,90,.65), 0 0 0 2px rgba(22,133,90,.22); }
   .bar-empty { width: 100%; max-width: 34px; height: 4px; border-radius: 3px; background: var(--panel-2); }
   .bar-lab { font-size: 11px; font-weight: 600; color: var(--ink-faint); }
   .bar-col.is-today .bar-lab { color: var(--accent); }
@@ -1139,13 +1139,26 @@ function renderTrend() {
   const labs = [0, 7, 14, 21, 27].filter(i => tr[i]).map(i => `<span>${tr[i].label}</span>`).join("");
   el.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="150" aria-hidden="true">
-      <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="var(--accent)" stop-opacity=".20"/>
-        <stop offset="1" stop-color="var(--accent)" stop-opacity="0"/>
-      </linearGradient></defs>
-      <path d="${area}" fill="url(#tg)"/>
-      <path d="${smoothPath(aPts)}" fill="none" stroke="#e0a33a" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round"/>
-      <path d="${cLine}" fill="none" stroke="var(--accent)" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linecap="round"/>
+      <defs>
+        <linearGradient id="tg-area" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#16b39a" stop-opacity=".34"/>
+          <stop offset="1" stop-color="#16855a" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="tg-line" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#0e9488"/>
+          <stop offset=".55" stop-color="#16a34a"/>
+          <stop offset="1" stop-color="#2fd27a"/>
+        </linearGradient>
+        <linearGradient id="tg-amber" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#d97706"/>
+          <stop offset="1" stop-color="#f5b13a"/>
+        </linearGradient>
+      </defs>
+      <path d="${area}" fill="url(#tg-area)"/>
+      <path d="${smoothPath(aPts)}" fill="none" stroke="url(#tg-amber)" stroke-width="6" opacity=".14" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${smoothPath(aPts)}" fill="none" stroke="url(#tg-amber)" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${cLine}" fill="none" stroke="url(#tg-line)" stroke-width="8" opacity=".16" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${cLine}" fill="none" stroke="url(#tg-line)" stroke-width="3" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <div class="trend-x">${labs}</div>`;
 }
@@ -1794,18 +1807,23 @@ function renderVerlauf(verlauf) {
     const h2 = (H - padT - padB) * (d.angenommen / max);
     const h3 = (H - padT - padB) * (d.geantwortet / max);
     return `
-      <rect x="${cx - bw / 2}" y="${H - padB - h1}" width="${bw}" height="${h1}" rx="2" fill="var(--green)" opacity=".25"/>
-      <rect x="${cx - bw / 2}" y="${H - padB - h2}" width="${bw}" height="${h2}" rx="2" fill="var(--green)" opacity=".6"/>
-      <rect x="${cx - bw / 2}" y="${H - padB - h3}" width="${bw}" height="${h3}" rx="2" fill="#e0a33a"/>`;
+      <rect x="${cx - bw / 2}" y="${H - padB - h1}" width="${bw}" height="${h1}" rx="3" fill="url(#vg-inv)"/>
+      <rect x="${cx - bw / 2}" y="${H - padB - h2}" width="${bw}" height="${h2}" rx="3" fill="url(#vg-acc)"/>
+      <rect x="${cx - bw / 2}" y="${H - padB - h3}" width="${bw}" height="${h3}" rx="3" fill="url(#vg-rep)"/>`;
   }).join("");
+  const defs = `<defs>
+    <linearGradient id="vg-inv" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fe3c2"/><stop offset="1" stop-color="#c7f0dd"/></linearGradient>
+    <linearGradient id="vg-acc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2fd27a"/><stop offset="1" stop-color="#16a34a"/></linearGradient>
+    <linearGradient id="vg-rep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5b13a"/><stop offset="1" stop-color="#d97706"/></linearGradient>
+  </defs>`;
   const labs = [0, Math.floor(n / 3), Math.floor(2 * n / 3), n - 1].map(i => verlauf[i] ? `<span>${verlauf[i].label}</span>` : "").join("");
   document.getElementById("an-verlauf").innerHTML = `
     <div class="chart-legend" style="flex-direction:row;gap:16px;margin-bottom:10px">
-      <span><i style="background:var(--green);opacity:.25"></i>Eingeladen</span>
-      <span><i style="background:var(--green);opacity:.6"></i>Angenommen</span>
+      <span><i style="background:#a9dcc3"></i>Eingeladen</span>
+      <span><i style="background:#16a34a"></i>Angenommen</span>
       <span><i style="background:#e0a33a"></i>Geantwortet</span>
     </div>
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="150">${bars}</svg>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="150">${defs}${bars}</svg>
     <div class="trend-x">${labs}</div>`;
 }
 </script>
