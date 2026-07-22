@@ -1,7 +1,13 @@
 import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { governor, GovernorBlocked } from "../core/safetyGovernor.js";
 import { humanDelay, humanScroll, humanType, humanTypeInto } from "../core/humanize.js";
+import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { db } from "../db/index.js";
+
+/** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
+function normText(s: string): string {
+  return (s || "").replace(/​/g, "").replace(/\s+/g, " ").trim();
+}
 
 /**
  * Cold Outreach über die echte Browser-Session.
@@ -133,42 +139,71 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
  * Versand als eine Falschmeldung.
  */
 async function tippenUndSenden(page: import("playwright").Page, text: string) {
+  // SICHERHEITSSCHLEIFE 1: kein Kauderwelsch/Fehler-Text. Im Zweifel gar nicht senden.
+  const plaus = istPlausibleNachricht(text);
+  if (!plaus.ok) throw new UnsichereNachricht(plaus.grund ?? "unplausibel");
+
   await page.waitForSelector(SEL.messageBox, { timeout: 15000 });
 
   // WICHTIG: LinkedIn stellt beim Laden ALLE zuletzt offenen Chat-Fenster wieder her – live
-  // gemessen 2026-07-16: nach dem zweiten Profil lagen 2 Eingabefelder auf der Seite. Ein
-  // Selektor-String wäre mehrdeutig (Playwright: "strict mode violation") und der Versand
-  // würde ab der zweiten Nachricht scheitern. Das zuletzt geöffnete Fenster ist unseres,
-  // deshalb .last() – und ALLE Prüfungen laufen auf genau demselben Element.
+  // gemessen 2026-07-16: nach dem zweiten Profil lagen 2 Eingabefelder auf der Seite. Das
+  // zuletzt geöffnete Fenster ist unseres, deshalb .last() – ALLE Prüfungen auf demselben Element.
   const box = page.locator(SEL.messageBox).last();
-  await humanTypeInto(box, text);
-  await humanDelay(600, 1500);
+
+  const sollNorm = normText(text);
+
+  /**
+   * SICHERHEITSSCHLEIFE 2 – der eigentliche Fix für "Entwurf richtig, aber auf LinkedIn kommt
+   * was anderes raus": Zeichen-für-Zeichen-Tippen (el.type) hat LinkedIns Rich-Text-Editor
+   * verstümmelt (Zeichen verschluckt/vertauscht → Kauderwelsch). Jetzt: Feld KOMPLETT leeren,
+   * Text in EINEM Rutsch einfügen, dann ZURÜCKLESEN und exakt mit dem Soll vergleichen. Erst
+   * wenn Ist == Soll, wird gesendet. Bis zu 2 Versuche, sonst Abbruch (kein Versand).
+   */
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  let feldOk = false;
+  for (let versuch = 1; versuch <= 2 && !feldOk; versuch++) {
+    await box.click();
+    await humanDelay(200, 500);
+    await page.keyboard.press(`${mod}+A`);
+    await page.keyboard.press("Backspace");
+    await humanDelay(150, 400);
+    await box.focus();
+    await page.keyboard.insertText(text); // zuverlässig, kein Editor-Race
+    await humanDelay(400, 900);
+    const ist = normText(await box.evaluate((el) => el.textContent || "").catch(() => ""));
+    if (ist === sollNorm) feldOk = true;
+    else console.warn(`[send] Feld-Inhalt weicht ab (Versuch ${versuch}) – steht: "${ist.slice(0, 45)}"`);
+  }
+  if (!feldOk) throw new UnsichereNachricht("Feld-Inhalt stimmte nach 2 Versuchen nicht mit dem Entwurf überein");
 
   const sendBtn = page.locator(SEL.sendButton).last();
   if (await sendBtn.isEnabled().catch(() => false)) await sendBtn.click();
   else await page.keyboard.press("Enter"); // Fallback
 
-  // Beleg 1: unser Eingabefeld muss leer sein.
-  const geleert = await box
-    .evaluate((el) => (el.textContent || "").trim().length === 0)
-    .catch(() => false);
-  if (!geleert) {
-    await humanDelay(1500, 2500); // LinkedIn braucht manchmal einen Moment
-    const nochmal = await box.evaluate((el) => (el.textContent || "").trim().length === 0).catch(() => false);
-    if (!nochmal) throw new Error("Senden nicht bestätigt: Eingabefeld ist noch gefüllt");
+  /**
+   * BELEG = Feld leer. Das ist die AUTORITÄT für "gesendet": LinkedIn leert das Eingabefeld
+   * nur bei erfolgreichem Senden. Steht der Text noch drin → NICHT gesendet → werfen (der
+   * Aufrufer darf gefahrlos neu versuchen, kein Duplikat).
+   */
+  let geleert = false;
+  for (let i = 0; i < 3 && !geleert; i++) {
+    geleert = await box.evaluate((el) => (el.textContent || "").trim().length === 0).catch(() => false);
+    if (!geleert) await humanDelay(1000, 1800);
   }
+  if (!geleert) throw new Error("Senden nicht bestätigt: Eingabefeld ist noch gefüllt (nicht gesendet)");
 
-  // Beleg 2: Text steht im Verlauf – NUR im zuletzt geöffneten Fenster prüfen, sonst
-  // könnte ein anderes offenes Fenster einen Treffer vortäuschen.
-  const marker = text.replace(/\s+/g, " ").trim().slice(0, 40);
+  /**
+   * Verlaufs-Prüfung nur noch als WARNUNG, nicht als Abbruch. Früher wurde hier geworfen,
+   * wenn der Text nicht im Verlauf gefunden wurde – aber da das Feld schon geleert war (=
+   * gesendet), führte das Werfen zu einem ERNEUTEN Versand = Duplikat. Genau das war der
+   * Doppel-Nachrichten-Bug. Feld-leer zählt, die Verlaufssuche ist nur noch Zusatz-Info.
+   */
+  const marker = normText(text).slice(0, 40);
   const bubble = page.locator(SEL.bubble).last();
   const suchraum = (await bubble.count()) ? bubble : page.locator("body");
-  const imVerlauf = await suchraum
-    .locator(SEL.threadItem)
-    .filter({ hasText: marker })
-    .count()
-    .catch(() => 0);
-  if (imVerlauf === 0) throw new Error("Senden nicht bestätigt: Nachricht steht nicht im Verlauf");
+  const imVerlauf = await suchraum.locator(SEL.threadItem).filter({ hasText: marker }).count().catch(() => 0);
+  if (imVerlauf === 0)
+    console.warn("[send] Feld geleert (= gesendet), aber Text nicht im Verlauf gefunden – Verlaufsprüfung unsicher, kein erneuter Versand.");
 }
 
 /** Erstnachricht an einen bereits verbundenen Kontakt. */

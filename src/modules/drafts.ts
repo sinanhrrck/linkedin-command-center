@@ -4,6 +4,7 @@ import { fetchThreads, type ThreadContext } from "./inbox.js";
 import { sendThreadReply, sendMessage, sendComment } from "./outreach.js";
 import { firstMessage, followupMessage , converseStep } from "./personalize.js";
 import { GovernorBlocked } from "../core/safetyGovernor.js";
+import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { markRepliedByName, markDeclinedByName, messagedAwaitingFollowup, type Contact } from "./crm.js";
 import { promptKontext, saubern } from "../context.js";
 import { events } from "../core/events.js";
@@ -58,6 +59,11 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
     return "";
   });
   if (!text) return false;
+  const chk = istPlausibleNachricht(text);
+  if (!chk.ok) {
+    console.error(`[sicherheit] Erstnachricht-Entwurf fuer ${c.full_name} verworfen (${chk.grund}) – KI-Ausgabe unbrauchbar, kein Entwurf angelegt.`);
+    return false;
+  }
   const info = db
     .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('first',?,?,?,?,?,'first')")
     .run(c.profile_url, c.full_name ?? null, "", text, text);
@@ -78,6 +84,11 @@ export async function createFollowupDraft(c: Contact): Promise<boolean> {
   if (exists) return false;
   const text = await followupMessage(c).catch(() => "");
   if (!text) return false;
+  const chkF = istPlausibleNachricht(text);
+  if (!chkF.ok) {
+    console.error(`[sicherheit] Follow-up-Entwurf fuer ${c.full_name} verworfen (${chkF.grund}).`);
+    return false;
+  }
   const info = db
     .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('followup',?,?,?,?)")
     .run(c.profile_url, c.full_name ?? null, "", text);
@@ -126,6 +137,15 @@ export function queueReplyDraft(threadUrl: string, participant: string, incoming
  * (governor-gedrosselt). Bei Sendefehler Fallback als Entwurf, damit nichts verloren geht.
  */
 export async function deliverFirstMessage(c: Contact): Promise<void> {
+  // DUPLIKAT-SPERRE: wurde diese Person schon angeschrieben (oder hat geantwortet/ist zu)?
+  // Dann NIE eine zweite Erstnachricht – weder als Entwurf noch als Versand.
+  const st = db.prepare("SELECT status, messaged_at FROM contacts WHERE profile_url=?").get(c.profile_url) as
+    | { status?: string; messaged_at?: string }
+    | undefined;
+  if (st && (st.messaged_at || ["messaged", "replied", "closed"].includes(st.status ?? ""))) {
+    console.info(`[sicherheit] ${c.full_name ?? c.profile_url} bereits angeschrieben (${st.status}) – Erstnachricht übersprungen (kein Duplikat).`);
+    return;
+  }
   if (getMode() === "manual") {
     await createFirstMessageDraft(c);
     return;
@@ -139,6 +159,12 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
   });
   if (!text) {
     console.info(`[first] ${c.full_name} bleibt offen, naechster Versuch in max. 1 Stunde.`);
+    return;
+  }
+  // Auto-Versand (semi/full): Kauderwelsch NIE senden. Lieber offen lassen und neu versuchen.
+  const chkD = istPlausibleNachricht(text);
+  if (!chkD.ok) {
+    console.error(`[sicherheit] Erstnachricht fuer ${c.full_name} NICHT gesendet (${chkD.grund}) – KI-Ausgabe unbrauchbar, naechster Versuch spaeter.`);
     return;
   }
   try {
@@ -284,6 +310,16 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
   if (!d) return { ok: false, reason: "Entwurf nicht gefunden" };
   if (d.status === "sent") return { ok: false, reason: "Bereits gesendet" };
   if (!d.thread_url) return { ok: false, reason: "Kein Ziel (Thread/Profil)" };
+  // DUPLIKAT-SPERRE für Erstnachrichten: wenn der Kontakt schon angeschrieben wurde, NICHT
+  // erneut senden (auch wenn der Entwurf freigegeben ist). Entwurf aus der Warteschlange nehmen.
+  if (d.kind === "first") {
+    const st = db.prepare("SELECT messaged_at FROM contacts WHERE profile_url=?").get(d.thread_url) as { messaged_at?: string } | undefined;
+    if (st?.messaged_at) {
+      db.prepare("UPDATE drafts SET status='blockiert' WHERE id=?").run(id);
+      console.info(`[sicherheit] Entwurf #${id} nicht gesendet – ${d.participant ?? "Kontakt"} wurde schon angeschrieben (kein Duplikat).`);
+      return { ok: false, reason: "Schon angeschrieben – kein Duplikat" };
+    }
+  }
   try {
     // 'first'/'followup' = Nachricht an einen Kontakt (über Profil), 'message' = Thread-Antwort.
     if (d.kind === "comment") await sendComment(d.thread_url, d.draft); // öffentlicher Kommentar
@@ -293,6 +329,17 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
     return { ok: true };
   } catch (e) {
     if (e instanceof GovernorBlocked) return { ok: false, reason: e.message };
+    /**
+     * UNSICHERE NACHRICHT (Kauderwelsch / Feld-Inhalt weicht ab): NICHT erneut versuchen –
+     * sonst würde derselbe Mist wieder und wieder rausgehen. Entwurf 'blockiert' setzen (kommt
+     * NICHT in die Sende-Warteschlange zurück) und den Nutzer informieren.
+     */
+    if (e instanceof UnsichereNachricht) {
+      db.prepare("UPDATE drafts SET status='blockiert' WHERE id=?").run(id);
+      console.error(`[sicherheit] Entwurf #${id} blockiert – ${e.grund}. Nicht gesendet.`);
+      events.emit("draft:blockiert", { id, grund: e.grund, participant: d.participant });
+      return { ok: false, reason: `Blockiert: ${e.grund}` };
+    }
     throw e;
   }
 }
