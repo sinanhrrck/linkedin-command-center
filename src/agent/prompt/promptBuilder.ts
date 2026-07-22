@@ -47,6 +47,8 @@ export interface ReplyPromptInput {
   memory: ConversationMemory;
   letzteNachricht: string;
   teilnehmer: string;
+  /** Zusätzliche Verhaltens-Hinweise (z.B. aus der Trigger Engine). Optional. */
+  triggerHinweise?: string[];
 }
 
 /** Deterministische Stil-Hinweise aus dem Profil (nur wo es ein Signal gibt). Seed der Trigger Engine. */
@@ -89,7 +91,7 @@ const STILREGELN = `# Stil (Pflicht)
 
 /** Setzt den vollständigen Antwort-Prompt aus den Blöcken zusammen. */
 export function buildReplyPrompt(inp: ReplyPromptInput): string {
-  const hinweise = stilHinweise(inp.profile);
+  const hinweise = [...stilHinweise(inp.profile), ...(inp.triggerHinweise ?? [])];
   const fokus = interessenFokus(inp.profile);
   const mem = memoryAlsText(inp.memory);
   const wenigInfo = inp.profile.beobachtungen < 2;
