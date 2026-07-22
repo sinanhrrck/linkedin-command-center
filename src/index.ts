@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { db, setState, getState, getMode } from "./db/index.js";
+import { db, setState, getState, getMode, getAgentMode } from "./db/index.js";
 import { governor } from "./core/safetyGovernor.js";
 import { events } from "./core/events.js";
 import { publishPost } from "./modules/posting.js";
@@ -64,7 +64,7 @@ setTimeout(async () => {
   // Auch das Postfach sofort prüfen: wer den Bot mittags startet, soll nicht bis zur
   // nächsten Viertelstunde warten, um zu sehen, dass er arbeitet.
   await einzeln("drafts", async () => {
-    if (!config.agent.enabled && getMode() !== "full") await generateInboxDrafts(8);
+    if (getAgentMode() === "off" && getMode() !== "full") await generateInboxDrafts(8);
   });
   // Freigegebene Entwürfe, die noch offen sind, gleich beim Start abarbeiten.
   await einzeln("sendApproved", () => sendApprovedDrafts(15));
@@ -142,7 +142,7 @@ cron.schedule("*/2 * * * *", () =>
 cron.schedule("*/15 9-19 * * *", () =>
   einzeln("drafts", async () => {
     // Im Vollautomatik-Modus übernimmt der Autopilot die Antworten – dann keine Entwürfe.
-    if (!config.agent.enabled && getMode() !== "full") await generateInboxDrafts(8);
+    if (getAgentMode() === "off" && getMode() !== "full") await generateInboxDrafts(8);
   }),
 );
 
@@ -151,7 +151,7 @@ cron.schedule("*/15 9-19 * * *", () =>
 // als Erstes die frische Antwort-Liste bereit und gestern Genehmigtes geht sofort raus.
 cron.schedule("0 9 * * *", () =>
   einzeln("morgen", async () => {
-    if (!config.agent.enabled && getMode() !== "full") await generateInboxDrafts(10);
+    if (getAgentMode() === "off" && getMode() !== "full") await generateInboxDrafts(10);
     await sendApprovedDrafts(20);
   }),
 );
@@ -166,13 +166,12 @@ cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4,
 // AUTOPILOT (alt, voll-autonome Gespräche) – nur wenn Modus 'full' UND der neue Agent NICHT aktiv
 // ist. Sobald der Agent läuft, übernimmt er die Inbox-Gespräche (sonst würden beide antworten).
 cron.schedule(`*/${config.autopilot.intervalMinutes} * * * *`, () => {
-  if (!config.agent.enabled) einzeln("autopilot", () => runAutopilot());
+  if (getAgentMode() === "off") einzeln("autopilot", () => runAutopilot());
 });
 
-// NEUER SALES-AGENT – nur wenn eingeschaltet (config.agent.enabled). Übernimmt dann die Inbox-
-// Gespräche über die intelligente Pipeline. Im Schatten-Modus legt er nur Entwürfe an (sendet nicht).
-if (config.agent.enabled)
-  cron.schedule(`*/${config.agent.intervalMinutes} * * * *`, () => einzeln("agent", () => agentTick()));
+// NEUER SALES-AGENT – Cron läuft immer, agentTick prüft selbst den Dashboard-Modus (off/shadow/
+// live). So lässt sich der Agent per Klick umschalten, ohne den Bot neu zu starten.
+cron.schedule(`*/${config.agent.intervalMinutes} * * * *`, () => einzeln("agent", () => agentTick()));
 
 // KOMMENTARE: 1x täglich (12:30) Nischen-Posts finden und Kommentar-ENTWÜRFE erzeugen.
 // Öffentlich → immer erst Freigabe (Telegram), nie autonom. Moderate Frequenz: Sichtbarkeit

@@ -9,7 +9,7 @@ import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft } from "
 import { getPost, approvePost, discardPost } from "../modules/content.js";
 import { addSource, deleteSource } from "../modules/leadFeed.js";
 import { deleteContact } from "../modules/crm.js";
-import { db, getState, setState, setMode, setFocus, getFocus, type Mode, type Focus } from "../db/index.js";
+import { db, getState, setState, setMode, setFocus, getFocus, setAgentMode, type Mode, type Focus, type AgentMode } from "../db/index.js";
 import { LIVE_SHOT_PATH } from "../core/session.js";
 
 /**
@@ -331,6 +331,26 @@ const server = createServer((req, res) => {
         }
         setFocus(focus as Focus);
         res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, focus }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // SALES-AGENT umschalten (off/shadow/live) – der neue intelligente Kern. Greift ohne Neustart.
+  if (url.pathname === "/api/agent-mode" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { mode } = JSON.parse(body || "{}");
+        if (!["off", "shadow", "live"].includes(mode)) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad agent mode" }));
+          return;
+        }
+        setAgentMode(mode as AgentMode);
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, mode }));
       } catch (e) {
         res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
       }

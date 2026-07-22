@@ -654,6 +654,13 @@
         <button data-focus="beides">Beides</button>
       </div>
       <div class="mode-note" id="focus-note"></div>
+      <p class="eyebrow" style="margin-top:16px">Sales-Agent <span style="font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--amber);background:rgba(192,122,18,.12);padding:2px 6px;border-radius:20px;margin-left:4px">Beta</span></p>
+      <div class="modeseg" id="agentseg">
+        <button data-agent="off">Aus</button>
+        <button data-agent="shadow">Schatten</button>
+        <button data-agent="live">Live</button>
+      </div>
+      <div class="mode-note" id="agent-note"></div>
       <div class="act-tally" id="act-tally"></div>
     </div>
     <div class="act-right">
@@ -969,6 +976,7 @@ function render() {
   renderActionCenter();
   renderActivity();
   renderMode();
+  renderAgent();
   renderFocus();
   renderLive();
   renderTermine();
@@ -1254,6 +1262,25 @@ function renderMode() {
     };
   });
   document.getElementById("mode-note").innerHTML = MODE_NOTES[mode] || "";
+}
+
+const AGENT_NOTES = {
+  off: "<b>Aus:</b> Der klassische Bot läuft wie gewohnt.",
+  shadow: "<b>Schatten:</b> Der intelligente Agent denkt bei jeder Antwort mit und legt seinen Vorschlag als Entwurf ab – <b>sendet nichts</b>. So siehst du erst, was er tun würde.",
+  live: "<b>Live:</b> Der Agent führt die Gespräche selbst (governor-gedrosselt, mehrfach geprüft) und übergibt Termine/Nummern an dich. Braucht bezahlten KI-Key + Dauerbetrieb.",
+};
+function renderAgent() {
+  const mode = state.agentMode || "off";
+  document.querySelectorAll("#agentseg button").forEach(b => {
+    b.classList.toggle("active", b.dataset.agent === mode);
+    b.onclick = async () => {
+      if (b.dataset.agent === mode) return;
+      if (b.dataset.agent === "live" && !confirm("Sales-Agent LIVE: Der Agent beantwortet Nachrichten eigenständig – ohne deine Freigabe. Erst nach Beobachtung im Schatten-Modus empfohlen. Jetzt live schalten?")) return;
+      await fetch("/api/agent-mode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: b.dataset.agent }) });
+      load();
+    };
+  });
+  document.getElementById("agent-note").innerHTML = AGENT_NOTES[mode] || "";
 }
 
 /**

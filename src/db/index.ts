@@ -90,6 +90,19 @@ export const getMode = (): Mode => {
 };
 export const setMode = (m: Mode) => setState("mode", m);
 
+/**
+ * SALES-AGENT-Modus (der neue intelligente Kern), per Dashboard umschaltbar OHNE Neustart:
+ *  - off    : Agent aus, alles läuft wie bisher (Default).
+ *  - shadow : Agent denkt mit, legt nur Entwürfe an, SENDET NICHT (Beobachtung).
+ *  - live   : Agent antwortet selbst (governor-gedrosselt + validiert).
+ */
+export type AgentMode = "off" | "shadow" | "live";
+export const getAgentMode = (): AgentMode => {
+  const m = getState("agent_mode");
+  return m === "shadow" || m === "live" ? m : "off";
+};
+export const setAgentMode = (m: AgentMode) => setState("agent_mode", m);
+
 /** Startdatum des Tools (für Warm-up-Berechnung), einmalig gesetzt. */
 export function getStartDate(): Date {
   let iso = getState("start_date");

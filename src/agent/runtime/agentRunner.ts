@@ -12,7 +12,7 @@ import { config } from "../../config.js";
 import { fetchThreads } from "../../modules/inbox.js";
 import { sendThreadReply } from "../../modules/outreach.js";
 import { queueReplyDraft } from "../../modules/drafts.js";
-import { db } from "../../db/index.js";
+import { db, getAgentMode } from "../../db/index.js";
 import { events } from "../../core/events.js";
 import { generateText } from "../../core/textLlm.js";
 import { generateClaude, claudeAvailable } from "../../core/claude.js";
@@ -28,7 +28,9 @@ const replyLlm = (p: string) => (config.llm.autopilotProvider === "claude" && cl
 
 export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesendet: number; entwuerfe: number; eskaliert: number }> {
   const res = { verarbeitet: 0, gesendet: 0, entwuerfe: 0, eskaliert: 0 };
-  if (!config.agent.enabled) return res;
+  const mode = getAgentMode();
+  if (mode === "off") return res;
+  const schatten = mode === "shadow";
 
   const repo = new SqliteConversationRepository(db);
   const persona = promptKontext();
@@ -47,7 +49,7 @@ export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesende
     res.verarbeitet++;
 
     // ---- SCHATTEN-MODUS: nur zeigen, was der Agent tun würde ----
-    if (config.agent.shadowMode) {
+    if (schatten) {
       if (e.typ !== "nichts") {
         const vorschau = e.typ === "senden" ? e.text : `[Agent würde eskalieren: ${e.grund}] ${e.entwurf ?? ""}`.trim();
         queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, vorschau, "agent-schatten");
@@ -81,6 +83,6 @@ export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesende
     }
   }
 
-  if (res.verarbeitet) console.info(`[agent] ${res.verarbeitet} Threads · ${res.gesendet} gesendet · ${res.entwuerfe} Entwürfe · ${res.eskaliert} eskaliert${config.agent.shadowMode ? " (Schatten)" : ""}`);
+  if (res.verarbeitet) console.info(`[agent] ${res.verarbeitet} Threads · ${res.gesendet} gesendet · ${res.entwuerfe} Entwürfe · ${res.eskaliert} eskaliert${schatten ? " (Schatten)" : ""}`);
   return res;
 }

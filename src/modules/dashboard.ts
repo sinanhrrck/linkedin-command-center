@@ -1,4 +1,4 @@
-import { db, getState, getMode, getFocus } from "../db/index.js";
+import { db, getState, getMode, getFocus, getAgentMode } from "../db/index.js";
 import { governor } from "../core/safetyGovernor.js";
 import { pendingDrafts, approvedCount } from "./drafts.js";
 import { pendingPosts } from "./content.js";
@@ -187,6 +187,7 @@ export function getDashboardData() {
     deltas,
     hotLeads: hotLeads(),
     mode: getMode(),
+    agentMode: getAgentMode(),
     focus: getFocus(),
     // Wie viele Leads warten je Zielgruppe? Zeigt, ob der gewaehlte Fokus noch Sprit hat.
     fokusVorrat: Object.fromEntries(
