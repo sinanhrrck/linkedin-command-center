@@ -140,6 +140,20 @@ export const config = {
     maxMessagesPerThread: 6, // danach an den Menschen eskalieren (kein Endlos-Loop)
     intervalMinutes: 20,
   },
+
+  /**
+   * NEUER SALES-AGENT (src/agent) – die intelligente Pipeline (State Machine, Profil, Scores,
+   * Risk/Validator/Humanizer) statt des einfachen converseStep. Default AUS: solange `enabled`
+   * false ist, ändert sich am laufenden Bot NICHTS.
+   * shadowMode: der Agent DENKT mit und legt seine Antwort nur als ENTWURF ab (sendet NICHT) –
+   * so sieht man, was er tun WÜRDE, bevor er Verantwortung übernimmt. Erst nach Beobachtung auf
+   * false stellen (dann sendet er governor-gedrosselt + validiert).
+   */
+  agent: {
+    enabled: false,
+    shadowMode: true,
+    intervalMinutes: 8,
+  },
 } as const;
 
 export type Config = typeof config;

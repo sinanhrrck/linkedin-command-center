@@ -42,7 +42,33 @@ export class SqliteConversationRepository implements ConversationRepository {
         ts         TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_agent_messages_thread ON agent_messages(thread_url);
+      CREATE TABLE IF NOT EXISTS agent_outcomes (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        thread_url    TEXT NOT NULL,
+        teilnehmer    TEXT,
+        ergebnis      TEXT NOT NULL,   -- 'gebucht' | 'verloren' | 'eskaliert'
+        letzter_state TEXT,
+        nachrichten   INTEGER,
+        trust         INTEGER,
+        interest      INTEGER,
+        ts            TEXT NOT NULL DEFAULT (datetime('now'))
+      );
     `);
+  }
+
+  /** LEARNING: Ergebnis eines Gesprächs festhalten (Grundlage für spätere Optimierung). */
+  recordOutcome(o: { threadUrl: string; teilnehmer: string; ergebnis: string; letzterState: string; nachrichten: number; trust: number; interest: number }): void {
+    this.db.prepare(
+      "INSERT INTO agent_outcomes(thread_url, teilnehmer, ergebnis, letzter_state, nachrichten, trust, interest) VALUES(?,?,?,?,?,?,?)",
+    ).run(o.threadUrl, o.teilnehmer, o.ergebnis, o.letzterState, o.nachrichten, o.trust, o.interest);
+  }
+
+  /** Aggregat der letzten 30 Tage (fürs Learning-Dashboard/Reporting). */
+  lernStatistik(): { ergebnis: string; anzahl: number; oemNachrichten: number }[] {
+    return this.db.prepare(
+      `SELECT ergebnis, COUNT(*) AS anzahl, ROUND(AVG(nachrichten),1) AS oemNachrichten
+         FROM agent_outcomes WHERE ts >= datetime('now','-30 days') GROUP BY ergebnis ORDER BY anzahl DESC`,
+    ).all() as { ergebnis: string; anzahl: number; oemNachrichten: number }[];
   }
 
   async load(threadUrl: string): Promise<Conversation | null> {

@@ -10,6 +10,7 @@ import { generateInboxDrafts, generateFollowups, sendApprovedDrafts } from "./mo
 import { generatePostIdeas } from "./modules/content.js";
 import { commentTick } from "./modules/comment.js";
 import { runAutopilot } from "./modules/autopilot.js";
+import { agentTick } from "./agent/runtime/agentRunner.js";
 import { config } from "./config.js";
 import { startTelegram } from "./modules/telegram.js";
 import { countByStatus } from "./modules/crm.js";
@@ -63,7 +64,7 @@ setTimeout(async () => {
   // Auch das Postfach sofort prüfen: wer den Bot mittags startet, soll nicht bis zur
   // nächsten Viertelstunde warten, um zu sehen, dass er arbeitet.
   await einzeln("drafts", async () => {
-    if (getMode() !== "full") await generateInboxDrafts(8);
+    if (!config.agent.enabled && getMode() !== "full") await generateInboxDrafts(8);
   });
   // Freigegebene Entwürfe, die noch offen sind, gleich beim Start abarbeiten.
   await einzeln("sendApproved", () => sendApprovedDrafts(15));
@@ -141,7 +142,7 @@ cron.schedule("*/2 * * * *", () =>
 cron.schedule("*/15 9-19 * * *", () =>
   einzeln("drafts", async () => {
     // Im Vollautomatik-Modus übernimmt der Autopilot die Antworten – dann keine Entwürfe.
-    if (getMode() !== "full") await generateInboxDrafts(8);
+    if (!config.agent.enabled && getMode() !== "full") await generateInboxDrafts(8);
   }),
 );
 
@@ -150,7 +151,7 @@ cron.schedule("*/15 9-19 * * *", () =>
 // als Erstes die frische Antwort-Liste bereit und gestern Genehmigtes geht sofort raus.
 cron.schedule("0 9 * * *", () =>
   einzeln("morgen", async () => {
-    if (getMode() !== "full") await generateInboxDrafts(10);
+    if (!config.agent.enabled && getMode() !== "full") await generateInboxDrafts(10);
     await sendApprovedDrafts(20);
   }),
 );
@@ -162,10 +163,16 @@ cron.schedule("*/10 9-19 * * *", () => einzeln("sendApproved", () => sendApprove
 // Follow-ups 1x täglich: für Kontakte, die seit >=4 Tagen nicht geantwortet haben.
 cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4, 5)));
 
-// AUTOPILOT (voll-autonome Gespräche) – läuft nur, wenn Modus 'full' aktiv ist (self-gated).
-cron.schedule(`*/${config.autopilot.intervalMinutes} * * * *`, () =>
-  einzeln("autopilot", () => runAutopilot()),
-);
+// AUTOPILOT (alt, voll-autonome Gespräche) – nur wenn Modus 'full' UND der neue Agent NICHT aktiv
+// ist. Sobald der Agent läuft, übernimmt er die Inbox-Gespräche (sonst würden beide antworten).
+cron.schedule(`*/${config.autopilot.intervalMinutes} * * * *`, () => {
+  if (!config.agent.enabled) einzeln("autopilot", () => runAutopilot());
+});
+
+// NEUER SALES-AGENT – nur wenn eingeschaltet (config.agent.enabled). Übernimmt dann die Inbox-
+// Gespräche über die intelligente Pipeline. Im Schatten-Modus legt er nur Entwürfe an (sendet nicht).
+if (config.agent.enabled)
+  cron.schedule(`*/${config.agent.intervalMinutes} * * * *`, () => einzeln("agent", () => agentTick()));
 
 // KOMMENTARE: 1x täglich (12:30) Nischen-Posts finden und Kommentar-ENTWÜRFE erzeugen.
 // Öffentlich → immer erst Freigabe (Telegram), nie autonom. Moderate Frequenz: Sichtbarkeit
