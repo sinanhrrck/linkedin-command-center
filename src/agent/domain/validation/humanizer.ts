@@ -23,6 +23,9 @@ export function humanize(text: string): string {
   // Listen-Bindestriche/Bullets in Fließtext auflösen
   t = t.replace(/(^|\n)\s*[-*•]\s+/g, "$1").trim();
 
+  // unnötige Gedankenstrich-Floskeln (" – "/" — "/" - ") als Satztrenner → Komma (wirkt weniger KI)
+  t = t.replace(/\s[–—-]\s/g, ", ");
+
   // Doppel-Leerzeilen und Mehrfach-Spaces glätten (eine lockere DM, kein Brief)
   t = t.replace(/\n{2,}/g, "\n").replace(/[ \t]{2,}/g, " ").trim();
 

@@ -29,8 +29,19 @@ const VERKAUFSSPRACHE = [
   "beste entscheidung", "nicht verpassen", "jetzt zugreifen",
 ];
 
-/** Frage nach Telefon/Nummer/Call im Text erkannt? */
-const NUMMER_FRAGE = /(deine|eine)\s+(telefon)?nummer|telefonnummer|handynummer|ruf(e|st)?\s+(dich|ich)|kurz\s+telefonier|per\s+telefon|am\s+telefon|schick.{0,12}nummer|whats\s?app/i;
+import type { Aktion } from "../state.js";
+
+/** Textmuster, an denen man eine (evtl. verbotene) Aktion in der Antwort erkennt. */
+// NUR das Erfragen der Nummer/des Kanals (NICHT das Anbieten eines Calls – das ist CALL_ANBIETEN).
+const NUMMER_FRAGE = /(deine|eine|die)\s+(telefon)?nummer|telefonnummer|handynummer|ruf(e|st)?\s+(dich|ich)|schick.{0,12}nummer|gib mir\s+.{0,12}nummer|whats\s?app/i;
+const CALL_ANBIETEN = /(lass uns\s+.{0,20}(telefonier|call|kurz sprechen|quatschen)|kurz\s+(telefonier|sprechen|quatschen)|hättest du\s+.{0,20}(zeit|lust).{0,20}(call|telefon|sprechen)|wollen wir\s+.{0,20}(telefonier|sprechen)|magst du\s+.{0,20}telefonier)/i;
+const TERMIN_MUSTER = /(passt (dir|es)\s+.{0,30}uhr|dann machen wir\s+.{0,20}(fest|aus)|termin\s+.{0,15}(fix|bestätig|steht)|wir sagen\s+.{0,15}uhr|(montag|dienstag|mittwoch|donnerstag|freitag|morgen)\s+um\s+\d)/i;
+const AKTIONS_MUSTER: Partial<Record<Aktion, RegExp>> = {
+  nummer_fragen: NUMMER_FRAGE,
+  call_anbieten: CALL_ANBIETEN,
+  termin_bestaetigen: TERMIN_MUSTER,
+  frage_stellen: /\?/,
+};
 
 export interface ValidatorKontext {
   stage: Stage;
@@ -65,11 +76,18 @@ export function validiereAntwort(reply: string, ctx: ValidatorKontext): Validato
   const verkauf = VERKAUFSSPRACHE.find((v) => low.includes(v));
   if (verkauf) gruende.push(`Verkaufssprache: "${verkauf}"`);
 
-  // 7) im aktuellen State verbotene Nummer-Frage.
-  if (STAGE_DEF[ctx.stage].verboten.includes("nummer_fragen") && NUMMER_FRAGE.test(text))
-    gruende.push(`fragt nach Nummer/Call – in Phase "${ctx.stage}" verboten (zu früh)`);
+  // 7) passt zum State? JEDE in dieser Phase verbotene Aktion wird im Text erkannt & blockiert
+  //    (zu früh nach Nummer fragen, Call anbieten, Termin bestätigen, oder in "verloren" nachfragen).
+  for (const aktion of STAGE_DEF[ctx.stage].verboten) {
+    const rx = AKTIONS_MUSTER[aktion];
+    if (rx && rx.test(text)) gruende.push(`Aktion "${aktion}" ist in Phase "${ctx.stage}" verboten (passt nicht zum State)`);
+  }
 
-  // 8) Wiederholung einer der letzten eigenen Nachrichten.
+  // 8) nicht jede Nachricht mit einer Frage beenden (deine Humanizer-Regel).
+  if (text.endsWith("?") && ctx.letzteEigene.length >= 2 && ctx.letzteEigene.slice(-2).every((m) => m.trim().endsWith("?")))
+    gruende.push("schon wieder mit einer Frage beenden – variieren, nicht jede Nachricht als Frage");
+
+  // 9) Wiederholung einer der letzten eigenen Nachrichten.
   if (istWiederholung(text, ctx.letzteEigene)) gruende.push("wiederholt (fast) eine frühere Nachricht");
 
   return { ok: gruende.length === 0, gruende };

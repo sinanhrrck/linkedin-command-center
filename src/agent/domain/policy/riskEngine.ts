@@ -25,6 +25,7 @@ export function darfNachNummerFragen(s: Scores, k: RiskKontext): RiskUrteil {
   if (s.trust < SCHWELLEN.callTrust) return { ok: false, grund: `Vertrauen zu niedrig (${s.trust}<${SCHWELLEN.callTrust})` };
   if (s.interest < SCHWELLEN.callInterest) return { ok: false, grund: `Interesse zu niedrig (${s.interest}<${SCHWELLEN.callInterest})` };
   if (s.callReadiness < SCHWELLEN.callReadiness) return { ok: false, grund: `CallReadiness zu niedrig (${s.callReadiness}<${SCHWELLEN.callReadiness})` };
+  if (k.nachrichtenGesamt < SCHWELLEN.minNachrichten) return { ok: false, grund: `zu wenige Nachrichten (${k.nachrichtenGesamt}<${SCHWELLEN.minNachrichten})` };
   if (k.antwortenDerPerson < SCHWELLEN.minAntworten) return { ok: false, grund: `zu wenige Antworten (${k.antwortenDerPerson}<${SCHWELLEN.minAntworten})` };
   if (k.offeneNachfragen > 0) return { ok: false, grund: "keine positive Dynamik (offene Nachfrage)" };
   return OK;

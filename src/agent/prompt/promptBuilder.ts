@@ -84,6 +84,7 @@ const STILREGELN = `# Stil (Pflicht)
 - kurze, lockere LinkedIn-DM in Umgangssprache, keine langen Absätze
 - höchstens EINE Frage – und nicht jede Nachricht mit einer Frage beenden
 - keine Marketing-/Verkaufsbegriffe, keine Aufzählungen, keine Bindestrich-Floskeln
+- gelegentlich (nicht immer) mal ein Emoji, sparsam und passend
 - klingt wie ein echter Mensch, nicht wie ChatGPT`;
 
 /** Setzt den vollständigen Antwort-Prompt aus den Blöcken zusammen. */

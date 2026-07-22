@@ -31,8 +31,8 @@ export interface StageDef {
   exit: string[];
 }
 
-/** Schwellen (0..100), ab denen ein Angebot/Call überhaupt erlaubt ist. */
-export const SCHWELLEN = { callTrust: 55, callInterest: 55, callReadiness: 60, minAntworten: 4 } as const;
+/** Schwellen, ab denen ein Angebot/Call überhaupt erlaubt ist (Scores 0..100, Zähler absolut). */
+export const SCHWELLEN = { callTrust: 55, callInterest: 55, callReadiness: 60, minAntworten: 4, minNachrichten: 6 } as const;
 
 export const STAGE_DEF: Record<Stage, StageDef> = {
   connection:  { ziel: "Vernetzung angenommen, Gespräch eröffnen.", erlaubt: ["frage_stellen", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"], exit: ["Person hat geantwortet → icebreaker/smalltalk"] },
