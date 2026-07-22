@@ -47,45 +47,86 @@ export function getAnalytics() {
     { stage: "geantwortet", label: "Geantwortet", count: gesamt.geantwortet },
   ];
 
-  // --- Kernquoten (mit Benchmark-Einordnung; Werte aus LinkedIn-Praxis) ---
-  const akz = governor.acceptanceRate(); // reife Kohorte letzte 7 Tage (Breaker-Wert)
-  const quoten = {
-    annahmeGesamt: quote(gesamt.angenommen, gesamt.eingeladen, 40, 25), // gut ≥40%, mittel ≥25%
-    annahme7d: {
-      n: Math.round(akz.rate * akz.sample),
-      von: akz.sample,
-      pct: Math.round(akz.rate * 100),
-      tier: (akz.sample < config.safety.acceptanceRateMinSample ? "none" : akz.rate >= 0.4 ? "good" : akz.rate >= 0.25 ? "mid" : "low") as Quote["tier"],
-    },
-    antwortGesamt: quote(gesamt.geantwortet, gesamt.angeschrieben, 30, 15), // gut ≥30%, mittel ≥15%
-    endToEnd: quote(gesamt.geantwortet, gesamt.eingeladen, 10, 5), // Hot-Lead je Einladung: gut ≥10%
-    ansprache: quote(gesamt.angeschrieben, gesamt.angenommen, 80, 50), // wie viele Angenommene wurden angeschrieben
+  /**
+   * KERNQUOTEN – ehrlich über REIFE KOHORTEN.
+   * Eine Einladung/Nachricht ist erst aussagekräftig, wenn sie lange genug her ist, um überhaupt
+   * beantwortet worden zu sein. Zählt man frische Einladungen mit (die noch gar nicht angenommen
+   * sein KÖNNEN), sinkt die Quote künstlich – die Zahl lügt dann nach unten. Deshalb: Nenner =
+   * nur Kontakte, deren Einladung/Nachricht mindestens REIFE_TAGE her ist. Ø-Annahme dauert ~1–2
+   * Tage, 7 Tage fangen also praktisch alle Spätzünder ab.
+   */
+  // Reife = so lange, wie eine Reaktion realistisch braucht. Gleiche Definition wie der Governor
+  // (acceptanceMaturityDays, Default 2) – Ø-Annahme dauert ~1–2 Tage, das fängt praktisch alle ab.
+  // 7 Tage wären zu streng (würfe fast alle Daten weg); 2 Tage halten die Stichprobe belastbar.
+  const REIFE_TAGE = config.safety.acceptanceMaturityDays ?? 2;
+  const MIN_N = config.safety.acceptanceRateMinSample ?? 20; // darunter statistisch nicht belastbar
+  const grenze = `-${REIFE_TAGE} days`;
+  const r = db
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN invited_at  <= datetime('now','localtime',?) THEN 1 ELSE 0 END) AS einReif,
+         SUM(CASE WHEN invited_at  <= datetime('now','localtime',?) AND accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS annReif,
+         SUM(CASE WHEN messaged_at <= datetime('now','localtime',?) THEN 1 ELSE 0 END) AS angReif,
+         SUM(CASE WHEN messaged_at <= datetime('now','localtime',?) AND replied_at IS NOT NULL THEN 1 ELSE 0 END) AS antReif
+       FROM contacts`,
+    )
+    .get(grenze, grenze, grenze, grenze) as Record<string, number>;
+
+  type RQuote = { pct: number | null; zaehler: number; nenner: number; genugDaten: boolean; gut: number; mittel: number; tier: Quote["tier"] };
+  const reifeQuote = (zaehler: number, nenner: number, gut: number, mittel: number): RQuote => {
+    const pct = nenner > 0 ? Math.round((zaehler / nenner) * 100) : null;
+    const genugDaten = nenner >= MIN_N;
+    const tier: Quote["tier"] = !genugDaten || pct === null ? "none" : pct >= gut ? "good" : pct >= mittel ? "mid" : "low";
+    return { pct, zaehler, nenner, genugDaten, gut, mittel, tier };
   };
 
-  // --- Tempo: Ø Tage zwischen den Stufen ---
+  const akz = governor.acceptanceRate(); // rollierende reife 7-Tage-Kohorte (Breaker-Wert) → als Trend
+  const quoten = {
+    reifeTage: REIFE_TAGE,
+    minN: MIN_N,
+    annahme: reifeQuote(r.annReif ?? 0, r.einReif ?? 0, 40, 25), // gut ≥40 %, mittel ≥25 %
+    antwort: reifeQuote(r.antReif ?? 0, r.angReif ?? 0, 30, 15), // gut ≥30 %, mittel ≥15 %
+    endToEnd: reifeQuote(r.antReif ?? 0, r.einReif ?? 0, 10, 5), // Hot-Lead je reifer Einladung
+    // Trend der letzten 7 Tage (Richtung, nicht Gesamtbild)
+    trend7d: {
+      pct: akz.sample > 0 ? Math.round(akz.rate * 100) : null,
+      n: akz.sample,
+      genugDaten: akz.sample >= (config.safety.acceptanceRateMinSample ?? 15),
+    },
+  };
+
+  // --- Tempo: Ø Tage zwischen den Stufen (mit Stichprobengröße n, damit man weiß, wie belastbar) ---
   const tempoRow = db
     .prepare(
       `SELECT
          ROUND(AVG(julianday(accepted_at)-julianday(invited_at)),1) AS bisAnnahme,
-         (SELECT ROUND(AVG(julianday(replied_at)-julianday(messaged_at)),1)
-            FROM contacts WHERE replied_at IS NOT NULL AND messaged_at IS NOT NULL) AS bisAntwort
+         SUM(CASE WHEN accepted_at IS NOT NULL AND invited_at IS NOT NULL THEN 1 ELSE 0 END) AS nAnnahme,
+         (SELECT ROUND(AVG(julianday(replied_at)-julianday(messaged_at)),1) FROM contacts WHERE replied_at IS NOT NULL AND messaged_at IS NOT NULL) AS bisAntwort,
+         (SELECT COUNT(*) FROM contacts WHERE replied_at IS NOT NULL AND messaged_at IS NOT NULL) AS nAntwort
        FROM contacts WHERE accepted_at IS NOT NULL AND invited_at IS NOT NULL`,
     )
-    .get() as { bisAnnahme: number | null; bisAntwort: number | null };
-  const tempo = { tageBisAnnahme: tempoRow.bisAnnahme, tageBisAntwort: tempoRow.bisAntwort };
+    .get() as { bisAnnahme: number | null; nAnnahme: number; bisAntwort: number | null; nAntwort: number };
+  const tempo = {
+    tageBisAnnahme: tempoRow.bisAnnahme, nAnnahme: tempoRow.nAnnahme ?? 0,
+    tageBisAntwort: tempoRow.bisAntwort, nAntwort: tempoRow.nAntwort ?? 0,
+  };
 
-  // --- Wochentag-Analyse: an welchem Tag eingeladene Anfragen am besten angenommen werden ---
+  // --- Wochentag-Analyse: nur REIFE Einladungen (≥REIFE_TAGE), sonst verzerren frische Tage.
+  // Prozent nur ab WD_MIN Einladungen zeigen – darunter ist ein Tageswert reines Rauschen. ---
+  const WD_MIN = 8;
   const wdRows = db
     .prepare(
-      `SELECT strftime('%w', invited_at) AS wd, COUNT(*) AS n,
+      `SELECT strftime('%w', invited_at, 'localtime') AS wd, COUNT(*) AS n,
               SUM(CASE WHEN accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS acc
-         FROM contacts WHERE invited_at IS NOT NULL GROUP BY wd`,
+         FROM contacts
+        WHERE invited_at IS NOT NULL AND invited_at <= datetime('now','localtime',?)
+        GROUP BY wd`,
     )
-    .all() as { wd: string; n: number; acc: number }[];
+    .all(grenze) as { wd: string; n: number; acc: number }[];
   const wochentage = Array.from({ length: 7 }, (_, i) => {
-    const r = wdRows.find((x) => Number(x.wd) === i);
-    const n = r?.n ?? 0, acc = r?.acc ?? 0;
-    return { tag: WD[i], eingeladen: n, angenommen: acc, pct: n > 0 ? Math.round((acc / n) * 100) : null };
+    const row = wdRows.find((x) => Number(x.wd) === i);
+    const n = row?.n ?? 0, acc = row?.acc ?? 0;
+    return { tag: WD[i], eingeladen: n, angenommen: acc, pct: n >= WD_MIN ? Math.round((acc / n) * 100) : null, genugDaten: n >= WD_MIN };
   });
 
   // --- Verlauf: pro Tag der letzten 42 Tage (eingeladen/angenommen/geantwortet nach jeweiligem _at) ---

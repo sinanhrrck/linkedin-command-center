@@ -380,6 +380,12 @@
   .an-tier.none { color: var(--ink-faint); background: var(--panel-2); }
   .an-qval { font-family: var(--display); font-size: 34px; font-weight: 700; letter-spacing: -.02em; margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
   .an-qsub { font-size: 11.5px; color: var(--ink-faint); line-height: 1.4; }
+  .an-nchip { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink-dim); background: var(--panel-2); padding: 2px 7px; border-radius: 20px; }
+  .an-bench { font-size: 11px; color: var(--ink-faint); margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line); }
+  .an-bench .an-b-good { color: #12855a; } .an-bench .an-b-mid { color: var(--amber); } .an-bench .an-b-low { color: #c23940; } .an-bench .an-b-none { color: var(--ink-faint); }
+  .an-tn { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--ink-faint); margin-left: 8px; }
+  .an-wd-row.weak { opacity: .5; }
+  .an-wd-row.weak .an-wd-pct { color: var(--ink-faint); font-family: var(--disp); font-size: 10.5px; font-weight: 500; }
   .an-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   .an-tempo-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); }
   .an-tempo-row:last-of-type { border-bottom: none; }
@@ -1708,20 +1714,30 @@ async function ladeAnalytics() {
 }
 
 function renderAnalytics(a) {
-  // --- Kernquoten-Karten ---
+  // --- Kernquoten-Karten: ehrlich über REIFE Kohorten (≥ reifeTage), mit Stichprobengröße ---
   const q = a.quoten;
+  const einord = (Q) => Q.pct == null ? "" : Q.pct >= Q.gut ? "über Ziel" : Q.pct >= Q.mittel ? "im Mittelfeld" : "unter Ziel";
   const karten = [
-    { t: "Annahmequote (gesamt)", q: q.annahmeGesamt, sub: `${q.annahmeGesamt.n} von ${q.annahmeGesamt.von} eingeladenen` },
-    { t: "Annahmequote (7 Tage)", q: q.annahme7d, sub: `${q.annahme7d.n} von ${q.annahme7d.von} reifen Einladungen · Breaker-Wert` },
-    { t: "Antwortquote", q: q.antwortGesamt, sub: `${q.antwortGesamt.n} von ${q.antwortGesamt.von} angeschrieben` },
-    { t: "Hot-Lead-Quote", q: q.endToEnd, sub: `${q.endToEnd.n} Antworten aus ${q.endToEnd.von} Einladungen (Ende-zu-Ende)` },
+    { t: "Annahmequote", Q: q.annahme, sub: `${q.annahme.zaehler} von ${q.annahme.nenner} Einladungen (≥ ${q.reifeTage} Tage alt)` },
+    { t: "Antwortquote", Q: q.antwort, sub: `${q.antwort.zaehler} von ${q.antwort.nenner} Nachrichten (≥ ${q.reifeTage} Tage alt)` },
+    { t: "Hot-Lead-Quote", Q: q.endToEnd, sub: `${q.endToEnd.zaehler} Antworten aus ${q.endToEnd.nenner} reifen Einladungen · Ende-zu-Ende` },
   ];
-  document.getElementById("an-quoten").innerHTML = karten.map(k => `
+  const cards = karten.map(k => `
     <div class="an-qcard">
-      <div class="an-qtop"><span class="an-qlab">${k.t}</span>${tierPill(k.q.tier)}</div>
-      <div class="an-qval" style="color:${TIER[k.q.tier]}">${k.q.tier === "none" ? "—" : k.q.pct + " %"}</div>
+      <div class="an-qtop"><span class="an-qlab">${k.t}</span><span class="an-nchip">n=${k.Q.nenner}</span></div>
+      <div class="an-qval" style="color:${k.Q.genugDaten ? TIER[k.Q.tier] : "var(--ink-faint)"}">${k.Q.genugDaten && k.Q.pct != null ? k.Q.pct + " %" : "—"}</div>
       <div class="an-qsub">${k.sub}</div>
+      <div class="an-bench">${k.Q.genugDaten ? `Ziel ≥ ${k.Q.gut}&#8239;% · <b class="an-b-${k.Q.tier}">${einord(k.Q)}</b>` : `zu wenig Daten – belastbar ab ${q.minN} reifen`}</div>
     </div>`).join("");
+  const tr = q.trend7d;
+  const trendCard = `
+    <div class="an-qcard">
+      <div class="an-qtop"><span class="an-qlab">Trend (7 Tage)</span><span class="an-nchip">n=${tr.n}</span></div>
+      <div class="an-qval" style="color:${tr.genugDaten ? "var(--green)" : "var(--ink-faint)"}">${tr.genugDaten && tr.pct != null ? tr.pct + " %" : "—"}</div>
+      <div class="an-qsub">Annahmequote der letzten 7 Tage</div>
+      <div class="an-bench">${tr.genugDaten ? "zeigt die aktuelle Richtung" : "zu wenig frische Daten"}</div>
+    </div>`;
+  document.getElementById("an-quoten").innerHTML = cards + trendCard;
 
   // --- Funnel (kumulativ) ---
   const FC = ["var(--ink-faint)", "var(--amber)", "var(--green)", "var(--cyan)", "#a78bfa"];
@@ -1739,25 +1755,25 @@ function renderAnalytics(a) {
     </div>`;
   }).join("");
 
-  // --- Tempo ---
+  // --- Tempo (mit Stichprobengröße n) ---
   const t = a.tempo;
   document.getElementById("an-tempo").innerHTML = `
-    <div class="an-tempo-row"><span>Einladung → Annahme</span><b>${t.tageBisAnnahme != null ? t.tageBisAnnahme + " Tage" : "—"}</b></div>
-    <div class="an-tempo-row"><span>Nachricht → Antwort</span><b>${t.tageBisAntwort != null ? t.tageBisAntwort + " Tage" : "—"}</b></div>
-    <p class="an-note">Ø-Werte. „Annahme" ist der Erkennungszeitpunkt des Bots (stündlich), daher grobe Näherung.</p>`;
+    <div class="an-tempo-row"><span>Einladung → Annahme</span><b>${t.tageBisAnnahme != null ? t.tageBisAnnahme + " Tage" : "—"}<small class="an-tn">n=${t.nAnnahme}</small></b></div>
+    <div class="an-tempo-row"><span>Nachricht → Antwort</span><b>${t.tageBisAntwort != null ? t.tageBisAntwort + " Tage" : "—"}<small class="an-tn">n=${t.nAntwort}</small></b></div>
+    <p class="an-note">Ø über abgeschlossene Übergänge. „Annahme" = Erkennungszeitpunkt des Bots (stündlich), daher grobe Näherung.</p>`;
 
-  // --- Beste Wochentage (Annahmequote je Einlade-Tag) ---
+  // --- Wochentage: nur reife Einladungen; Tage mit zu wenig Daten klar ausgewiesen ---
   const wd = a.wochentage.filter(d => d.eingeladen > 0);
-  const wdMax = Math.max(1, ...wd.map(d => d.pct || 0));
+  const wdMax = Math.max(1, ...wd.filter(d => d.genugDaten).map(d => d.pct || 0));
   document.getElementById("an-weekday").innerHTML = wd.length
     ? wd.map(d => `
-      <div class="an-wd-row">
+      <div class="an-wd-row${d.genugDaten ? "" : " weak"}">
         <span class="an-wd-tag">${d.tag}</span>
-        <div class="an-wd-track"><div class="an-wd-fill" style="width:${Math.round((d.pct || 0) / wdMax * 100)}%"></div></div>
-        <span class="an-wd-pct">${d.pct != null ? d.pct + "%" : "–"}</span>
+        <div class="an-wd-track"><div class="an-wd-fill" style="width:${d.genugDaten ? Math.round((d.pct || 0) / wdMax * 100) : 0}%"></div></div>
+        <span class="an-wd-pct">${d.genugDaten ? d.pct + "%" : "zu wenig"}</span>
         <span class="an-wd-n">${d.angenommen}/${d.eingeladen}</span>
       </div>`).join("")
-    : `<div class="src-empty">Noch keine Einladungen ausgewertet.</div>`;
+    : `<div class="src-empty">Noch keine reifen Einladungen ausgewertet.</div>`;
 
   // --- Verlauf (SVG-Balken pro Tag, 3 Serien gestapelt: geantwortet+angenommen+eingeladen) ---
   renderVerlauf(a.verlauf);
