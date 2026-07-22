@@ -58,7 +58,17 @@ export function stilHinweise(p: PsychProfile): string[] {
   if (p.responseLength > 0 && p.responseLength < 0.3) h.push("Sie schreibt knapp – halte dich sehr kurz.");
   if (p.financialKnowledge > 0.6) h.push("Sie kennt sich aus – sachlich, nicht erklärbärig.");
   if (p.openness > 0.6) h.push("Sie ist offen – du darfst etwas persönlicher werden.");
+  if (p.extroversion > 0.6) h.push("Sie ist gesprächig – Raum geben, nicht zutexten.");
   return h;
+}
+
+/** Woran die Person andockt – aus den Interessens-Dimensionen. Sagt dem Bot, WORÜBER er reden soll. */
+export function interessenFokus(p: PsychProfile): string[] {
+  const f: string[] = [];
+  if (p.moneyInterest > 0.45) f.push("finanzielle Absicherung/Geld");
+  if (p.investmentInterest > 0.45) f.push("Investieren/Vermögensaufbau");
+  if (p.careerInterest > 0.45) f.push("Karriere/Perspektive nach der Ausbildung");
+  return f;
 }
 
 const stateBlock = (stage: Stage): string => {
@@ -79,7 +89,9 @@ const STILREGELN = `# Stil (Pflicht)
 /** Setzt den vollständigen Antwort-Prompt aus den Blöcken zusammen. */
 export function buildReplyPrompt(inp: ReplyPromptInput): string {
   const hinweise = stilHinweise(inp.profile);
+  const fokus = interessenFokus(inp.profile);
   const mem = memoryAlsText(inp.memory);
+  const wenigInfo = inp.profile.beobachtungen < 2;
   return `${inp.persona}
 
 ${stateBlock(inp.stage)}
@@ -88,7 +100,10 @@ ${stateBlock(inp.stage)}
 ${mem || "Noch wenig – finde behutsam mehr heraus."}
 
 # Wie die Person tickt (nur beobachtet)
-${hinweise.length ? hinweise.join(" ") : "Noch neutral – tastend und freundlich bleiben."}
+${hinweise.length ? hinweise.join(" ") : "Noch neutral – tastend und freundlich bleiben."}${wenigInfo ? "\n(Erst wenige Signale – nicht überinterpretieren, mehr zuhören.)" : ""}
+
+# Woran die Person andockt
+${fokus.length ? "Zeigt Interesse an: " + fokus.join(", ") + ". Knüpf hier an, aber ohne zu pitchen." : "Noch kein klares Interessens-Signal – neugierig bleiben, herausfinden was sie bewegt."}
 
 ${STILREGELN}
 
