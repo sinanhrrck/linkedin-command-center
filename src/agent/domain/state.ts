@@ -25,25 +25,29 @@ export interface StageDef {
   ziel: string;
   erlaubt: Aktion[];
   verboten: Aktion[];
+  /** Exit-Bedingungen in Klartext: wann diese Stufe verlassen wird (deine Vorgabe). Speist
+   *  auch den Prompt Builder ("du bist hier fertig, wenn …"). Die harte Übergangslogik lebt
+   *  zusätzlich in nextStage(); hier steht das WAS, dort das WIE. */
+  exit: string[];
 }
 
 /** Schwellen (0..100), ab denen ein Angebot/Call überhaupt erlaubt ist. */
 export const SCHWELLEN = { callTrust: 55, callInterest: 55, callReadiness: 60, minAntworten: 4 } as const;
 
 export const STAGE_DEF: Record<Stage, StageDef> = {
-  connection:  { ziel: "Vernetzung angenommen, Gespräch eröffnen.", erlaubt: ["frage_stellen", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"] },
-  icebreaker:  { ziel: "Lockerer Einstieg, echtes Interesse zeigen.", erlaubt: ["frage_stellen", "spiegeln", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen"] },
-  smalltalk:   { ziel: "Beziehung aufwärmen, sympathisch bleiben.", erlaubt: ["frage_stellen", "spiegeln", "validieren"], verboten: ["call_anbieten", "nummer_fragen"] },
-  discovery:   { ziel: "Situation/Motivation/Ambitionen verstehen. NICHT verkaufen.", erlaubt: ["frage_stellen", "spiegeln", "validieren"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"] },
-  bedarf:      { ziel: "Bedarf/Problem herausarbeiten und vertiefen.", erlaubt: ["frage_stellen", "spiegeln", "validieren", "story_teilen"], verboten: ["nummer_fragen"] },
-  vertrauen:   { ziel: "Vertrauen festigen, eigene Erfahrung teilen.", erlaubt: ["story_teilen", "validieren", "spiegeln"], verboten: ["nummer_fragen"] },
-  validierung: { ziel: "Interesse konkret validieren (Micro-Commitment).", erlaubt: ["frage_stellen", "leichter_next_step", "validieren"], verboten: ["nummer_fragen"] },
-  einwand:     { ziel: "Einwand mit Fingerspitzengefühl auflösen. Nie diskutieren.", erlaubt: ["validieren", "spiegeln", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"] },
-  call_angebot:{ ziel: "Ein Telefonat sinnvoll erscheinen lassen (kein Pitch).", erlaubt: ["call_anbieten", "leichter_next_step", "validieren"], verboten: ["nummer_fragen"] },
-  nummer:      { ziel: "Nummer/Termin-Kanal erhalten – erst wenn die Tür offen ist.", erlaubt: ["nummer_fragen", "call_anbieten"], verboten: [] },
-  termin:      { ziel: "Termin fix bestätigen.", erlaubt: ["termin_bestaetigen"], verboten: [] },
-  abgeschlossen:{ ziel: "Termin steht – Übergabe an den Menschen.", erlaubt: ["eskalieren"], verboten: ["nummer_fragen"] },
-  verloren:    { ziel: "Abschied respektieren, Tür freundlich offen lassen.", erlaubt: ["abschied"], verboten: ["frage_stellen", "call_anbieten", "nummer_fragen"] },
+  connection:  { ziel: "Vernetzung angenommen, Gespräch eröffnen.", erlaubt: ["frage_stellen", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"], exit: ["Person hat geantwortet → icebreaker/smalltalk"] },
+  icebreaker:  { ziel: "Lockerer Einstieg, echtes Interesse zeigen.", erlaubt: ["frage_stellen", "spiegeln", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen"], exit: ["lockerer Austausch läuft → smalltalk/discovery"] },
+  smalltalk:   { ziel: "Beziehung aufwärmen, sympathisch bleiben.", erlaubt: ["frage_stellen", "spiegeln", "validieren"], verboten: ["call_anbieten", "nummer_fragen"], exit: ["genug Wärme/Rapport → discovery"] },
+  discovery:   { ziel: "Situation/Motivation/Ambitionen verstehen. NICHT verkaufen.", erlaubt: ["frage_stellen", "spiegeln", "validieren"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"], exit: ["Bedarf/Unsicherheit sichtbar → bedarf", "Skepsis/Preisfrage → einwand", "Absage → verloren"] },
+  bedarf:      { ziel: "Bedarf/Problem herausarbeiten und vertiefen.", erlaubt: ["frage_stellen", "spiegeln", "validieren", "story_teilen"], verboten: ["nummer_fragen"], exit: ["Bedarf klar & Vertrauen wächst → vertrauen", "Einwand → einwand"] },
+  vertrauen:   { ziel: "Vertrauen festigen, eigene Erfahrung teilen.", erlaubt: ["story_teilen", "validieren", "spiegeln"], verboten: ["nummer_fragen"], exit: ["Trust hoch → validierung", "Einwand → einwand"] },
+  validierung: { ziel: "Interesse konkret validieren (Micro-Commitment).", erlaubt: ["frage_stellen", "leichter_next_step", "validieren"], verboten: ["nummer_fragen"], exit: ["Scores über Schwelle (Trust≥55, Interest≥55, CallReadiness≥60) → call_angebot", "sonst zurück in vertrauen"] },
+  einwand:     { ziel: "Einwand mit Fingerspitzengefühl auflösen. Nie diskutieren.", erlaubt: ["validieren", "spiegeln", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"], exit: ["Einwand aufgelöst, positives Signal → vertrauen", "sonst zurück in discovery", "hartes Nein → verloren"] },
+  call_angebot:{ ziel: "Ein Telefonat sinnvoll erscheinen lassen (kein Pitch).", erlaubt: ["call_anbieten", "leichter_next_step", "validieren"], verboten: ["nummer_fragen"], exit: ["Person offen für Call → nummer", "zögert → zurück in vertrauen", "Einwand → einwand"] },
+  nummer:      { ziel: "Nummer/Termin-Kanal erhalten – erst wenn die Tür offen ist.", erlaubt: ["nummer_fragen", "call_anbieten"], verboten: [], exit: ["Nummer/Kontakt genannt → termin", "Zusage zum Termin → termin"] },
+  termin:      { ziel: "Termin fix bestätigen.", erlaubt: ["termin_bestaetigen"], verboten: [], exit: ["Termin bestätigt → abgeschlossen (Übergabe an Mensch)"] },
+  abgeschlossen:{ ziel: "Termin steht – Übergabe an den Menschen.", erlaubt: ["eskalieren"], verboten: ["nummer_fragen"], exit: ["terminal – Bot fasst den Thread nicht mehr an"] },
+  verloren:    { ziel: "Abschied respektieren, Tür freundlich offen lassen.", erlaubt: ["abschied"], verboten: ["frage_stellen", "call_anbieten", "nummer_fragen"], exit: ["terminal – kein Nachfassen gegen ein Nein"] },
 };
 
 const REIHENFOLGE: Stage[] = ["connection","icebreaker","smalltalk","discovery","bedarf","vertrauen","validierung","call_angebot","nummer","termin"];
