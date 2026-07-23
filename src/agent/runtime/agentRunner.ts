@@ -62,7 +62,7 @@ export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesende
     // ---- LIVE-MODUS ----
     if (e.typ === "senden") {
       try {
-        await sendThreadReply(t.threadUrl, e.text); // governor-gated + Sicherheits-Sende-Prüfung
+        await sendThreadReply(t.threadUrl, e.text, t.participant); // governor-gated + Sicherheits-Sende-Prüfung
         repo.saveMessage(t.threadUrl, "Sinan", e.text, e.intents);
         res.gesendet++;
         events.emit("agent:gesendet", { participant: t.participant, text: e.text, threadUrl: t.threadUrl, stage: e.conversation.stage });

@@ -52,7 +52,7 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
      */
     if (step && step.intent === "absage") {
       try {
-        if (step.reply) await sendThreadReply(t.threadUrl, step.reply);
+        if (step.reply) await sendThreadReply(t.threadUrl, step.reply, t.participant);
         markDeclinedByName(t.participant);
         db.prepare("UPDATE conversations SET status='closed', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
         console.info(`[autopilot] ${t.participant} hat abgewunken → Abschied gesendet, Thread zu.`);
@@ -106,7 +106,7 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
 
     // Routine (positiv/neutral) → KI-Antwort autonom senden, governor-gedrosselt
     try {
-      await sendThreadReply(t.threadUrl, step.reply);
+      await sendThreadReply(t.threadUrl, step.reply, t.participant);
       db.prepare("UPDATE conversations SET auto_count=auto_count+1, updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
       res.replied++;
 

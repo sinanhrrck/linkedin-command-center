@@ -138,17 +138,56 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
  * Schlägt einer fehl, wird geworfen. Der Aufrufer macht daraus einen Entwurf. Lieber kein
  * Versand als eine Falschmeldung.
  */
-async function tippenUndSenden(page: import("playwright").Page, text: string) {
+/**
+ * Findet das Konversations-FENSTER (Overlay-Bubble oder Haupt-Thread), das dem erwarteten
+ * Empfänger gehört – über den Namen im Fenster-Kopf. Gibt es NICHT genau EIN Fenster mit diesem
+ * Namen, wird null zurückgegeben (mehrdeutig/nicht gefunden → der Aufrufer bricht ab).
+ *
+ * WARUM (kritischer Vorfall 2026-07-23): `.last()` traf das falsche der mehreren offenen
+ * Chat-Fenster → eine Nachricht ("Hey Jack …") ging an die FALSCHE Person. Der Inhalts-Abgleich
+ * prüfte nur den Text, nie den Empfänger. Diese Zuordnung schließt die Lücke.
+ */
+async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger: string) {
+  const ziel = empfaenger.trim().toLowerCase();
+  if (!ziel) return null;
+  const fenster = page
+    .locator(`${SEL.bubble}, .scaffold-layout__detail, .msg-thread`)
+    .filter({ has: page.locator(SEL.messageBox) });
+  const anzahl = await fenster.count();
+  const treffer: import("playwright").Locator[] = [];
+  for (let i = 0; i < anzahl; i++) {
+    const f = fenster.nth(i);
+    // Kopf/Titel des Fensters lesen (dort steht der Name); Fallback: Anfang des Fenstertexts.
+    const kopf = (await f
+      .locator("[class*='bubble-header'], [class*='overlay-bubble-header'], [class*='entity-lockup__title'], h2, a[href*='/in/']")
+      .first()
+      .innerText()
+      .catch(() => "")) || (await f.innerText().catch(() => "")).slice(0, 150);
+    if (kopf.toLowerCase().includes(ziel)) treffer.push(f);
+  }
+  return treffer.length === 1 ? treffer[0] : null; // eindeutig ODER gar nicht (fail-safe)
+}
+
+async function tippenUndSenden(page: import("playwright").Page, text: string, empfaenger: string) {
   // SICHERHEITSSCHLEIFE 1: kein Kauderwelsch/Fehler-Text. Im Zweifel gar nicht senden.
   const plaus = istPlausibleNachricht(text);
   if (!plaus.ok) throw new UnsichereNachricht(plaus.grund ?? "unplausibel");
 
   await page.waitForSelector(SEL.messageBox, { timeout: 15000 });
 
-  // WICHTIG: LinkedIn stellt beim Laden ALLE zuletzt offenen Chat-Fenster wieder her – live
-  // gemessen 2026-07-16: nach dem zweiten Profil lagen 2 Eingabefelder auf der Seite. Das
-  // zuletzt geöffnete Fenster ist unseres, deshalb .last() – ALLE Prüfungen auf demselben Element.
-  const box = page.locator(SEL.messageBox).last();
+  /**
+   * SICHERHEITSSCHLEIFE 0 (NEU, wichtigste): EMPFÄNGER VERIFIZIEREN. Statt blind `.last()` das
+   * Fenster nehmen, das eindeutig dem erwarteten Namen gehört. Ohne eindeutige Zuordnung →
+   * ABBRUCH. Lieber eine Nachricht nicht senden als an die falsche Person.
+   */
+  if (!empfaenger || !empfaenger.trim())
+    throw new UnsichereNachricht("Kein Empfängername übergeben – Versand abgebrochen (Schutz vor Fehlleitung)");
+  const fenster = await fensterFuerEmpfaenger(page, empfaenger);
+  if (!fenster)
+    throw new UnsichereNachricht(`Empfänger-Fenster für "${empfaenger}" nicht eindeutig gefunden – Versand abgebrochen (Schutz vor Fehlleitung)`);
+
+  // AB HIER ist alles auf GENAU DIESES Fenster gescopt (Eingabefeld, Senden-Knopf, Prüfungen).
+  const box = fenster.locator(SEL.messageBox).last();
 
   const sollNorm = normText(text);
 
@@ -176,7 +215,7 @@ async function tippenUndSenden(page: import("playwright").Page, text: string) {
   }
   if (!feldOk) throw new UnsichereNachricht("Feld-Inhalt stimmte nach 2 Versuchen nicht mit dem Entwurf überein");
 
-  const sendBtn = page.locator(SEL.sendButton).last();
+  const sendBtn = fenster.locator(SEL.sendButton).last();
   if (await sendBtn.isEnabled().catch(() => false)) await sendBtn.click();
   else await page.keyboard.press("Enter"); // Fallback
 
@@ -199,9 +238,7 @@ async function tippenUndSenden(page: import("playwright").Page, text: string) {
    * Doppel-Nachrichten-Bug. Feld-leer zählt, die Verlaufssuche ist nur noch Zusatz-Info.
    */
   const marker = normText(text).slice(0, 40);
-  const bubble = page.locator(SEL.bubble).last();
-  const suchraum = (await bubble.count()) ? bubble : page.locator("body");
-  const imVerlauf = await suchraum.locator(SEL.threadItem).filter({ hasText: marker }).count().catch(() => 0);
+  const imVerlauf = await fenster.locator(SEL.threadItem).filter({ hasText: marker }).count().catch(() => 0);
   if (imVerlauf === 0)
     console.warn("[send] Feld geleert (= gesendet), aber Text nicht im Verlauf gefunden – Verlaufsprüfung unsicher, kein erneuter Versand.");
 }
@@ -223,8 +260,12 @@ export async function sendMessage(profileUrl: string, text: string) {
       await msgBtn.evaluate((el) => (el as HTMLElement).click()); // JS-Klick: React-Handler, kein Nav
       await humanDelay(1000, 2500);
 
-      // Wirft, wenn der Versand nicht nachweisbar ist – dann NICHT als gesendet markieren.
-      await tippenUndSenden(page, text);
+      // Erwarteten Empfänger aus dem CRM holen → Empfänger-Verifikation im tippenUndSenden.
+      const c = db.prepare("SELECT full_name FROM contacts WHERE profile_url = ?").get(profileUrl) as { full_name?: string } | undefined;
+      const empfaenger = (c?.full_name ?? "").trim();
+
+      // Wirft, wenn der Versand nicht nachweisbar ODER der Empfänger nicht eindeutig ist.
+      await tippenUndSenden(page, text, empfaenger);
 
       db.prepare(
         "UPDATE contacts SET status='messaged', messaged_at=datetime('now') WHERE profile_url = ?",
@@ -244,13 +285,13 @@ export async function sendMessage(profileUrl: string, text: string) {
  * Navigiert direkt zur Thread-URL und sendet über `tippenUndSenden` – inklusive Beweis,
  * dass die Nachricht wirklich im Verlauf steht. Governor-gated.
  */
-export async function sendThreadReply(threadUrl: string, text: string) {
+export async function sendThreadReply(threadUrl: string, text: string, empfaenger: string) {
   return governor.execute("message", threadUrl, async () => {
     const page = await newPage();
     await page.goto(threadUrl, { waitUntil: "domcontentloaded" });
     if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
     await humanDelay(1200, 2500);
-    await tippenUndSenden(page, text);
+    await tippenUndSenden(page, text, empfaenger); // Empfänger-Verifikation: nie ans falsche Fenster
   });
 }
 

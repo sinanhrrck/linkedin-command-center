@@ -324,7 +324,7 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
     // 'first'/'followup' = Nachricht an einen Kontakt (über Profil), 'message' = Thread-Antwort.
     if (d.kind === "comment") await sendComment(d.thread_url, d.draft); // öffentlicher Kommentar
     else if (d.kind === "first" || d.kind === "followup") await sendMessage(d.thread_url, d.draft);
-    else await sendThreadReply(d.thread_url, d.draft);
+    else await sendThreadReply(d.thread_url, d.draft, d.participant ?? "");
     db.prepare("UPDATE drafts SET status='sent', sent_at=datetime('now') WHERE id=?").run(id);
     return { ok: true };
   } catch (e) {
