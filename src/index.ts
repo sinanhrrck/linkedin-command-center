@@ -148,6 +148,16 @@ cron.schedule("*/2 * * * *", () =>
   }),
 );
 
+// REICHWEITE JETZT auf Knopfdruck: Dashboard setzt "comment_now"=1 → der Loop liked + erzeugt
+// Kommentar-Entwürfe sofort (statt bis werktags 12:30 zu warten). Browser gehört der Engine.
+cron.schedule("*/2 * * * *", () =>
+  einzeln("comment", async () => {
+    if (getState("comment_now") !== "1") return;
+    setState("comment_now", "");
+    await commentTick(3);
+  }),
+);
+
 // DM-Entwürfe 2x täglich generieren (rein lesend + Gemini, SENDET NICHT).
 // Neue Entwürfe erscheinen als 'pending' im Dashboard zur Freigabe.
 /**

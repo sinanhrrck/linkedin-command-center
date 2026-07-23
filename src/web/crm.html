@@ -213,6 +213,10 @@
   .modeseg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; padding: 3px; gap: 2px; margin-top: 12px; }
   .modeseg-4 { display: flex; width: 100%; flex-wrap: wrap; }
   .modeseg-4 button { flex: 1 1 42%; }
+  .content-ctl { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .content-btn { flex: 1 1 100%; font-family: var(--disp); font-weight: 600; font-size: 12.5px; border: 1px solid var(--line); border-radius: 11px; padding: 9px 14px; color: var(--ink); background: var(--panel); cursor: pointer; transition: all .14s var(--ease); text-align: left; }
+  .content-btn:hover { border-color: var(--accent); color: var(--accent); box-shadow: var(--shadow-sm); }
+  .content-btn:disabled { opacity: .6; cursor: default; }
   .modeseg button { flex: 1; font-family: var(--disp); font-weight: 600; font-size: 12px; border: none; background: transparent; color: var(--ink-dim); padding: 7px 12px; border-radius: 8px; transition: all .15s var(--ease); }
   .modeseg button.active { background: var(--panel); color: var(--accent); box-shadow: var(--shadow-sm); }
   .mode-note { font-size: 11.5px; color: var(--ink-dim); margin-top: 9px; line-height: 1.45; min-height: 15px; }
@@ -662,6 +666,12 @@
         <button data-focus="beides">Beides</button>
       </div>
       <div class="mode-note" id="focus-note"></div>
+      <p class="eyebrow" style="margin-top:16px">Reichweite · Content</p>
+      <div class="content-ctl">
+        <button id="write-post-btn" class="content-btn">✍️ Beitrag schreiben lassen</button>
+        <button id="reichweite-btn" class="content-btn">👍 Jetzt liken &amp; kommentieren</button>
+      </div>
+      <div class="mode-note" id="content-note">Der Bot schreibt dir einen Beitrag (unten zur Freigabe) und sammelt Reichweite über Likes &amp; Kommentar-Entwürfe.</div>
       <div class="act-tally" id="act-tally"></div>
     </div>
     <div class="act-right">
@@ -978,6 +988,7 @@ function render() {
   renderActivity();
   renderAutomatik();
   renderNotaus();
+  renderContent();
   renderFocus();
   renderLive();
   renderTermine();
@@ -1285,6 +1296,36 @@ function renderAutomatik() {
   document.getElementById("automatik-note").innerHTML = s ? s.note : "";
 }
 
+/**
+ * Content & Reichweite: sichtbare Knöpfe, damit man den Bot direkt einen Beitrag schreiben lässt
+ * (server-seitig, kein Browser nötig → geht auch ohne laufende Engine) und Likes/Kommentare sofort
+ * anstößt (braucht die Engine – Flag, das der Loop abholt).
+ */
+function renderContent() {
+  const note = document.getElementById("content-note");
+  const wp = document.getElementById("write-post-btn");
+  wp.onclick = async () => {
+    wp.disabled = true; const alt = wp.textContent; wp.textContent = "schreibt …";
+    try {
+      const r = await (await fetch("/api/generate-post", { method: "POST" })).json();
+      if (r && r.ok) { note.innerHTML = "<b>Beitrag geschrieben ✓</b> – unten bei den Post-Entwürfen prüfen &amp; freigeben."; load(); }
+      else note.textContent = (r && r.error) || "Konnte gerade keinen Beitrag schreiben.";
+    } catch { note.textContent = "Fehler beim Schreiben."; }
+    wp.textContent = alt; wp.disabled = false;
+  };
+  const rw = document.getElementById("reichweite-btn");
+  rw.onclick = async () => {
+    const engineAn = !!(state.engine && state.engine.alive);
+    if (!engineAn) { note.textContent = "Dafür muss der Bot laufen – erst oben auf Bot starten."; return; }
+    rw.disabled = true; const alt = rw.textContent; rw.textContent = "wird angestoßen …";
+    try {
+      await fetch("/api/reichweite", { method: "POST" });
+      note.innerHTML = "<b>Reichweite angestoßen ✓</b> – der Bot liked & schreibt Kommentar-Entwürfe (in den nächsten Minuten).";
+    } catch { note.textContent = "Fehler."; }
+    rw.textContent = alt; rw.disabled = false;
+  };
+}
+
 /** Not-Aus: ein Klick blockiert JEDEN Versand (ohne die Engine zu stoppen). */
 function renderNotaus() {
   const btn = document.getElementById("notaus-btn");
@@ -1482,7 +1523,7 @@ function renderPosts() {
       <div class="dc-top"><span class="dc-name">Eigener Post</span><span class="dc-kind">Beitrag</span></div>
       <textarea spellcheck="false">${esc(p.body)}</textarea>
       <div class="dc-foot">
-        <button class="dc-send" title="Über die offizielle LinkedIn-API veröffentlichen">Freigeben & posten</button>
+        <button class="dc-send" title="Der Bot veröffentlicht den Beitrag (über deine Session oder API)">Freigeben & posten</button>
         <span class="draft-saved">gespeichert ✓</span>
         <button class="dc-discard">Verwerfen</button>
       </div>

@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
 import { getAnalytics } from "../modules/analytics.js";
 import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft } from "../modules/drafts.js";
-import { getPost, approvePost, discardPost } from "../modules/content.js";
+import { getPost, approvePost, discardPost, generatePostDraft } from "../modules/content.js";
 import { addSource, deleteSource } from "../modules/leadFeed.js";
 import { deleteContact } from "../modules/crm.js";
 import { db, getState, setState, setMode, setFocus, getFocus, setAgentMode, type Mode, type Focus, type AgentMode } from "../db/index.js";
@@ -384,6 +384,26 @@ const server = createServer((req, res) => {
         res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
       }
     });
+    return;
+  }
+
+  // BEITRAG SCHREIBEN LASSEN: sofort einen neuen Post-Entwurf erzeugen (nur Gemini + DB, KEIN
+  // Browser nötig → der Dashboard-Prozess kann das direkt). Erscheint danach in "Post-Entwürfe".
+  if (url.pathname === "/api/generate-post" && req.method === "POST") {
+    generatePostDraft()
+      .then((id) => {
+        if (id) res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, id }));
+        else res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "Konnte gerade keinen Beitrag schreiben (evtl. KI-Tageslimit erreicht)." }));
+      })
+      .catch((e) => res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String(e) })));
+    return;
+  }
+
+  // REICHWEITE JETZT: Liken + Kommentar-Entwürfe sofort anstoßen. Braucht den Browser der Engine →
+  // wir setzen nur ein Flag, das der Loop beim nächsten Tick (alle 2 Min) abholt (wie feed_now).
+  if (url.pathname === "/api/reichweite" && req.method === "POST") {
+    setState("comment_now", "1");
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, running: engineAlive() }));
     return;
   }
 
