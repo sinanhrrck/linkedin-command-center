@@ -91,6 +91,28 @@
   .nav-item.active { background: rgba(22,133,90,.10); color: var(--accent); font-weight: 600; }
   .nav-item.active svg { opacity: 1; }
   .nav-item .n-badge { margin-left: auto; font-family: var(--mono); font-size: 10px; font-weight: 600; background: rgba(22,133,90,.12); color: var(--accent); padding: 2px 7px; border-radius: 20px; min-width: 20px; text-align: center; }
+  /* ---------- Modul-Navigation (Lead Engine / Sales Agent / Brand Engine) ---------- */
+  .nav-group { display: flex; flex-direction: column; }
+  .nav-grp {
+    display: flex; align-items: center; gap: 11px; width: 100%; padding: 10px 12px; border: none; background: transparent;
+    border-radius: 11px; color: var(--ink-dim); font-family: inherit; font-size: 13.5px; font-weight: 500;
+    cursor: pointer; text-align: left; transition: all .16s var(--ease);
+  }
+  .nav-grp svg { width: 17px; height: 17px; stroke-width: 1.9; flex: 0 0 17px; opacity: .8; }
+  .nav-grp:hover { background: var(--panel-2); color: var(--ink); }
+  .nav-grp .chev { margin-left: auto; font-size: 15px; line-height: 1; color: var(--ink-faint); transition: transform .18s var(--ease); }
+  .nav-group.open > .nav-grp { color: var(--ink); font-weight: 600; }
+  .nav-group.open > .nav-grp .chev { transform: rotate(90deg); }
+  /* Ein Modul mit aktiver Unterseite bleibt sichtbar markiert, auch eingeklappt. */
+  .nav-group.has-active > .nav-grp { color: var(--accent); }
+  .nav-group.has-active > .nav-grp svg { opacity: 1; }
+  .nav-grp .n-badge { margin-left: 6px; font-family: var(--mono); font-size: 10px; font-weight: 600; background: rgba(22,133,90,.12); color: var(--accent); padding: 2px 7px; border-radius: 20px; min-width: 20px; text-align: center; }
+  /* Ausklappen: max-height reicht hier völlig (max. 4 Unterpunkte) und ist robust. */
+  .nav-sub { display: flex; flex-direction: column; gap: 1px; overflow: hidden; max-height: 0; transition: max-height .22s var(--ease); }
+  .nav-group.open > .nav-sub { max-height: 240px; }
+  .nav-item.sub { padding: 8px 12px 8px 40px; font-size: 13px; position: relative; }
+  .nav-item.sub::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 1px; background: var(--line); }
+  .nav-item.sub.active::before { background: var(--accent); }
   .side-foot { margin-top: auto; padding: 14px; border-radius: 14px; background: var(--hero-grad); color: #fff; }
   .side-foot .sf-lab { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
   .side-foot .sf-val { font-family: var(--display); font-weight: 700; font-size: 15px; margin-top: 3px; display: flex; align-items: center; gap: 7px; }
@@ -385,6 +407,31 @@
   .score-pill.mid { color: var(--amber); background: rgba(192,122,18,.12); }
   .score-pill.low { color: var(--ink-faint); background: var(--panel-2); }
 
+  /* ---------- Safety-Transparenz im Governor-Panel ---------- */
+  .safe-box { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .safe-box > summary { list-style: none; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 6px; }
+  .safe-box > summary::-webkit-details-marker { display: none; }
+  .safe-box > summary::after { content: "›"; margin-left: auto; font-size: 15px; color: var(--ink-faint); transition: transform .16s var(--ease); }
+  .safe-box[open] > summary::after { transform: rotate(90deg); }
+  .safe-list { margin: 12px 0 0; padding-left: 16px; font-size: 11.5px; color: var(--ink-dim); line-height: 1.55; }
+  .safe-list li { margin-bottom: 6px; }
+  .safe-list b { color: var(--ink); }
+  /* ---------- Modul-Views (Lead Engine / Sales Agent / Brand Engine) ---------- */
+  .mod-panel { padding: 22px 24px; margin-bottom: 22px; }
+  .mod-lead { font-size: 13.5px; color: var(--ink-dim); line-height: 1.55; margin: 0 0 14px; }
+  .mod-soon { padding: 22px 24px; margin-bottom: 22px; border-style: dashed; }
+  .mod-soon b { font-family: var(--disp); font-size: 14px; color: var(--ink); display: block; margin-bottom: 6px; }
+  .mod-soon p { font-size: 13px; color: var(--ink-dim); line-height: 1.55; margin: 0; }
+  .mod-tag { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--amber); background: rgba(192,122,18,.12); padding: 2px 8px; border-radius: 20px; }
+  .ls-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .ls-form label { display: flex; flex-direction: column; gap: 5px; flex: 1 1 220px; font-size: 11.5px; font-weight: 600; color: var(--ink-dim); }
+  .ls-form input { font-family: inherit; font-size: 13px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); }
+  .ls-form input:focus { outline: none; border-color: var(--accent); }
+  .mod-row { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .mod-row:last-child { border-bottom: none; }
+  .mod-row .mr-name { font-weight: 600; color: var(--ink); }
+  .mod-row .mr-meta { margin-left: auto; font-size: 11.5px; color: var(--ink-faint); }
+  .mod-empty { padding: 18px 4px; color: var(--ink-faint); font-size: 13px; }
   /* ---------- Analytics-Seite ---------- */
   .an-guide { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); margin: 4px 0 22px; overflow: hidden; }
   .an-guide > summary { list-style: none; cursor: pointer; padding: 16px 22px; font-family: var(--disp); font-weight: 600; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
@@ -517,25 +564,54 @@
       <span class="bt"><b>NextLead</b><span>LinkedIn Autopilot</span></span>
     </div>
     <div class="side-lab">Menü</div>
+    <!--
+      NAVIGATION = 3 Module (Lead Engine / Sales Agent / Brand Engine), jedes einklappbar.
+      Die Reihenfolge bildet den echten Funnel ab: Leads finden → Gespräch führen → Marke aufbauen.
+      Übersicht + Live-Ansicht stehen bewusst ausserhalb der Module (globale Sichten).
+    -->
     <nav class="side-nav">
-      <a class="nav-item active" data-view="dashboard">
+      <a class="nav-item" data-view="dashboard">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
         Übersicht</a>
-      <a class="nav-item" data-view="analytics">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19V5M4 19h16M8 16v-5M13 16V8M18 16v-8"/></svg>
-        Analytics</a>
-      <a class="nav-item" data-view="drafts">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 5h16M4 12h16M4 19h10"/></svg>
-        Entwürfe<span class="n-badge" id="nav-drafts">0</span></a>
-      <a class="nav-item" data-view="hotleads">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3s5 3.5 5 9a5 5 0 0 1-10 0c0-2 1-3.5 1-3.5S8 12 10 12c0-3 2-6 2-9z"/></svg>
-        Hot Leads<span class="n-badge" id="nav-hot">0</span></a>
-      <a class="nav-item" data-view="pipeline">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg>
-        Pipeline</a>
-      <a class="nav-item" data-view="contacts">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M17 11l2 2 3.5-3.5"/></svg>
-        Kontakte</a>
+
+      <div class="nav-group" data-group="lead">
+        <button class="nav-grp" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+          <span>Lead Engine</span><span class="chev">›</span>
+        </button>
+        <div class="nav-sub">
+          <a class="nav-item sub" data-view="leadsuche">Leadsuche</a>
+          <a class="nav-item sub" data-view="vernetzen">Vernetzen</a>
+          <a class="nav-item sub" data-view="contacts">CRM</a>
+        </div>
+      </div>
+
+      <div class="nav-group" data-group="sales">
+        <button class="nav-grp" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5 8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"/></svg>
+          <span>Sales Agent</span><span class="chev">›</span><span class="n-badge" id="nav-drafts">0</span>
+        </button>
+        <div class="nav-sub">
+          <a class="nav-item sub" data-view="erstnachricht">Erstnachricht<span class="n-badge" id="nav-first">0</span></a>
+          <a class="nav-item sub" data-view="gespraech">Gespräch<span class="n-badge" id="nav-hot">0</span></a>
+          <a class="nav-item sub" data-view="followups">Follow-Ups<span class="n-badge" id="nav-fup">0</span></a>
+          <a class="nav-item sub" data-view="termine">Terminübergabe</a>
+        </div>
+      </div>
+
+      <div class="nav-group" data-group="brand">
+        <button class="nav-grp" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 11l18-7-7 18-2.5-8.5z"/></svg>
+          <span>Brand Engine</span><span class="chev">›</span>
+        </button>
+        <div class="nav-sub">
+          <a class="nav-item sub" data-view="beitraege">Beiträge<span class="n-badge" id="nav-posts">0</span></a>
+          <a class="nav-item sub" data-view="kommentare">Kommentare<span class="n-badge" id="nav-comments">0</span></a>
+          <a class="nav-item sub" data-view="likes">Likes</a>
+          <a class="nav-item sub" data-view="analytics">Analytics</a>
+        </div>
+      </div>
+
       <a class="nav-item" data-view="live">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
         Live-Ansicht</a>
@@ -634,8 +710,13 @@
       <div class="status-reason" id="st-reason"></div>
       <div class="status-meta">
         <div>Arbeitszeit<b id="st-hours">—</b></div>
-        <div>Warm-up<b id="st-warm">—</b></div>
+        <div id="st-warm-wrap">Warm-up<b id="st-warm">—</b></div>
         <div>Woche<b id="st-week">—</b></div>
+      </div>
+      <!-- Geschäftszeiten-Schalter: prominent im Safety Governor, wo der Nutzer ihn erwartet. -->
+      <div class="switch-row" id="gov-zeitfenster">
+        <div class="switch-txt"><b>Geschäftszeiten</b><span id="zeitfenster-sub">—</span></div>
+        <button id="zeitfenster-btn" class="toggle" role="switch" aria-label="Geschäftszeiten umschalten"><span class="knob"></span></button>
       </div>
       <div class="gov-divider"></div>
       <div class="meter-block">
@@ -647,6 +728,21 @@
         <div class="meter-foot"><span>Vernetzungen heute</span><span id="m-warmlab">Warm-up —</span></div>
       </div>
       <div class="meter-foot" style="font-size:11px;margin-top:12px" id="acts">—</div>
+      <!-- SAFETY-TRANSPARENZ: die grösste Sorge der Nutzer ist eine LinkedIn-Sperre.
+           Deshalb offenlegen, was konkret dagegen getan wird – nachprüfbar, nicht als Werbespruch. -->
+      <details class="safe-box">
+        <summary>🛡 Warum das sicher ist</summary>
+        <ul class="safe-list">
+          <li><b>Menschliches Tempo:</b> zufällige Pausen von 20–75 s zwischen Aktionen — kein Maschinen-Takt.</li>
+          <li><b>Harte Limits:</b> max. 100 Anfragen pro Woche, dazu ein Tageslimit. Darüber geht nichts, egal was du einstellst.</li>
+          <li><b>Sanfter Start:</b> die ersten Tage laufen bewusst mit gedrosseltem Limit (Warm-up).</li>
+          <li><b>Automatische Reißleine:</b> nehmen zu wenige deine Anfragen an, stoppt der Bot von allein.</li>
+          <li><b>Geschäftszeiten:</b> aktiv nur in deinem Zeitfenster; Direktnachrichten nur werktags.</li>
+          <li><b>Deine echte Sitzung:</b> läuft lokal in deinem Browser-Profil — keine fremden Server, keine geteilten IPs.</li>
+          <li><b>Kein Doppelversand:</b> dieselbe Nachricht geht nie zweimal an dieselbe Person; vor jedem Senden wird der Empfänger geprüft.</li>
+          <li><b>Not-Aus:</b> ein Klick stoppt jeden Versand sofort.</li>
+        </ul>
+      </details>
     </div>
 
     <div class="panel accept-card">
@@ -681,10 +777,6 @@
         <button data-level="agent_live">Agent · Live</button>
       </div>
       <div class="mode-note" id="automatik-note"></div>
-      <div class="switch-row">
-        <div class="switch-txt"><b>Zeitfenster</b><span id="zeitfenster-sub">nur 9–22 Uhr senden</span></div>
-        <button id="zeitfenster-btn" class="toggle" role="switch" aria-label="Zeitfenster umschalten"><span class="knob"></span></button>
-      </div>
       <p class="eyebrow" style="margin-top:16px">Fokus · wen suchen wir?</p>
       <div class="modeseg" id="focusseg">
         <button data-focus="azubi">Azubis</button>
@@ -872,6 +964,93 @@
     <div class="panel" id="an-projektion"></div>
   </div><!-- /#view-analytics -->
 
+  <!-- ========== MODUL: LEAD ENGINE ========== -->
+  <div id="view-leadsuche" class="view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Zielgruppen-Suche</p><span class="sec-hint">funktioniert ohne Sales Navigator</span></div>
+    <div class="panel mod-panel">
+      <p class="mod-lead">Beschreibe deine Zielgruppe — der Bot baut daraus die LinkedIn-Suche und sammelt passende Profile ein.</p>
+      <div class="ls-form">
+        <label>Wen suchst du?<input id="ls-was" placeholder="z. B. Bankkaufmann Auszubildende" /></label>
+        <label>Wo?<input id="ls-ort" placeholder="z. B. Nordrhein-Westfalen" /></label>
+        <button id="ls-go" class="content-btn" style="flex:0 0 auto">🔎 Suche anlegen &amp; sammeln</button>
+      </div>
+      <div class="mode-note" id="ls-note">Die Suche wird als dauerhafte Quelle gespeichert — der Bot holt daraus regelmäßig Nachschub.</div>
+    </div>
+
+    <div class="section-head"><p class="sec-title">Deine Such-Quellen</p><span class="sec-hint">Warteschlange · liefern laufend neue Profile</span></div>
+    <div class="panel" id="ls-quellen"></div>
+
+    <div class="section-head"><p class="sec-title">Bestehendes Netzwerk reaktivieren</p><span class="sec-hint">geplant</span></div>
+    <div class="panel mod-soon">
+      <b>Alte Kontakte wieder ansprechen</b>
+      <p>Der Bot geht dein bestehendes Netzwerk durch und findet Kontakte, mit denen du länger nicht geschrieben hast — und schlägt dir einen natürlichen Wiedereinstieg vor. <span class="mod-tag">Kommt als Nächstes</span></p>
+    </div>
+  </div>
+
+  <div id="view-vernetzen" class="view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Vernetzungs-Status</p><span class="sec-hint">heute &amp; diese Woche</span></div>
+    <div class="an-quoten" id="vn-kpi"></div>
+    <div class="section-head"><p class="sec-title">Warten auf Annahme</p><span class="sec-hint">Anfrage raus, noch nicht bestätigt</span></div>
+    <div class="panel" id="vn-liste"></div>
+  </div>
+
+  <!-- ========== MODUL: SALES AGENT ========== -->
+  <div id="view-erstnachricht" class="view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Erstnachrichten</p><span class="sec-hint">gehen raus, sobald du freigibst</span></div>
+    <div class="drafts-grid" id="mod-first"></div>
+    <div class="view-empty" id="mod-first-empty">Gerade keine Erstnachrichten offen. Sobald jemand deine Anfrage annimmt, legt der Bot hier einen Entwurf ab.</div>
+  </div>
+
+  <div id="view-gespraech" class="view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Laufende Gespräche</p><span class="sec-hint">Antworten deiner Leads</span></div>
+    <div class="drafts-grid" id="mod-chat"></div>
+    <div class="view-empty" id="mod-chat-empty">Noch keine laufenden Gespräche. Sobald jemand antwortet, erscheint der Chat hier.</div>
+    <div class="section-head"><p class="sec-title">Direkt schreiben &amp; Kampagnen</p><span class="sec-hint">geplant</span></div>
+    <div class="panel mod-soon">
+      <b>Echtzeit-Chat im Postfach</b>
+      <p>Direkt aus dem Dashboard mit deinen Leads schreiben — ohne Umweg über LinkedIn. Dazu Ordner/Filter, um mehrere Kampagnen und Strategien sauber zu trennen. <span class="mod-tag">In Arbeit</span></p>
+    </div>
+  </div>
+
+  <div id="view-followups" class="view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Follow-Ups</p><span class="sec-hint">wer sich länger nicht gemeldet hat</span></div>
+    <div class="drafts-grid" id="mod-fup"></div>
+    <div class="view-empty" id="mod-fup-empty">Keine Follow-Ups offen. Der Bot legt sie an, wenn jemand nach ein paar Tagen nicht geantwortet hat.</div>
+  </div>
+
+  <div id="view-termine" class="view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Bereit für dich</p><span class="sec-hint">Termin zugesagt oder Nummer geteilt</span></div>
+    <div class="hot-grid" id="mod-termine"></div>
+    <div class="view-empty" id="mod-termine-empty">Noch keine Übergaben. Sobald ein Lead einen Termin zusagt oder seine Nummer teilt, landet er hier — und du bekommst eine Meldung.</div>
+  </div>
+
+  <!-- ========== MODUL: BRAND ENGINE ========== -->
+  <div id="view-beitraege" class="view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Beiträge</p><span class="sec-hint">der Bot schreibt, du gibst frei</span></div>
+    <div class="panel mod-panel">
+      <p class="mod-lead">Lass dir einen Beitrag in deinem Ton schreiben — du kannst ihn danach frei bearbeiten und veröffentlichen.</p>
+      <button id="bt-write" class="content-btn" style="max-width:280px">✍️ Beitrag schreiben lassen</button>
+      <div class="mode-note" id="bt-note">Beiträge gehen nie ohne deine Freigabe raus.</div>
+    </div>
+    <div class="drafts-grid" id="mod-posts"></div>
+    <div class="view-empty" id="mod-posts-empty">Noch keine Beitrags-Entwürfe. Klick oben auf „Beitrag schreiben lassen".</div>
+  </div>
+
+  <div id="view-kommentare" class="view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Kommentar-Entwürfe</p><span class="sec-hint">öffentlich — immer erst deine Freigabe</span></div>
+    <div class="panel mod-panel">
+      <button id="km-now" class="content-btn" style="max-width:300px">👍 Jetzt liken &amp; kommentieren</button>
+      <div class="mode-note" id="km-note">Der Bot sucht Beiträge in deiner Nische, liked sie und schlägt dir Kommentare vor.</div>
+    </div>
+    <div class="drafts-grid" id="mod-comments"></div>
+    <div class="view-empty" id="mod-comments-empty">Noch keine Kommentar-Entwürfe. Stoß sie oben an oder warte auf den nächsten Durchlauf.</div>
+  </div>
+
+  <div id="view-likes" class="view" style="display:none">
+    <div class="section-head" style="margin-top:8px"><p class="sec-title">Vergebene Likes</p><span class="sec-hint">Sichtbarkeit im Hintergrund</span></div>
+    <div class="panel" id="mod-likes"></div>
+  </div>
+
   <div class="foot" id="foot">—</div>
   </main>
 </div>
@@ -926,9 +1105,18 @@ function render() {
   const hoursEl = document.getElementById("st-hours");
   hoursEl.textContent = g.withinWorkingHours ? "offen" : "geschlossen";
   hoursEl.className = g.withinWorkingHours ? "ok" : "warn";
+  /**
+   * WARM-UP nur zeigen, SOLANGE es läuft. Ist die Phase durch (100%), verschwinden alle
+   * Warm-up-Anzeigen komplett aus dem UI – eine dauerhafte "fertig"-Meldung ist reiner
+   * Platzverbrauch ohne Information. Gilt für die Kennzahl oben UND das Meter-Label unten.
+   */
   const warmDone = g.warmup.elapsedDays >= g.warmup.days;
-  document.getElementById("st-warm").textContent = warmDone ? "fertig" : `Tag ${Math.floor(g.warmup.elapsedDays)+1}/${g.warmup.days}`;
-  document.getElementById("st-warm").className = warmDone ? "ok" : "warn";
+  document.getElementById("st-warm-wrap").style.display = warmDone ? "none" : "";
+  if (!warmDone) {
+    const w = document.getElementById("st-warm");
+    w.textContent = `Tag ${Math.floor(g.warmup.elapsedDays) + 1}/${g.warmup.days}`;
+    w.className = "warn";
+  }
   const weekEl = document.getElementById("st-week");
   weekEl.textContent = `${g.connect.week}/${g.connect.weeklyCap}`;
   weekEl.className = g.connect.week >= g.connect.weeklyCap ? "bad" : "";
@@ -982,7 +1170,10 @@ function render() {
   fill.style.width = pct + "%";
   if (g.connect.today >= g.connect.effectiveCap) fill.style.background = "var(--amber)";
   document.getElementById("m-tick").style.left = Math.min(100, g.connect.effectiveCap / g.connect.hardCap * 100) + "%";
-  document.getElementById("m-warmlab").textContent = "Warm-up " + Math.round(g.warmup.factor * 100) + "%";
+  // Warm-up-Label ebenfalls nur während der Phase (siehe oben).
+  const wl = document.getElementById("m-warmlab");
+  wl.style.display = warmDone ? "none" : "";
+  if (!warmDone) wl.textContent = "Warm-up " + Math.round(g.warmup.factor * 100) + "%";
 
   // Activity
   const acts = state.actionsToday;
@@ -1035,6 +1226,7 @@ function render() {
   renderZeitfenster();
   renderNotaus();
   renderContent();
+  renderModulViews(aktuelleView); // aktive Modul-Seite mit frischen Daten nachziehen
   renderFocus();
   renderLive();
   renderTermine();
@@ -1089,10 +1281,15 @@ function renderActivity() {
     sfDot.style.boxShadow = "0 0 0 3px " + (e.alive ? "rgba(125,224,172,.25)" : "rgba(245,163,167,.22)");
     sfSub.textContent = e.alive ? "Läuft und füttert die Pipeline." : "Gestoppt. Oben wieder starten.";
   }
-  // Sidebar-Badges: offene Entwürfe (DM + Post) und Hot Leads.
-  const nd = document.getElementById("nav-drafts"), nh = document.getElementById("nav-hot");
-  if (nd) { const n = (state.drafts || []).length + (state.postDrafts || []).length; nd.textContent = n; nd.style.display = n ? "" : "none"; }
-  if (nh) { const n = (state.hotLeads || []).length; nh.textContent = n; nh.style.display = n ? "" : "none"; }
+  // Sidebar-Badges: pro Modul-Unterpunkt, damit man ohne Klick sieht, wo etwas liegt.
+  const badge = (id, n) => { const el = document.getElementById(id); if (el) { el.textContent = n; el.style.display = n ? "" : "none"; } };
+  const dms = state.drafts || [];
+  badge("nav-drafts", dms.length + (state.postDrafts || []).length);
+  badge("nav-hot", (state.hotLeads || []).length);
+  badge("nav-first", dms.filter(d => d.kind === "first").length);
+  badge("nav-fup", dms.filter(d => d.kind === "followup").length);
+  badge("nav-comments", dms.filter(d => d.kind === "comment").length);
+  badge("nav-posts", (state.postDrafts || []).length);
   const sources = state.leadSources || [];
   const activeSrc = sources.filter(s => s.active).length;
   const srcLine = activeSrc
@@ -1498,19 +1695,14 @@ function renderHotLeads() {
   }).join("");
 }
 
-function renderDrafts() {
-  const list = state.drafts || [];
-  const sec = document.getElementById("drafts-section");
-  const grid = document.getElementById("drafts-grid");
-  document.getElementById("drafts-count").textContent = list.length ? list.length : "";
-  if (!list.length) { sec.style.display = "none"; return; }
-  // Nicht neu aufbauen, während jemand gerade in einem Feld tippt (sonst gehen Edits verloren).
-  if (grid.contains(document.activeElement)) return;
-  sec.style.display = "block";
-  // Genehmigt-wartend-Hinweis in der Kopfzeile
-  const appr = state.approvedCount || 0;
-  const apprEl = document.getElementById("drafts-approved");
-  if (apprEl) apprEl.textContent = appr ? `${appr} genehmigt · warten auf Versand` : "";
+/**
+ * Zeichnet Entwurfskarten in EIN beliebiges Grid (inkl. Speichern/Genehmigen/Ablehnen).
+ * Ausgelagert, damit die Modul-Views (Erstnachricht / Gespräch / Follow-Ups / Kommentare)
+ * exakt dieselben Karten mit derselben Logik nutzen – gefiltert nach kind.
+ */
+function zeichneEntwuerfe(list, grid) {
+  if (!grid) return;
+  if (grid.contains(document.activeElement)) return; // nicht neu bauen, während getippt wird
   grid.innerHTML = list.map(d => `
     <div class="draft-card" data-id="${d.id}">
       <div class="dc-top">
@@ -1558,6 +1750,22 @@ function renderDrafts() {
       setTimeout(load, 1000);
     });
   });
+}
+
+function renderDrafts() {
+  const list = state.drafts || [];
+  const sec = document.getElementById("drafts-section");
+  const grid = document.getElementById("drafts-grid");
+  document.getElementById("drafts-count").textContent = list.length ? list.length : "";
+  if (!list.length) { sec.style.display = "none"; return; }
+  // Nicht neu aufbauen, während jemand gerade in einem Feld tippt (sonst gehen Edits verloren).
+  if (grid.contains(document.activeElement)) return;
+  sec.style.display = "block";
+  // Genehmigt-wartend-Hinweis in der Kopfzeile
+  const appr = state.approvedCount || 0;
+  const apprEl = document.getElementById("drafts-approved");
+  if (apprEl) apprEl.textContent = appr ? `${appr} genehmigt · warten auf Versand` : "";
+  zeichneEntwuerfe(list, grid);
   // SAMMEL-GENEHMIGUNG: genehmigt alle offenen DM-Entwürfe auf einmal. Der Bot arbeitet sie
   // danach nacheinander ab (governor-gedrosselt). Ein Klick statt zehn.
   const bulk = document.getElementById("bulk-send");
@@ -1575,14 +1783,13 @@ function renderDrafts() {
  * die offizielle LinkedIn-API (index.ts-Cron) – deshalb "Freigeben & posten" statt "Senden".
  * Kein Empfaenger, kein Verlaufs-Beleg: der Post erscheint einfach im Feed.
  */
-function renderPosts() {
-  const list = state.postDrafts || [];
-  const sec = document.getElementById("posts-section");
-  const grid = document.getElementById("posts-grid");
-  document.getElementById("posts-count").textContent = list.length ? list.length : "";
-  if (!list.length) { sec.style.display = "none"; return; }
+/**
+ * Beitrags-Karten in EIN beliebiges Grid zeichnen (Speichern/Freigeben/Verwerfen).
+ * Ausgelagert, damit die Brand-Engine-View dieselben Karten nutzt wie das Dashboard.
+ */
+function zeichnePosts(list, grid) {
+  if (!grid) return;
   if (grid.contains(document.activeElement)) return;
-  sec.style.display = "block";
   grid.innerHTML = list.map(p => `
     <div class="draft-card" data-id="${p.id}">
       <div class="dc-top"><span class="dc-name">Eigener Post</span><span class="dc-kind">Beitrag</span></div>
@@ -1615,6 +1822,17 @@ function renderPosts() {
       await postPost({ id, action: "discard" }); load();
     });
   });
+}
+
+function renderPosts() {
+  const list = state.postDrafts || [];
+  const sec = document.getElementById("posts-section");
+  const grid = document.getElementById("posts-grid");
+  document.getElementById("posts-count").textContent = list.length ? list.length : "";
+  if (!list.length) { sec.style.display = "none"; return; }
+  if (grid.contains(document.activeElement)) return;
+  sec.style.display = "block";
+  zeichnePosts(list, grid);
 }
 
 async function postPost(payload) {
@@ -1788,30 +2006,178 @@ tick(); setInterval(tick, 1000);
 load(); setInterval(load, 20000);
 
 // Sidebar-Navigation: jede Seite ist ein eigener Reiter. Router zeigt genau eine View.
+/**
+ * MODUL-VIEWS. Rendert nur die gerade sichtbare Seite (spart Arbeit bei jedem load()).
+ * Die Sales-Agent-Seiten sind gefilterte Sichten auf dieselben Entwürfe (kind), damit es
+ * genau EINE Wahrheit gibt – kein zweiter Datenpfad, keine Abweichungen.
+ */
+function renderModulViews(v) {
+  const drafts = state.drafts || [];
+  const grid = (id, list, emptyId) => {
+    const g = document.getElementById(id), e = document.getElementById(emptyId);
+    if (e) e.style.display = list.length ? "none" : "";
+    if (g) { g.style.display = list.length ? "" : "none"; zeichneEntwuerfe(list, g); }
+  };
+  const zeile = (name, meta) => `<div class="mod-row"><span class="mr-name">${esc(name)}</span><span class="mr-meta">${esc(meta)}</span></div>`;
+  const leer = (t) => `<div class="mod-empty">${t}</div>`;
+
+  if (v === "erstnachricht") grid("mod-first", drafts.filter(d => d.kind === "first"), "mod-first-empty");
+  if (v === "gespraech")     grid("mod-chat", drafts.filter(d => d.kind === "message"), "mod-chat-empty");
+  if (v === "followups")     grid("mod-fup", drafts.filter(d => d.kind === "followup"), "mod-fup-empty");
+  if (v === "kommentare")    grid("mod-comments", drafts.filter(d => d.kind === "comment"), "mod-comments-empty");
+
+  if (v === "beitraege") {
+    const list = state.postDrafts || [];
+    document.getElementById("mod-posts-empty").style.display = list.length ? "none" : "";
+    zeichnePosts(list, document.getElementById("mod-posts"));
+  }
+
+  if (v === "termine") {
+    const list = state.bookedLeads || [];
+    document.getElementById("mod-termine-empty").style.display = list.length ? "none" : "";
+    document.getElementById("mod-termine").innerHTML = list.map(t => `
+      <div class="hot-card">
+        <div class="hc-name">${esc(t.full_name || t.participant || "—")}</div>
+        <div class="hc-head">${esc(t.headline || t.kontakt || "Termin/Kontakt übergeben")}</div>
+      </div>`).join("");
+  }
+
+  if (v === "likes") {
+    const list = (state.recentActions || []).filter(a => a.type === "like");
+    document.getElementById("mod-likes").innerHTML = list.length
+      ? list.map(a => zeile(a.name || a.target || "Beitrag", new Date(a.created_at).toLocaleString("de-DE"))).join("")
+      : leer("Noch keine Likes vergeben. Der Bot liked Beiträge in deiner Nische, wenn er Reichweite sammelt.");
+  }
+
+  if (v === "vernetzen") {
+    const g = state.governor || {}, c = g.connect || {};
+    const kpi = (lab, val, hint) => `<div class="an-qcard"><div class="an-qtop"><span class="an-qlab">${lab}</span></div>
+      <div style="font-family:var(--disp);font-size:30px;font-weight:600;margin:6px 0 2px">${val}</div>
+      <div style="font-size:11.5px;color:var(--ink-faint)">${hint}</div></div>`;
+    document.getElementById("vn-kpi").innerHTML =
+      kpi("Heute", `${c.today ?? 0}<small style="font-size:15px;color:var(--ink-faint)"> / ${c.effectiveCap ?? "—"}</small>`, "Anfragen heute · Tageslimit") +
+      kpi("Diese Woche", `${c.week ?? 0}<small style="font-size:15px;color:var(--ink-faint)"> / ${c.weeklyCap ?? "—"}</small>`, "Wochenlimit schützt dein Konto") +
+      kpi("Status", g.notAus ? "Not-Aus" : (g.paused ? "Pausiert" : (g.withinWorkingHours ? "Aktiv" : "Ruhe")), g.zeitfenster === false ? "rund um die Uhr" : "innerhalb der Geschäftszeiten");
+    const wartend = (state.contacts || []).filter(k => k.status === "invited");
+    document.getElementById("vn-liste").innerHTML = wartend.length
+      ? wartend.slice(0, 40).map(k => zeile(k.full_name || "—", k.headline || "wartet auf Annahme")).join("")
+      : leer("Gerade wartet niemand auf eine Annahme.");
+  }
+
+  if (v === "leadsuche") {
+    const q = state.leadSources || [];
+    document.getElementById("ls-quellen").innerHTML = q.length
+      ? q.map(s => zeile(s.label || s.search_url, `Seite ${s.cursor_page ?? 0} · ${s.last_added ?? 0} zuletzt`)).join("")
+      : leer("Noch keine Quelle angelegt. Trag oben deine Zielgruppe ein — der Bot legt die Suche an und sammelt daraus laufend Profile.");
+  }
+}
+
 const VIEWS = {
-  dashboard: { title: "Übersicht",     sub: "Das Wichtigste auf einen Blick" },
-  analytics: { title: "Analytics",     sub: "Zahlen für Strategie & Skalierung" },
-  drafts:    { title: "Entwürfe",      sub: "Nachrichten genehmigen oder ablehnen" },
-  hotleads:  { title: "Hot Leads",     sub: "Kontakte, die geantwortet haben" },
-  pipeline:  { title: "Pipeline",      sub: "Funnel & Lead-Nachschub" },
-  contacts:  { title: "Kontakte",      sub: "Alle Leads in deinem CRM" },
-  live:      { title: "Live-Ansicht",  sub: "Der Browser des Bots in Echtzeit" },
+  dashboard: { title: "Übersicht",       sub: "Das Wichtigste auf einen Blick" },
+  live:      { title: "Live-Ansicht",    sub: "Der Browser des Bots in Echtzeit" },
+  // ---- Modul: Lead Engine ----
+  leadsuche: { title: "Leadsuche",       sub: "Zielgruppen finden & Profile sammeln", grp: "lead" },
+  vernetzen: { title: "Vernetzen",       sub: "Anfragen, Annahmen & Tageslimit",     grp: "lead" },
+  contacts:  { title: "CRM",             sub: "Alle Leads in deinem CRM",            grp: "lead" },
+  // ---- Modul: Sales Agent ----
+  erstnachricht: { title: "Erstnachricht", sub: "Der erste Kontakt nach der Annahme", grp: "sales" },
+  gespraech:     { title: "Gespräch",      sub: "Laufende Chats mit deinen Leads",    grp: "sales" },
+  followups:     { title: "Follow-Ups",    sub: "Freundlich nachfassen",              grp: "sales" },
+  termine:       { title: "Terminübergabe",sub: "Leads, die bereit für dich sind",    grp: "sales" },
+  // ---- Modul: Brand Engine ----
+  beitraege: { title: "Beiträge",        sub: "Schreiben, planen, veröffentlichen",  grp: "brand" },
+  kommentare:{ title: "Kommentare",      sub: "Reichweite durch echte Beiträge",     grp: "brand" },
+  likes:     { title: "Likes",           sub: "Sichtbarkeit im Hintergrund",         grp: "brand" },
+  analytics: { title: "Analytics",       sub: "Zahlen für Strategie & Skalierung",   grp: "brand" },
+  // ---- Weiterhin erreichbar (Sprungziele vom Dashboard) ----
+  drafts:    { title: "Entwürfe",        sub: "Nachrichten genehmigen oder ablehnen" },
+  hotleads:  { title: "Hot Leads",       sub: "Kontakte, die geantwortet haben" },
+  pipeline:  { title: "Pipeline",        sub: "Funnel & Lead-Nachschub" },
 };
+let aktuelleView = "dashboard"; // damit load()/render() weiss, welche Modul-Seite neu zu zeichnen ist
 function zeigeAnsicht(view) {
   const v = VIEWS[view] ? view : "dashboard";
+  aktuelleView = v;
   document.querySelectorAll(".view").forEach(el => { el.style.display = "none"; });
   const target = document.getElementById("view-" + v);
   if (target) target.style.display = "";
   document.getElementById("page-title").textContent = VIEWS[v].title;
   document.getElementById("page-sub").textContent = VIEWS[v].sub;
   document.querySelectorAll(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === v));
+  // Modul der aktiven Seite aufklappen + markieren; andere Module zuklappen.
+  const grp = VIEWS[v].grp || null;
+  document.querySelectorAll(".nav-group").forEach(g => {
+    const treffer = g.dataset.group === grp;
+    g.classList.toggle("has-active", treffer);
+    if (treffer) g.classList.add("open");
+  });
   window.scrollTo(0, 0);
   if (v === "analytics") ladeAnalytics();
+  renderModulViews(v);
   updateEmptyStates();
 }
 document.querySelectorAll(".nav-item").forEach(item => {
   item.addEventListener("click", (ev) => { ev.preventDefault(); zeigeAnsicht(item.dataset.view); });
 });
+// Modul-Kopf klickt auf/zu (reines UI, wechselt die Seite nicht).
+document.querySelectorAll(".nav-grp").forEach(btn => {
+  btn.addEventListener("click", () => btn.parentElement.classList.toggle("open"));
+});
+
+/**
+ * Aktions-Knöpfe der Modul-Seiten. Einmalig verdrahtet (nicht bei jedem render()),
+ * damit keine doppelten Listener entstehen.
+ */
+(function wireModulButtons() {
+  // --- Lead Engine: Zielgruppen-Suche anlegen ---
+  const go = document.getElementById("ls-go");
+  if (go) go.addEventListener("click", async () => {
+    const was = document.getElementById("ls-was").value.trim();
+    const ort = document.getElementById("ls-ort").value.trim();
+    const note = document.getElementById("ls-note");
+    if (!was) { note.textContent = "Bitte trag ein, wen du suchst."; return; }
+    // Ohne Sales Navigator: normale Personensuche über Stichworte – funktioniert für jeden.
+    const begriff = [was, ort].filter(Boolean).join(" ");
+    const url = "https://www.linkedin.com/search/results/people/?keywords=" + encodeURIComponent(begriff);
+    go.disabled = true; const alt = go.textContent; go.textContent = "wird angelegt …";
+    try {
+      const r = await (await fetch("/api/source", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add", url, label: begriff }) })).json();
+      note.innerHTML = r && r.ok
+        ? "<b>Quelle angelegt ✓</b> – der Bot sammelt jetzt Profile daraus." + (r.running ? "" : " (Starte den Bot, damit er loslegt.)")
+        : ((r && r.error) || "Konnte die Quelle nicht anlegen.");
+      load();
+    } catch { note.textContent = "Fehler beim Anlegen."; }
+    go.textContent = alt; go.disabled = false;
+  });
+
+  // --- Brand Engine: Beitrag schreiben lassen ---
+  const bt = document.getElementById("bt-write");
+  if (bt) bt.addEventListener("click", async () => {
+    const note = document.getElementById("bt-note");
+    bt.disabled = true; const alt = bt.textContent; bt.textContent = "schreibt …";
+    try {
+      const r = await (await fetch("/api/generate-post", { method: "POST" })).json();
+      note.innerHTML = r && r.ok ? "<b>Beitrag geschrieben ✓</b> – unten prüfen &amp; freigeben."
+                                 : ((r && r.error) || "Konnte gerade keinen Beitrag schreiben.");
+      load();
+    } catch { note.textContent = "Fehler beim Schreiben."; }
+    bt.textContent = alt; bt.disabled = false;
+  });
+
+  // --- Brand Engine: Reichweite jetzt (liken + kommentieren) ---
+  const km = document.getElementById("km-now");
+  if (km) km.addEventListener("click", async () => {
+    const note = document.getElementById("km-note");
+    if (!(state.engine && state.engine.alive)) { note.textContent = "Dafür muss der Bot laufen – starte ihn auf der Übersicht."; return; }
+    km.disabled = true; const alt = km.textContent; km.textContent = "wird angestoßen …";
+    try {
+      await fetch("/api/reichweite", { method: "POST" });
+      note.innerHTML = "<b>Angestoßen ✓</b> – der Bot liked &amp; schreibt Kommentar-Entwürfe (in den nächsten Minuten).";
+    } catch { note.textContent = "Fehler."; }
+    km.textContent = alt; km.disabled = false;
+  });
+})();
 
 // Leerzustände der Reiter-Seiten (zeigen einen Hinweis statt einer leeren Seite).
 function updateEmptyStates() {
