@@ -399,6 +399,14 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // NETZWERK REAKTIVIEREN: bestehende Verbindungen einlesen + Entwürfe für alle erzeugen, die
+  // nie angeschrieben wurden. Braucht den Browser der Engine → Flag setzen, Loop holt es ab.
+  if (url.pathname === "/api/netzwerk" && req.method === "POST") {
+    setState("netzwerk_now", "1");
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, running: engineAlive() }));
+    return;
+  }
+
   // REICHWEITE JETZT: Liken + Kommentar-Entwürfe sofort anstoßen. Braucht den Browser der Engine →
   // wir setzen nur ein Flag, das der Loop beim nächsten Tick (alle 2 Min) abholt (wie feed_now).
   if (url.pathname === "/api/reichweite" && req.method === "POST") {

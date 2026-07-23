@@ -115,13 +115,47 @@ Die "strategie" ist Sinans Handlungsempfehlung in Klartext, nicht die Wiederholu
 }
 
 /** Freundliches Follow-up, wenn die Erstnachricht unbeantwortet blieb. */
-export async function followupMessage(c: Contact): Promise<string> {
-  const prompt = `Schreibe ein kurzes, freundliches Follow-up auf LinkedIn (2-3 Sätze).
+/**
+ * Follow-up in ZWEI Stufen. Mehr als zwei gibt es bewusst nicht – wer zweimal nicht antwortet,
+ * will nicht, und weiteres Nachfassen wäre Belästigung (und ein Report-Risiko).
+ *  - Stufe 1 (nach ~4 Tagen): locker anknüpfen, leicht zu beantworten machen.
+ *  - Stufe 2 (nach weiteren ~7 Tagen): kurz, ehrlich, mit sauberem Schlussstrich –
+ *    das nimmt Druck raus und bringt erfahrungsgemäß die meisten späten Antworten.
+ */
+export async function followupMessage(c: Contact, stufe: 1 | 2 = 1): Promise<string> {
+  const stufenText =
+    stufe === 1
+      ? `Kontext: Sinan hatte der Person schon geschrieben, aber noch keine Antwort bekommen.
+KEIN Druck, kein Vorwurf, locker und sympathisch. Knüpf leicht an das Thema an (Ausbildung/
+Weg nach der Ausbildung) und mach es der Person leicht zu antworten.`
+      : `Kontext: Sinan hat der Person schon zweimal geschrieben, ohne Antwort. Das ist die LETZTE
+Nachricht. Schreib SEHR kurz (1-2 Sätze), ehrlich und ohne jeden Druck: Sinan meldet sich nicht
+mehr, die Tür bleibt aber offen, falls sie sich später doch melden möchte. Kein Vorwurf, kein
+"schade", kein Verkaufsversuch. Sympathischer Schlussstrich.`;
+  const prompt = `Schreibe ein kurzes, freundliches Follow-up auf LinkedIn (${stufe === 1 ? "2-3 Sätze" : "1-2 Sätze"}).
 ${promptKontext()}
 ${personZeile(c)}
-Kontext: Sinan hatte der Person schon geschrieben, aber noch keine Antwort bekommen.
-KEIN Druck, kein Vorwurf, locker und sympathisch. Knüpf leicht an das Thema an (Ausbildung/
-Weg nach der Ausbildung) und mach es der Person leicht zu antworten. Gib NUR die Nachricht aus,
-ohne Anführungszeichen.`;
+${stufenText}
+Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
+  return saubern(await generateText(prompt));
+}
+
+/**
+ * REAKTIVIERUNG bestehender Kontakte: Leute, mit denen Sinan schon vernetzt ist, aber nie
+ * geschrieben hat. Heikelster Ton im ganzen Tool – die Person kennt ihn evtl. kaum noch,
+ * deshalb: kein "wir sind ja vernetzt"-Vorwand, kein Pitch, echter Anlass.
+ */
+export async function reaktivierungMessage(c: Contact): Promise<string> {
+  const prompt = `Schreibe eine kurze, natürliche LinkedIn-Nachricht (2-3 Sätze).
+${promptKontext()}
+${personZeile(c)}
+Kontext: Ihr seid auf LinkedIn schon vernetzt, aber ihr habt nie miteinander geschrieben.
+Die Person erinnert sich vielleicht nicht mehr an die Vernetzung.
+Regeln:
+- Sprich das offen und locker an ("wir sind hier schon länger vernetzt, aber nie ins Gespräch gekommen").
+- KEIN Verkauf, KEIN Angebot, KEINE Beratung anbieten.
+- Echtes Interesse an ihrem Weg zeigen und EINE leichte, offene Frage stellen.
+- Kein Sie-Siezen, wenn der Stil sonst duzt. Kein Floskel-Deutsch.
+Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
   return saubern(await generateText(prompt));
 }

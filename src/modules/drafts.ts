@@ -75,14 +75,27 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
  * Follow-up-Entwurf für einen angeschriebenen, aber unbeantworteten Kontakt (kind='followup').
  * Idempotent: nur ein offener Follow-up-Entwurf pro Kontakt.
  */
+/**
+ * Follow-up-Entwurf. ZWEISTUFIG: `stufe` ergibt sich aus der Zahl bereits erzeugter Follow-ups.
+ * Nach der 2. Stufe wird NIE wieder nachgefasst (siehe followupMessage) – wer zweimal nicht
+ * antwortet, will nicht. Das schützt Sinans Ruf und das Konto (Report-Risiko).
+ */
 export async function createFollowupDraft(c: Contact): Promise<boolean> {
-  const exists = db
-    .prepare(
-      "SELECT 1 FROM drafts WHERE thread_url=? AND kind='followup' AND status IN ('pending','approved','sent') LIMIT 1",
-    )
+  const bisher = (
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM drafts WHERE thread_url=? AND kind='followup' AND status IN ('pending','approved','sent')",
+      )
+      .get(c.profile_url) as { n: number }
+  ).n;
+  if (bisher >= 2) return false; // Schluss nach zwei Versuchen
+  // Ein offener (noch nicht gesendeter) Follow-up blockiert einen weiteren – erst abarbeiten.
+  const offen = db
+    .prepare("SELECT 1 FROM drafts WHERE thread_url=? AND kind='followup' AND status IN ('pending','approved') LIMIT 1")
     .get(c.profile_url);
-  if (exists) return false;
-  const text = await followupMessage(c).catch(() => "");
+  if (offen) return false;
+  const stufe: 1 | 2 = bisher === 0 ? 1 : 2;
+  const text = await followupMessage(c, stufe).catch(() => "");
   if (!text) return false;
   const chkF = istPlausibleNachricht(text);
   if (!chkF.ok) {
@@ -321,9 +334,11 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
     }
   }
   try {
-    // 'first'/'followup' = Nachricht an einen Kontakt (über Profil), 'message' = Thread-Antwort.
+    // 'first'/'followup'/'reaktivierung' = Nachricht an einen Kontakt (über Profil),
+    // 'message' = Antwort im bestehenden Thread, 'comment' = öffentlicher Kommentar.
     if (d.kind === "comment") await sendComment(d.thread_url, d.draft); // öffentlicher Kommentar
-    else if (d.kind === "first" || d.kind === "followup") await sendMessage(d.thread_url, d.draft);
+    else if (d.kind === "first" || d.kind === "followup" || d.kind === "reaktivierung")
+      await sendMessage(d.thread_url, d.draft);
     else await sendThreadReply(d.thread_url, d.draft, d.participant ?? "");
     db.prepare("UPDATE drafts SET status='sent', sent_at=datetime('now') WHERE id=?").run(id);
     return { ok: true };

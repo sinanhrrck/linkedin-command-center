@@ -10,6 +10,7 @@ import { feedTick } from "./modules/leadFeed.js";
 import { generateInboxDrafts, generateFollowups, sendApprovedDrafts } from "./modules/drafts.js";
 import { generatePostIdeas } from "./modules/content.js";
 import { commentTick } from "./modules/comment.js";
+import { scanNetzwerk, generateReaktivierung } from "./modules/netzwerk.js";
 import { agentTick } from "./agent/runtime/agentRunner.js";
 import { config } from "./config.js";
 import { startTelegram } from "./modules/telegram.js";
@@ -147,6 +148,25 @@ cron.schedule("*/2 * * * *", () =>
     await feedTick();
   }),
 );
+
+/**
+ * NETZWERK REAKTIVIEREN. Zwei Wege:
+ *  - auf Knopfdruck (Dashboard setzt "netzwerk_now"=1) – wird alle 2 Min abgeholt,
+ *  - automatisch 1x pro Woche (Di 9:30), damit neue Verbindungen nachrutschen.
+ * Das Einlesen ist rein LESEND (kein Governor); gesendet wird nur nach Freigabe.
+ */
+async function netzwerkLauf(entwuerfe: number) {
+  await scanNetzwerk();
+  await generateReaktivierung(entwuerfe);
+}
+cron.schedule("*/2 * * * *", () =>
+  einzeln("netzwerk", async () => {
+    if (getState("netzwerk_now") !== "1") return;
+    setState("netzwerk_now", "");
+    await netzwerkLauf(5);
+  }),
+);
+cron.schedule("30 9 * * 2", () => einzeln("netzwerk", () => netzwerkLauf(3)));
 
 // REICHWEITE JETZT auf Knopfdruck: Dashboard setzt "comment_now"=1 → der Loop liked + erzeugt
 // Kommentar-Entwürfe sofort (statt bis werktags 12:30 zu warten). Browser gehört der Engine.

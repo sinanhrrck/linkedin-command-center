@@ -202,15 +202,34 @@ export function hotLeads(): Contact[] {
  * Kontakte, die vor >= `days` Tagen angeschrieben wurden und NICHT geantwortet haben –
  * Kandidaten fürs Follow-up (max. `limit`).
  */
-export function messagedAwaitingFollowup(days: number, limit: number): Contact[] {
+/**
+ * Kandidaten fürs Nachfassen – ZWEISTUFIG.
+ *  - Stufe 1: angeschrieben, keine Antwort, noch kein Follow-up → nach `days` Tagen fällig.
+ *  - Stufe 2: genau EIN Follow-up ist raus, immer noch keine Antwort → erst nach `days2`
+ *    Tagen fällig (längerer Abstand, damit es nicht drängend wirkt).
+ * Wer schon zwei Follow-ups hat oder noch einen offenen Entwurf, fällt raus.
+ * `messaged_at` wird beim Senden aktualisiert, ist also immer "letzter Kontakt".
+ */
+export function messagedAwaitingFollowup(days: number, limit: number, days2 = 7): Contact[] {
+  const gesendetOderOffen = "status IN ('pending','approved','sent')";
   return db
     .prepare(
-      `SELECT * FROM contacts
-       WHERE status='messaged' AND messaged_at IS NOT NULL
-         AND messaged_at <= datetime('now', ?)
-       ORDER BY messaged_at LIMIT ?`,
+      `SELECT c.* FROM contacts c
+       WHERE c.status='messaged' AND c.messaged_at IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url
+             AND d.kind='followup' AND d.status IN ('pending','approved')
+         )
+         AND (
+           (  (SELECT COUNT(*) FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='followup' AND d.${gesendetOderOffen}) = 0
+              AND c.messaged_at <= datetime('now', ?) )
+           OR
+           (  (SELECT COUNT(*) FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='followup' AND d.${gesendetOderOffen}) = 1
+              AND c.messaged_at <= datetime('now', ?) )
+         )
+       ORDER BY c.messaged_at LIMIT ?`,
     )
-    .all(`-${days} days`, limit) as Contact[];
+    .all(`-${days} days`, `-${days2} days`, limit) as Contact[];
 }
 
 export function countByStatus(): Record<string, number> {

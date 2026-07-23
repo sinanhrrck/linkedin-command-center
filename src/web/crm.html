@@ -980,11 +980,13 @@
     <div class="section-head"><p class="sec-title">Deine Such-Quellen</p><span class="sec-hint">Warteschlange · liefern laufend neue Profile</span></div>
     <div class="panel" id="ls-quellen"></div>
 
-    <div class="section-head"><p class="sec-title">Bestehendes Netzwerk reaktivieren</p><span class="sec-hint">geplant</span></div>
-    <div class="panel mod-soon">
-      <b>Alte Kontakte wieder ansprechen</b>
-      <p>Der Bot geht dein bestehendes Netzwerk durch und findet Kontakte, mit denen du länger nicht geschrieben hast — und schlägt dir einen natürlichen Wiedereinstieg vor. <span class="mod-tag">Kommt als Nächstes</span></p>
+    <div class="section-head"><p class="sec-title">Bestehendes Netzwerk reaktivieren</p><span class="sec-hint">schon vernetzt · nie geschrieben</span></div>
+    <div class="panel mod-panel">
+      <p class="mod-lead">Dein größter ungenutzter Hebel: Leute, mit denen du <b>schon vernetzt</b> bist, aber nie geschrieben hast. Keine Anfrage nötig, keine Wartezeit — und die Antwortquote ist deutlich höher als bei Kaltkontakten.</p>
+      <button id="nw-go" class="content-btn" style="max-width:320px">🔄 Netzwerk durchgehen &amp; ansprechen</button>
+      <div class="mode-note" id="nw-note">Der Bot liest deine Kontaktliste und schreibt persönliche Entwürfe — gesendet wird erst nach deiner Freigabe.</div>
     </div>
+    <div class="drafts-grid" id="mod-reak"></div>
   </div>
 
   <div id="view-vernetzen" class="view" style="display:none">
@@ -1707,12 +1709,12 @@ function zeichneEntwuerfe(list, grid) {
     <div class="draft-card" data-id="${d.id}">
       <div class="dc-top">
         <span class="dc-name">${esc(d.participant || "—")}</span>
-        <span class="dc-kind">${d.kind === "first" ? "Erstnachricht" : d.kind === "followup" ? "Follow-up" : d.kind === "comment" ? "Kommentar" : "Antwort"}</span>
+        <span class="dc-kind">${d.kind === "first" ? "Erstnachricht" : d.kind === "followup" ? "Follow-up" : d.kind === "comment" ? "Kommentar" : d.kind === "reaktivierung" ? "Reaktivierung" : "Antwort"}</span>
       </div>
       ${intentFlag(d.intent)}
       ${d.kind === "comment"
         ? (d.incoming ? `<div class="dc-in">Unter Post: „${esc(d.incoming)}"</div>` : "")
-        : d.incoming ? `<div class="dc-in">Auf: „${esc(d.incoming)}"</div>` : (d.kind === "first" ? `<div class="dc-in" style="color:var(--green)">✅ ${esc(d.participant || "")} hat deine Vernetzungsanfrage angenommen</div>` : d.kind === "followup" ? `<div class="dc-in">Noch keine Antwort auf deine Erstnachricht</div>` : "")}
+        : d.incoming ? `<div class="dc-in">Auf: „${esc(d.incoming)}"</div>` : (d.kind === "first" ? `<div class="dc-in" style="color:var(--green)">✅ ${esc(d.participant || "")} hat deine Vernetzungsanfrage angenommen</div>` : d.kind === "followup" ? `<div class="dc-in">Noch keine Antwort auf deine Erstnachricht</div>` : d.kind === "reaktivierung" ? `<div class="dc-in">🔄 Schon vernetzt, aber ihr habt nie geschrieben</div>` : "")}
       <textarea spellcheck="false">${esc(d.draft)}</textarea>
       <div class="dc-foot">
         <button class="dc-approve" title="Genehmigen – der Bot sendet es beim nächsten Lauf automatisch">✓ Genehmigen</button>
@@ -2069,6 +2071,8 @@ function renderModulViews(v) {
     document.getElementById("ls-quellen").innerHTML = q.length
       ? q.map(s => zeile(s.label || s.search_url, `Seite ${s.cursor_page ?? 0} · ${s.last_added ?? 0} zuletzt`)).join("")
       : leer("Noch keine Quelle angelegt. Trag oben deine Zielgruppe ein — der Bot legt die Suche an und sammelt daraus laufend Profile.");
+    // Reaktivierungs-Entwürfe (bestehendes Netzwerk) direkt hier zur Freigabe.
+    zeichneEntwuerfe(drafts.filter(d => d.kind === "reaktivierung"), document.getElementById("mod-reak"));
   }
 }
 
@@ -2149,6 +2153,19 @@ document.querySelectorAll(".nav-grp").forEach(btn => {
       load();
     } catch { note.textContent = "Fehler beim Anlegen."; }
     go.textContent = alt; go.disabled = false;
+  });
+
+  // --- Lead Engine: bestehendes Netzwerk reaktivieren ---
+  const nw = document.getElementById("nw-go");
+  if (nw) nw.addEventListener("click", async () => {
+    const note = document.getElementById("nw-note");
+    if (!(state.engine && state.engine.alive)) { note.textContent = "Dafür muss der Bot laufen – starte ihn auf der Übersicht."; return; }
+    nw.disabled = true; const alt = nw.textContent; nw.textContent = "wird angestoßen …";
+    try {
+      await fetch("/api/netzwerk", { method: "POST" });
+      note.innerHTML = "<b>Angestoßen ✓</b> – der Bot liest dein Netzwerk und legt gleich Entwürfe hier ab (dauert ein paar Minuten).";
+    } catch { note.textContent = "Fehler."; }
+    nw.textContent = alt; nw.disabled = false;
   });
 
   // --- Brand Engine: Beitrag schreiben lassen ---

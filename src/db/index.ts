@@ -72,6 +72,14 @@ try {
   /* Spalte existiert bereits */
 }
 
+try {
+  // Stammt der Kontakt aus dem BESTEHENDEN Netzwerk (schon vernetzt, nie geschrieben)?
+  // Diese Leute brauchen keine Vernetzungsanfrage mehr, sondern eine Reaktivierung.
+  db.exec("ALTER TABLE contacts ADD COLUMN aus_netzwerk INTEGER DEFAULT 0");
+} catch {
+  /* Spalte existiert bereits */
+}
+
 /** Key/Value-State */
 export const getState = (key: string): string | undefined =>
   (db.prepare("SELECT value FROM state WHERE key = ?").get(key) as { value: string } | undefined)
