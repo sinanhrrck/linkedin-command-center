@@ -105,8 +105,10 @@ export const config = {
     // Kompromiss aus Tempo und Ban-Sicherheit. Höher = sicherer, niedriger = schneller/riskanter.
     delayBetweenActionsMs: { min: 20_000, max: 75_000 },
 
-    // Nur in diesen Zeitfenstern arbeiten (lokale Uhrzeit, 24h).
-    workingHours: { start: 9, end: 19 },
+    // Nur in diesen Zeitfenstern arbeiten (lokale Uhrzeit, 24h). Bis 22 Uhr, damit Anfragen +
+    // Nachrichten auch abends rausgehen (Sinans Vorgabe 2026-07-23). Alle übrigen Schutz-
+    // Mechanismen (Caps, Pausen, Circuit-Breaker) bleiben unverändert scharf.
+    workingHours: { start: 9, end: 22 },
     // Am Wochenende (Sa/So) NUR diese Aktionstypen: Vernetzungsanfragen wirken auch am
     // Wochenende natürlich, Direktnachrichten/Kommentare NICHT (die sollen wie ein Mensch
     // Mo-Fr kommen). Likes/Profilbesuche sind harmlos und dürfen ebenfalls am Wochenende.

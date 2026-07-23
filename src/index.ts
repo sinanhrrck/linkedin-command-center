@@ -130,7 +130,7 @@ cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick()));
 // Rein lesend, kein Senden, kein Governor → kostet KEINE Sicherheit, spart aber Wartezeit:
 // Jede erkannte Annahme erzeugt sofort den Erstnachricht-Entwurf. Vorher lag zwischen
 // "hat angenommen" und "Entwurf liegt bereit" bis zu 8 Stunden, jetzt maximal 1.
-cron.schedule("5 9-19 * * *", () => einzeln("acceptance", () => checkAcceptances()));
+cron.schedule("5 9-22 * * *", () => einzeln("acceptance", () => checkAcceptances()));
 
 // Lead-Fütterung 2x täglich: gespeicherte Such-Quellen abgrasen (rein lesend).
 // Hält die Pipeline gefüllt, damit der Outreach nicht trockenläuft.
@@ -170,7 +170,7 @@ cron.schedule("*/2 * * * *", () =>
  * bereits verworfen wurde. Die Kosten hängen also an der Zahl NEUER Nachrichten, nicht am Takt.
  * Ist das Gratis-Kontingent leer, springt Claude ein und meldet sich vorher (core/textLlm.ts).
  */
-cron.schedule("*/15 9-19 * * *", () =>
+cron.schedule("*/15 9-22 * * *", () =>
   einzeln("drafts", async () => {
     // Sobald der Sales-Agent aktiv ist (Test/Live), macht ER die Antworten – dann keine Alt-Entwürfe.
     if (getAgentMode() === "off") await generateInboxDrafts(8);
@@ -189,7 +189,7 @@ cron.schedule("0 9 * * *", () =>
 
 // Freigegebene Entwürfe regelmäßig senden (alle 10 Min in der Arbeitszeit). Governor-gedrosselt;
 // Nachrichten sind werktags-gated, am Wochenende wartet also alles bis Montag.
-cron.schedule("*/10 9-19 * * *", () => einzeln("sendApproved", () => sendApprovedDrafts(10)));
+cron.schedule("*/10 9-22 * * *", () => einzeln("sendApproved", () => sendApprovedDrafts(10)));
 
 // Follow-ups 1x täglich: für Kontakte, die seit >=4 Tagen nicht geantwortet haben.
 cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4, 5)));
