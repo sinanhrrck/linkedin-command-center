@@ -217,6 +217,14 @@
   .content-btn { flex: 1 1 100%; font-family: var(--disp); font-weight: 600; font-size: 12.5px; border: 1px solid var(--line); border-radius: 11px; padding: 9px 14px; color: var(--ink); background: var(--panel); cursor: pointer; transition: all .14s var(--ease); text-align: left; }
   .content-btn:hover { border-color: var(--accent); color: var(--accent); box-shadow: var(--shadow-sm); }
   .content-btn:disabled { opacity: .6; cursor: default; }
+  .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; }
+  .switch-txt { font-size: 12px; line-height: 1.35; }
+  .switch-txt b { font-family: var(--disp); font-weight: 600; color: var(--ink); display: block; }
+  .switch-txt span { color: var(--ink-dim); font-size: 11px; }
+  .toggle { flex: none; width: 42px; height: 24px; border-radius: 20px; border: none; background: var(--line); position: relative; cursor: pointer; transition: background .16s var(--ease); }
+  .toggle .knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm); transition: transform .16s var(--ease); }
+  .toggle.on { background: var(--accent); }
+  .toggle.on .knob { transform: translateX(18px); }
   .modeseg button { flex: 1; font-family: var(--disp); font-weight: 600; font-size: 12px; border: none; background: transparent; color: var(--ink-dim); padding: 7px 12px; border-radius: 8px; transition: all .15s var(--ease); }
   .modeseg button.active { background: var(--panel); color: var(--accent); box-shadow: var(--shadow-sm); }
   .mode-note { font-size: 11.5px; color: var(--ink-dim); margin-top: 9px; line-height: 1.45; min-height: 15px; }
@@ -378,6 +386,20 @@
   .score-pill.low { color: var(--ink-faint); background: var(--panel-2); }
 
   /* ---------- Analytics-Seite ---------- */
+  .an-guide { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); margin: 4px 0 22px; overflow: hidden; }
+  .an-guide > summary { list-style: none; cursor: pointer; padding: 16px 22px; font-family: var(--disp); font-weight: 600; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .an-guide > summary::-webkit-details-marker { display: none; }
+  .an-guide > summary::before { content: "❔"; font-size: 15px; }
+  .an-guide > summary::after { content: "▸"; margin-left: auto; color: var(--ink-dim); transition: transform .16s var(--ease); }
+  .an-guide[open] > summary::after { transform: rotate(90deg); }
+  .an-guide-body { padding: 0 22px 20px; font-size: 13px; color: var(--ink-dim); line-height: 1.55; }
+  .an-guide-body > p { margin: 0 0 12px; }
+  .an-guide-body dl { display: grid; grid-template-columns: minmax(120px, 160px) 1fr; gap: 6px 16px; margin: 0 0 14px; }
+  .an-guide-body dt { font-family: var(--disp); font-weight: 600; color: var(--ink); }
+  .an-guide-body dd { margin: 0; }
+  .an-guide-body dd b, .an-guide-body p b { color: var(--ink); }
+  .an-guide-foot { padding-top: 12px; border-top: 1px solid var(--line); }
+  @media (max-width: 640px) { .an-guide-body dl { grid-template-columns: 1fr; gap: 2px 0; } .an-guide-body dt { margin-top: 8px; } }
   .an-quoten { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
   .an-qcard { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow); }
   .an-qtop { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -659,6 +681,10 @@
         <button data-level="agent_live">Agent · Live</button>
       </div>
       <div class="mode-note" id="automatik-note"></div>
+      <div class="switch-row">
+        <div class="switch-txt"><b>Zeitfenster</b><span id="zeitfenster-sub">nur 9–22 Uhr senden</span></div>
+        <button id="zeitfenster-btn" class="toggle" role="switch" aria-label="Zeitfenster umschalten"><span class="knob"></span></button>
+      </div>
       <p class="eyebrow" style="margin-top:16px">Fokus · wen suchen wir?</p>
       <div class="modeseg" id="focusseg">
         <button data-focus="azubi">Azubis</button>
@@ -800,6 +826,25 @@
   </div><!-- /#view-contacts -->
 
   <div id="view-analytics" class="view" style="display:none">
+    <details class="an-guide" open>
+      <summary>So liest du diese Zahlen — was sagt dir welche Statistik?</summary>
+      <div class="an-guide-body">
+        <p>Alle Zahlen hier haben <b>ein Ziel</b>: dir zeigen, wie gut deine Akquise gerade läuft — und <b>wo</b> du ansetzen solltest.</p>
+        <dl>
+          <dt>Annahmequote</dt><dd>Wie viele deiner <b>Vernetzungsanfragen angenommen</b> werden. Niedrig → Zielgruppe oder Anfrage passt nicht. Unter ~30 % pausiert der Bot automatisch (Konto-Schutz).</dd>
+          <dt>Antwortquote</dt><dd>Wie viele der <b>Angeschriebenen antworten</b>. Das misst, ob deine Nachrichten zünden. Der wichtigste Hebel für mehr Gespräche.</dd>
+          <dt>End-to-End</dt><dd>Von der Anfrage bis zur Antwort in <b>einer</b> Zahl — die Gesamt-Effizienz deiner Akquise. Gut, um über Wochen zu vergleichen.</dd>
+          <dt>Conversion-Funnel</dt><dd>Der Trichter Neu → Eingeladen → Angenommen → Angeschrieben → Geantwortet. Die <b>größte Stufe, an der Leute wegfallen</b>, ist dein nächster Ansatzpunkt.</dd>
+          <dt>Tempo</dt><dd>Ø Tage je Übergang. Zeigt, wie schnell Leute reagieren — und wie schnell <b>du</b> nacharbeitest (z. B. Angenommen → Angeschrieben).</dd>
+          <dt>Beste Wochentage</dt><dd>An welchem Einlade-Tag am meisten angenommen wird → <b>wann sich Vernetzen am meisten lohnt</b>.</dd>
+          <dt>Verlauf · 6 Wochen</dt><dd>Aktivität pro Tag über die Zeit. Zeigt den <b>Trend</b>: läuft es nach oben, oder schläft die Pipeline ein?</dd>
+          <dt>Lead-Quellen</dt><dd>Welche gespeicherte Such-Quelle die <b>besten</b> Leads bringt — damit du auf die Guten setzt.</dd>
+          <dt>Skalierungs-Rechner</dt><dd>Bei X Anfragen/Woche → wie viele <b>Hot Leads</b> (Antworten) du erwarten kannst. Für die Planung, wie viel Volumen dein Ziel braucht.</dd>
+        </dl>
+        <p class="an-guide-foot">Kurz: <b>Annahme</b> = passt die Zielgruppe? · <b>Antwort</b> = zünden die Nachrichten? · <b>Funnel</b> = wo hakt's? · <b>Quellen</b> = wo suchen?</p>
+      </div>
+    </details>
+
     <div class="section-head" style="margin-top:8px"><p class="sec-title">Kernquoten</p><span class="sec-hint">kumulativ über alle Kontakte · mit Einordnung</span></div>
     <div class="an-quoten" id="an-quoten"></div>
 
@@ -987,6 +1032,7 @@ function render() {
   renderActionCenter();
   renderActivity();
   renderAutomatik();
+  renderZeitfenster();
   renderNotaus();
   renderContent();
   renderFocus();
@@ -1323,6 +1369,25 @@ function renderContent() {
       note.innerHTML = "<b>Reichweite angestoßen ✓</b> – der Bot liked & schreibt Kommentar-Entwürfe (in den nächsten Minuten).";
     } catch { note.textContent = "Fehler."; }
     rw.textContent = alt; rw.disabled = false;
+  };
+}
+
+/**
+ * Zeitfenster-Schalter: AN = nur 9–22 Uhr senden (Standard). AUS = rund um die Uhr.
+ * Alle übrigen Schutz-Mechanismen (Limits, Pausen, Circuit-Breaker) bleiben in beiden Fällen an.
+ */
+function renderZeitfenster() {
+  const g = state.governor || {};
+  const an = g.zeitfenster !== false; // Default: an
+  const btn = document.getElementById("zeitfenster-btn");
+  const sub = document.getElementById("zeitfenster-sub");
+  btn.classList.toggle("on", an);
+  sub.textContent = an ? ("nur " + (g.workingHoursText || "9–22 Uhr") + " senden") : "rund um die Uhr senden";
+  btn.onclick = async () => {
+    const neu = !an;
+    if (!neu && !confirm("Zeitfenster ausschalten? Der Bot sendet dann rund um die Uhr (auch nachts). Limits, Pausen & Circuit-Breaker bleiben aktiv.")) return;
+    await fetch("/api/zeitfenster", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ an: neu }) });
+    load();
   };
 }
 

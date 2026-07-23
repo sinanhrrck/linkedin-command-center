@@ -407,6 +407,23 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // ZEITFENSTER an/aus: schaltet die Uhrzeit-Begrenzung (9–22 Uhr) ein oder aus. Aus = rund um
+  // die Uhr senden; Caps/Pausen/Circuit-Breaker bleiben unberührt. Governor liest das Flag live.
+  if (url.pathname === "/api/zeitfenster" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { an } = JSON.parse(body || "{}");
+        setState("working_hours_off", an ? "0" : "1");
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, an: !!an }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
   // NOT-AUS: mit EINEM Klick jeden Versand blockieren (ohne die Engine zu stoppen). Setzt das
   // Flag, das der Governor VOR jeder sendenden Aktion prüft. Wirkt sofort für alle Sendewege.
   if (url.pathname === "/api/notaus" && req.method === "POST") {

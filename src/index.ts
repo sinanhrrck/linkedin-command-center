@@ -189,7 +189,8 @@ cron.schedule("0 9 * * *", () =>
 
 // Freigegebene Entwürfe regelmäßig senden (alle 10 Min in der Arbeitszeit). Governor-gedrosselt;
 // Nachrichten sind werktags-gated, am Wochenende wartet also alles bis Montag.
-cron.schedule("*/10 9-22 * * *", () => einzeln("sendApproved", () => sendApprovedDrafts(10)));
+// Läuft rund um die Uhr; ob wirklich gesendet wird, entscheidet der Governor (Zeitfenster-Schalter).
+cron.schedule("*/10 * * * *", () => einzeln("sendApproved", () => sendApprovedDrafts(10)));
 
 // Follow-ups 1x täglich: für Kontakte, die seit >=4 Tagen nicht geantwortet haben.
 cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4, 5)));

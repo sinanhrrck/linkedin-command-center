@@ -67,14 +67,29 @@ class SafetyGovernor {
    * `weekendActions` (Vernetzen/Like/Profilbesuch) sind Sa/So erlaubt, Direktnachrichten &
    * Kommentare NICHT – die sollen wie bei einem Menschen nur werktags kommen.
    */
+  /** Ist die Uhrzeit-Begrenzung (9–22 Uhr) EINGESCHALTET? Per Dashboard umschaltbar.
+   *  Default: AN (state ungesetzt). "1" = AUS → rund um die Uhr senden. Alle übrigen
+   *  Schutz-Mechanismen (Caps, Pausen, Circuit-Breaker) bleiben davon UNBERÜHRT. */
+  zeitfensterAktiv(): boolean {
+    return getState("working_hours_off") !== "1";
+  }
+  setZeitfenster(an: boolean) {
+    setState("working_hours_off", an ? "0" : "1");
+    console.warn(`[GOVERNOR] Zeitfenster ${an ? "AN (9–22 Uhr)" : "AUS (rund um die Uhr)"}`);
+  }
+
   private withinWorkingHours(type?: ActionType): boolean {
     const now = new Date();
-    const h = now.getHours();
-    if (h < config.safety.workingHours.start || h >= config.safety.workingHours.end) return false;
+    // Uhrzeit-Fenster NUR prüfen, wenn eingeschaltet. Ist es aus, darf zu jeder Stunde gesendet werden.
+    if (this.zeitfensterAktiv()) {
+      const h = now.getHours();
+      if (h < config.safety.workingHours.start || h >= config.safety.workingHours.end) return false;
+    }
+    // Wochenend-Regel gilt IMMER (unabhängig vom Zeitfenster): Sa/So nur weekendActions,
+    // Direktnachrichten & Kommentare bleiben werktags (wirken menschlicher).
     const weekend = now.getDay() === 0 || now.getDay() === 6;
     if (weekend) {
-      // Ohne Typ (Telemetrie): Wochenende gilt als "aktiv", solange überhaupt etwas erlaubt ist.
-      if (!type) return true;
+      if (!type) return true; // Ohne Typ (Telemetrie): Wochenende gilt als "aktiv".
       return (config.safety.weekendActions as readonly string[]).includes(type);
     }
     return true;
@@ -168,6 +183,8 @@ class SafetyGovernor {
     const warmup = this.warmupFactor();
     return {
       notAus: this.notAusAktiv(),
+      zeitfenster: this.zeitfensterAktiv(),
+      workingHoursText: `${config.safety.workingHours.start}–${config.safety.workingHours.end} Uhr`,
       paused: this.isPaused(),
       pauseReason: getState("pause_reason") || null,
       withinWorkingHours: this.withinWorkingHours(),
