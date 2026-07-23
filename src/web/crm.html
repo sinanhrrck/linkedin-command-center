@@ -207,7 +207,12 @@
   .engine-btn { font-family: var(--disp); font-weight: 600; font-size: 13px; border: none; border-radius: 12px; padding: 11px 16px; color: #fff; background: var(--hero-grad); box-shadow: 0 8px 18px -8px rgba(20,80,50,.5); transition: transform .12s var(--ease), box-shadow .16s; }
   .engine-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 22px -8px rgba(20,80,50,.55); }
   .engine-btn.stop { background: linear-gradient(155deg, #e05a60, #c23940); box-shadow: 0 8px 18px -8px rgba(180,50,60,.5); }
+  .notaus-btn { display: block; width: 100%; margin-top: 9px; font-family: var(--disp); font-weight: 700; font-size: 12.5px; border: 1.5px solid var(--red); border-radius: 12px; padding: 9px 16px; color: var(--red); background: rgba(200,60,60,.06); cursor: pointer; transition: all .14s var(--ease); }
+  .notaus-btn:hover { background: rgba(200,60,60,.12); }
+  .notaus-btn.armed { color: #fff; background: linear-gradient(155deg, #e05a60, #c23940); border-color: transparent; box-shadow: 0 8px 18px -8px rgba(180,50,60,.55); }
   .modeseg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; padding: 3px; gap: 2px; margin-top: 12px; }
+  .modeseg-4 { display: flex; width: 100%; flex-wrap: wrap; }
+  .modeseg-4 button { flex: 1 1 42%; }
   .modeseg button { flex: 1; font-family: var(--disp); font-weight: 600; font-size: 12px; border: none; background: transparent; color: var(--ink-dim); padding: 7px 12px; border-radius: 8px; transition: all .15s var(--ease); }
   .modeseg button.active { background: var(--panel); color: var(--accent); box-shadow: var(--shadow-sm); }
   .mode-note { font-size: 11.5px; color: var(--ink-dim); margin-top: 9px; line-height: 1.45; min-height: 15px; }
@@ -641,12 +646,15 @@
       <div class="status-big"><span class="status-dot" id="bot-dot"></span><span class="status-word" id="bot-word" style="font-size:23px">—</span></div>
       <div class="act-hb" id="bot-hb"></div>
       <button id="engine-btn" class="engine-btn start">▶ Bot starten</button>
-      <div class="modeseg" id="modeseg">
-        <button data-mode="manual">Manuell</button>
-        <button data-mode="semi">Halb</button>
-        <button data-mode="full">Voll</button>
+      <button id="notaus-btn" class="notaus-btn">🛑 Not-Aus · Versand stoppen</button>
+      <p class="eyebrow" style="margin-top:16px">Automatik-Stufe · wie viel macht der Bot allein?</p>
+      <div class="modeseg modeseg-4" id="automatikseg">
+        <button data-level="vorschlaege">Vorschläge</button>
+        <button data-level="halb">Halb-Auto</button>
+        <button data-level="agent_test">Agent · Test</button>
+        <button data-level="agent_live">Agent · Live</button>
       </div>
-      <div class="mode-note" id="mode-note"></div>
+      <div class="mode-note" id="automatik-note"></div>
       <p class="eyebrow" style="margin-top:16px">Fokus · wen suchen wir?</p>
       <div class="modeseg" id="focusseg">
         <button data-focus="azubi">Azubis</button>
@@ -654,13 +662,6 @@
         <button data-focus="beides">Beides</button>
       </div>
       <div class="mode-note" id="focus-note"></div>
-      <p class="eyebrow" style="margin-top:16px">Sales-Agent <span style="font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--amber);background:rgba(192,122,18,.12);padding:2px 6px;border-radius:20px;margin-left:4px">Beta</span></p>
-      <div class="modeseg" id="agentseg">
-        <button data-agent="off">Aus</button>
-        <button data-agent="shadow">Schatten</button>
-        <button data-agent="live">Live</button>
-      </div>
-      <div class="mode-note" id="agent-note"></div>
       <div class="act-tally" id="act-tally"></div>
     </div>
     <div class="act-right">
@@ -975,8 +976,8 @@ function render() {
   renderTrend();
   renderActionCenter();
   renderActivity();
-  renderMode();
-  renderAgent();
+  renderAutomatik();
+  renderNotaus();
   renderFocus();
   renderLive();
   renderTermine();
@@ -1245,42 +1246,56 @@ function intentFlag(intent) {
   return `<div class="dc-flag ${f.cls}" title="${f.hint}"><b>${f.t}</b><span>${f.hint}</span></div>`;
 }
 
-const MODE_NOTES = {
-  manual: "<b>Manuell:</b> Vernetzt automatisch. Erstnachrichten & Antworten kommen als Entwurf zur Freigabe.",
-  semi: "<b>Halbautomatisch:</b> Vernetzt + sendet Erstnachrichten automatisch. Antworten bleiben Entwürfe zur Freigabe.",
-  full: "<b>Vollautomatisch:</b> KI führt Gespräche selbst und meldet Termine per Telegram. Braucht bezahlten KI-Key + Dauerbetrieb.",
-};
-function renderMode() {
-  const mode = state.mode || "manual";
-  document.querySelectorAll("#modeseg button").forEach(b => {
-    b.classList.toggle("active", b.dataset.mode === mode);
+/**
+ * EINE Automatik-Stufe statt zwei verwirrender Schalter. Jede Stufe setzt intern Modus + Agent.
+ * Der Sales-Agent ist die Gesprächs-Engine für die oberen zwei Stufen (der alte Zweit-Bot ist weg).
+ * Reihenfolge = zunehmende Autonomie; Default „Vorschläge" ist die sichere Stufe (nichts geht ohne dich raus).
+ */
+const AUTOMATIK = [
+  { key: "vorschlaege", mode: "manual", agent: "off",
+    note: "<b>Vorschläge:</b> Der Bot vernetzt automatisch. Erstnachrichten & Antworten kommen als <b>Entwurf</b> zu dir – nichts geht ohne deine Freigabe raus. Sicherste Stufe." },
+  { key: "halb", mode: "semi", agent: "off",
+    note: "<b>Halb-Automatisch:</b> Vernetzt + sendet <b>Erstnachrichten</b> selbst. Antworten bleiben Entwürfe zur Freigabe." },
+  { key: "agent_test", mode: "semi", agent: "shadow",
+    note: "<b>Agent · Test (Schatten):</b> Der Sales-Agent denkt bei jeder Antwort mit und legt seinen Vorschlag als Entwurf ab – <b>sendet nichts</b>. So siehst du erst, wie gut er ist, bevor er live geht." },
+  { key: "agent_live", mode: "semi", agent: "live",
+    note: "<b>Agent · Live:</b> Der Sales-Agent führt die Gespräche <b>selbst</b> (mehrfach geprüft, gedrosselt) und übergibt Termine/Nummern an dich. Empfohlen erst nach dem Test-Modus. Braucht bezahlten KI-Key + Dauerbetrieb." },
+];
+/** Aktuelle Stufe aus (mode, agentMode) ableiten – robust auch für Alt-Zustände. */
+function automatikLevel() {
+  const a = state.agentMode || "off";
+  if (a === "live") return "agent_live";
+  if (a === "shadow") return "agent_test";
+  if ((state.mode || "manual") === "semi") return "halb";
+  return "vorschlaege"; // manual/off (und alles Übrige)
+}
+function renderAutomatik() {
+  const cur = automatikLevel();
+  document.querySelectorAll("#automatikseg button").forEach(b => {
+    const stufe = AUTOMATIK.find(s => s.key === b.dataset.level);
+    b.classList.toggle("active", b.dataset.level === cur);
     b.onclick = async () => {
-      if (b.dataset.mode === mode) return;
-      if (b.dataset.mode === "full" && !confirm("Vollautomatik: Die KI beantwortet Nachrichten eigenständig – ohne deine Freigabe. Nur mit bezahltem KI-Key + Dauerbetrieb sinnvoll. Jetzt aktivieren?")) return;
-      await fetch("/api/mode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: b.dataset.mode }) });
+      if (b.dataset.level === cur) return;
+      if (b.dataset.level === "agent_live" && !confirm("Agent · Live: Der Sales-Agent beantwortet Nachrichten eigenständig – ohne deine Freigabe. Empfohlen erst nach dem Test-Modus. Jetzt live schalten?")) return;
+      await fetch("/api/automatik", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ level: b.dataset.level }) });
       load();
     };
   });
-  document.getElementById("mode-note").innerHTML = MODE_NOTES[mode] || "";
+  const s = AUTOMATIK.find(x => x.key === cur);
+  document.getElementById("automatik-note").innerHTML = s ? s.note : "";
 }
 
-const AGENT_NOTES = {
-  off: "<b>Aus:</b> Der klassische Bot läuft wie gewohnt.",
-  shadow: "<b>Schatten:</b> Der intelligente Agent denkt bei jeder Antwort mit und legt seinen Vorschlag als Entwurf ab – <b>sendet nichts</b>. So siehst du erst, was er tun würde.",
-  live: "<b>Live:</b> Der Agent führt die Gespräche selbst (governor-gedrosselt, mehrfach geprüft) und übergibt Termine/Nummern an dich. Braucht bezahlten KI-Key + Dauerbetrieb.",
-};
-function renderAgent() {
-  const mode = state.agentMode || "off";
-  document.querySelectorAll("#agentseg button").forEach(b => {
-    b.classList.toggle("active", b.dataset.agent === mode);
-    b.onclick = async () => {
-      if (b.dataset.agent === mode) return;
-      if (b.dataset.agent === "live" && !confirm("Sales-Agent LIVE: Der Agent beantwortet Nachrichten eigenständig – ohne deine Freigabe. Erst nach Beobachtung im Schatten-Modus empfohlen. Jetzt live schalten?")) return;
-      await fetch("/api/agent-mode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: b.dataset.agent }) });
-      load();
-    };
-  });
-  document.getElementById("agent-note").innerHTML = AGENT_NOTES[mode] || "";
+/** Not-Aus: ein Klick blockiert JEDEN Versand (ohne die Engine zu stoppen). */
+function renderNotaus() {
+  const btn = document.getElementById("notaus-btn");
+  const an = !!(state.governor && state.governor.notAus);
+  btn.classList.toggle("armed", an);
+  btn.textContent = an ? "✅ Versand wieder freigeben" : "🛑 Not-Aus · Versand stoppen";
+  btn.onclick = async () => {
+    if (!an && !confirm("Not-Aus: Der Bot sendet ab sofort NICHTS mehr (keine Vernetzungen, keine Nachrichten). Die Engine läuft weiter, nur der Versand ist blockiert. Aktivieren?")) return;
+    await fetch("/api/notaus", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ an: !an }) });
+    load();
+  };
 }
 
 /**

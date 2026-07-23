@@ -1,5 +1,5 @@
 import { newPage, guardAgainstCheckpoint } from "../core/session.js";
-import { governor, GovernorBlocked } from "../core/safetyGovernor.js";
+import { governor, GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { humanDelay, humanScroll, humanType, humanTypeInto } from "../core/humanize.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { db } from "../db/index.js";
@@ -7,6 +7,39 @@ import { db } from "../db/index.js";
 /** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
 function normText(s: string): string {
   return (s || "").replace(/​/g, "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * DOPPEL-VERSAND-SPERRE (universell, greift für JEDEN Sendeweg über tippenUndSenden).
+ * Ein persistentes Ledger merkt sich (Empfänger + Text-Fingerabdruck + Zeit). Bevor etwas
+ * rausgeht, wird geprüft, ob GENAU diese Nachricht kürzlich schon an diese Person ging –
+ * egal welcher Codepfad (Agent, Entwurf-Freigabe, alte Autopilot-Reste, Überlappung, Retry).
+ * Der eigentliche Root-Cause kann variieren; DIESE Sperre fängt sie alle ab.
+ */
+db.exec(
+  "CREATE TABLE IF NOT EXISTS sent_ledger (recipient TEXT NOT NULL, fingerprint TEXT NOT NULL, at TEXT NOT NULL DEFAULT (datetime('now')))",
+);
+/** Kurzer, stabiler Fingerabdruck des normalisierten Textes (djb2, kein Crypto-Import nötig). */
+function fingerprint(text: string): string {
+  const s = normText(text).toLowerCase();
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return `${h}:${s.length}`;
+}
+/** True, wenn dieselbe Nachricht in den letzten 24 h schon an diese Person ging. */
+function schonGesendet(empfaenger: string, text: string): boolean {
+  const row = db
+    .prepare(
+      "SELECT 1 AS x FROM sent_ledger WHERE recipient = ? AND fingerprint = ? AND at >= datetime('now','-1 day') LIMIT 1",
+    )
+    .get(empfaenger.trim().toLowerCase(), fingerprint(text)) as { x: number } | undefined;
+  return !!row;
+}
+function ledgerEintragen(empfaenger: string, text: string) {
+  db.prepare("INSERT INTO sent_ledger (recipient, fingerprint) VALUES (?, ?)").run(
+    empfaenger.trim().toLowerCase(),
+    fingerprint(text),
+  );
 }
 
 /**
@@ -182,6 +215,13 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
    */
   if (!empfaenger || !empfaenger.trim())
     throw new UnsichereNachricht("Kein Empfängername übergeben – Versand abgebrochen (Schutz vor Fehlleitung)");
+
+  // DOPPEL-VERSAND-SPERRE: identische Nachricht ging kürzlich schon an diese Person → NICHT nochmal.
+  if (schonGesendet(empfaenger, text)) {
+    console.warn(`[send] Duplikat verhindert – "${empfaenger}" hat diese Nachricht schon bekommen.`);
+    throw new DuplikatBlockiert(empfaenger);
+  }
+
   const fenster = await fensterFuerEmpfaenger(page, empfaenger);
   if (!fenster)
     throw new UnsichereNachricht(`Empfänger-Fenster für "${empfaenger}" nicht eindeutig gefunden – Versand abgebrochen (Schutz vor Fehlleitung)`);
@@ -230,6 +270,9 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
     if (!geleert) await humanDelay(1000, 1800);
   }
   if (!geleert) throw new Error("Senden nicht bestätigt: Eingabefeld ist noch gefüllt (nicht gesendet)");
+
+  // BESTÄTIGT gesendet → ins Ledger, damit derselbe Text nie ein zweites Mal an diese Person geht.
+  ledgerEintragen(empfaenger, text);
 
   /**
    * Verlaufs-Prüfung nur noch als WARNUNG, nicht als Abbruch. Früher wurde hier geworfen,

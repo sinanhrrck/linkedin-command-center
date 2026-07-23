@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { db, setState, getState, getMode, getAgentMode } from "./db/index.js";
+import { db, setState, getState, getMode, setMode, getAgentMode, setAgentMode } from "./db/index.js";
 import { governor } from "./core/safetyGovernor.js";
 import { events } from "./core/events.js";
 import { publishPost } from "./modules/posting.js";
@@ -9,7 +9,6 @@ import { feedTick } from "./modules/leadFeed.js";
 import { generateInboxDrafts, generateFollowups, sendApprovedDrafts } from "./modules/drafts.js";
 import { generatePostIdeas } from "./modules/content.js";
 import { commentTick } from "./modules/comment.js";
-import { runAutopilot } from "./modules/autopilot.js";
 import { agentTick } from "./agent/runtime/agentRunner.js";
 import { config } from "./config.js";
 import { startTelegram } from "./modules/telegram.js";
@@ -48,6 +47,14 @@ async function einzeln(name: string, fn: () => Promise<unknown>) {
 // Heartbeat: Lebenszeichen des Loops, damit das Dashboard "Bot arbeitet" erkennt.
 // Dazu ein Schnappschuss des (versteckten) Browsers für die Live-Ansicht im Dashboard –
 // so siehst du, was der Bot gerade macht, ohne dass dir ein Fenster im Weg steht.
+// MIGRATION: alter Modus 'full' bediente den (jetzt stillgelegten) Autopilot. Solche Nutzer
+// sanft auf den neuen Sales-Agent heben, damit ihre Gespräche nicht plötzlich unbeantwortet bleiben.
+if (getMode() === "full") {
+  setMode("semi");
+  if (getAgentMode() === "off") setAgentMode("live");
+  console.info("[migration] Modus 'full' → Sales-Agent (semi + agent live).");
+}
+
 setState("engine_heartbeat", new Date().toISOString());
 setState("engine_started", new Date().toISOString());
 setState("engine_pid", String(process.pid)); // fürs saubere Stoppen vom Dashboard
@@ -64,7 +71,7 @@ setTimeout(async () => {
   // Auch das Postfach sofort prüfen: wer den Bot mittags startet, soll nicht bis zur
   // nächsten Viertelstunde warten, um zu sehen, dass er arbeitet.
   await einzeln("drafts", async () => {
-    if (getAgentMode() === "off" && getMode() !== "full") await generateInboxDrafts(8);
+    if (getAgentMode() === "off") await generateInboxDrafts(8);
   });
   // Freigegebene Entwürfe, die noch offen sind, gleich beim Start abarbeiten.
   await einzeln("sendApproved", () => sendApprovedDrafts(15));
@@ -141,8 +148,8 @@ cron.schedule("*/2 * * * *", () =>
  */
 cron.schedule("*/15 9-19 * * *", () =>
   einzeln("drafts", async () => {
-    // Im Vollautomatik-Modus übernimmt der Autopilot die Antworten – dann keine Entwürfe.
-    if (getAgentMode() === "off" && getMode() !== "full") await generateInboxDrafts(8);
+    // Sobald der Sales-Agent aktiv ist (Test/Live), macht ER die Antworten – dann keine Alt-Entwürfe.
+    if (getAgentMode() === "off") await generateInboxDrafts(8);
   }),
 );
 
@@ -151,7 +158,7 @@ cron.schedule("*/15 9-19 * * *", () =>
 // als Erstes die frische Antwort-Liste bereit und gestern Genehmigtes geht sofort raus.
 cron.schedule("0 9 * * *", () =>
   einzeln("morgen", async () => {
-    if (getAgentMode() === "off" && getMode() !== "full") await generateInboxDrafts(10);
+    if (getAgentMode() === "off") await generateInboxDrafts(10);
     await sendApprovedDrafts(20);
   }),
 );
@@ -163,14 +170,9 @@ cron.schedule("*/10 9-19 * * *", () => einzeln("sendApproved", () => sendApprove
 // Follow-ups 1x täglich: für Kontakte, die seit >=4 Tagen nicht geantwortet haben.
 cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4, 5)));
 
-// AUTOPILOT (alt, voll-autonome Gespräche) – nur wenn Modus 'full' UND der neue Agent NICHT aktiv
-// ist. Sobald der Agent läuft, übernimmt er die Inbox-Gespräche (sonst würden beide antworten).
-cron.schedule(`*/${config.autopilot.intervalMinutes} * * * *`, () => {
-  if (getAgentMode() === "off") einzeln("autopilot", () => runAutopilot());
-});
-
-// NEUER SALES-AGENT – Cron läuft immer, agentTick prüft selbst den Dashboard-Modus (off/shadow/
-// live). So lässt sich der Agent per Klick umschalten, ohne den Bot neu zu starten.
+// SALES-AGENT = die EINZIGE Gesprächs-Engine (der alte Autopilot `runAutopilot` ist bewusst
+// stillgelegt – es gibt nur noch EINEN Bot, das war vorher verwirrend). Der Cron läuft immer,
+// `agentTick` prüft selbst die Automatik-Stufe (off/shadow/live) → per Klick umschaltbar ohne Neustart.
 cron.schedule(`*/${config.agent.intervalMinutes} * * * *`, () => einzeln("agent", () => agentTick()));
 
 // KOMMENTARE: 1x täglich (12:30) Nischen-Posts finden und Kommentar-ENTWÜRFE erzeugen.

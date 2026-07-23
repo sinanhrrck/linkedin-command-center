@@ -358,6 +358,52 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // AUTOMATIK-STUFE: EIN Schalter statt zwei. Jede Stufe setzt Modus + Agent zusammen. Damit
+  // gibt es nur noch EINEN Bot-Regler (der Sales-Agent ist die Gesprächs-Engine der oberen Stufen).
+  if (url.pathname === "/api/automatik" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { level } = JSON.parse(body || "{}");
+        const STUFEN: Record<string, { mode: Mode; agent: AgentMode }> = {
+          vorschlaege: { mode: "manual", agent: "off" },
+          halb: { mode: "semi", agent: "off" },
+          agent_test: { mode: "semi", agent: "shadow" },
+          agent_live: { mode: "semi", agent: "live" },
+        };
+        const s = STUFEN[level as string];
+        if (!s) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad level" }));
+          return;
+        }
+        setMode(s.mode);
+        setAgentMode(s.agent);
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, level }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // NOT-AUS: mit EINEM Klick jeden Versand blockieren (ohne die Engine zu stoppen). Setzt das
+  // Flag, das der Governor VOR jeder sendenden Aktion prüft. Wirkt sofort für alle Sendewege.
+  if (url.pathname === "/api/notaus" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { an } = JSON.parse(body || "{}");
+        setState("send_stop", an ? "1" : "0");
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, an: !!an }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
   // Lead-Quellen: hinzufügen / löschen / sofort Nachschub anfordern. Ersetzt `npm run source`.
   // Das eigentliche Scrapen macht die ENGINE (sie besitzt den Browser) – hier wird nur die
   // Quelle gespeichert und ein "feed_now"-Flag gesetzt, das der Loop beim nächsten Tick abholt.

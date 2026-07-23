@@ -112,8 +112,22 @@ class SafetyGovernor {
     return { rate: invited === 0 ? 1 : accepted / invited, sample: invited };
   }
 
+  /** MANUELLER Not-Aus (Dashboard-Knopf). Unabhängig vom Auto-Circuit-Breaker (`paused`),
+   *  damit ein automatisches „resume" den vom Menschen gesetzten Stopp NICHT aufhebt. */
+  notAusAktiv(): boolean {
+    return getState("send_stop") === "1";
+  }
+  setNotAus(an: boolean) {
+    setState("send_stop", an ? "1" : "0");
+    console.warn(`[GOVERNOR] Not-Aus ${an ? "AKTIV – jeder Versand blockiert" : "gelöst"}`);
+  }
+
   /** Kernfrage: Darf ich JETZT eine Aktion dieses Typs ausführen? */
   canDoAction(type: ActionType): Decision {
+    // NOT-AUS zuerst: härter als alles andere, kann nur vom Menschen gelöst werden.
+    if (this.notAusAktiv())
+      return { ok: false, reason: "Not-Aus aktiv – Versand manuell gestoppt" };
+
     if (this.isPaused())
       return { ok: false, reason: `pausiert (${getState("pause_reason") ?? "unbekannt"})` };
 
@@ -153,6 +167,7 @@ class SafetyGovernor {
     const { rate, sample } = this.acceptanceRate();
     const warmup = this.warmupFactor();
     return {
+      notAus: this.notAusAktiv(),
       paused: this.isPaused(),
       pauseReason: getState("pause_reason") || null,
       withinWorkingHours: this.withinWorkingHours(),
@@ -211,6 +226,19 @@ export class GovernorBlocked extends Error {
   constructor(reason: string) {
     super(`Governor hat Aktion blockiert: ${reason}`);
     this.name = "GovernorBlocked";
+  }
+}
+
+/**
+ * Wird geworfen, wenn EXAKT dieselbe Nachricht schon an dieselbe Person ging (Doppel-Versand-
+ * Schutz). Erbt bewusst von GovernorBlocked: jeder Aufrufer, der `instanceof GovernorBlocked`
+ * prüft, behandelt das automatisch als „übersprungen, kein Drama" – KEIN erneuter Versand,
+ * KEINE Falschmeldung, KEINE record()-Zählung (fn wirft vor governor.record()).
+ */
+export class DuplikatBlockiert extends GovernorBlocked {
+  constructor(empfaenger: string) {
+    super(`Duplikat – identische Nachricht ging kürzlich schon an "${empfaenger}"`);
+    this.name = "DuplikatBlockiert";
   }
 }
 
