@@ -108,6 +108,38 @@ NextLead-mac-arm64.dmg` bzw. `-Setup-win.exe`) und der Update-Check (pickt per E
 mehr beim Versionssprung. Release muss VERÖFFENTLICHT sein (nicht Draft), sonst greift `releases/latest`
 weder für Download noch Update-Check.
 
+## UPDATE 2026-07-24 — 3-Modul-UI, Netzwerk-Reaktivierung, zweistufige Follow-Ups
+- **NAVIGATION = 3 Module** (`crm.html`, `.nav-group[data-group]` + `.nav-grp` Kopf + `.nav-sub`):
+  Lead Engine (leadsuche/vernetzen/contacts) · Sales Agent (erstnachricht/gespraech/followups/
+  termine) · Brand Engine (beitraege/kommentare/likes/analytics). Übersicht + Live-Ansicht stehen
+  ausserhalb. `VIEWS`-Map hat pro Eintrag ein `grp`; `zeigeAnsicht()` klappt das Modul der aktiven
+  Seite auf (`.open`) und markiert es (`.has-active`). Ausklappen via `max-height` (nicht grid-0fr,
+  das braucht ein einzelnes Kind).
+- **Modul-Views sind GEFILTERTE Sichten auf dieselben Entwürfe** (`kind`) – EINE Wahrheit, kein
+  zweiter Datenpfad. Dafür wurden die Karten-Renderer aus `renderDrafts`/`renderPosts` in
+  `zeichneEntwuerfe(list, grid)` / `zeichnePosts(list, grid)` ausgelagert; `renderModulViews(v)`
+  zeichnet nur die aktive Seite, `aktuelleView` merkt sie fürs Nachziehen bei jedem `load()`.
+- **Safety Governor**: Geschäftszeiten-Toggle sitzt jetzt DORT (`#gov-zeitfenster`), nicht mehr im
+  Bot-Status. Warm-up-Anzeigen (`#st-warm-wrap`, `#m-warmlab`) werden bei 100% komplett
+  ausgeblendet (Conditional Rendering) statt dauerhaft "fertig" zu zeigen. Dazu eine einklappbare
+  `.safe-box` "Warum das sicher ist" (8 konkrete Schutzmechanismen) gegen die Ban-Sorge der Nutzer.
+- **NETZWERK REAKTIVIEREN** (`modules/netzwerk.ts`): `scanNetzwerk()` liest die eigene Kontaktliste
+  (rein lesend, KEIN Governor – wie acceptance.ts), legt Verbindungen als `status='accepted'` +
+  neue Spalte `contacts.aus_netzwerk=1` an → sie verbrauchen KEIN Vernetzungs-Kontingent.
+  `generateReaktivierung()` erzeugt `kind='reaktivierung'`-Entwürfe für nie angeschriebene
+  Verbindungen (eigener Prompt in personalize.ts: stille Vernetzung offen ansprechen, kein Pitch).
+  Auslöser: `POST /api/netzwerk` → state `netzwerk_now` → Loop alle 2 Min + wöchentlich Di 9:30.
+  `sendDraft` behandelt 'reaktivierung' wie 'first' (sendMessage). Namen-Parsing aus Kartentext –
+  ohne erkannten Namen wird KEIN Kontakt angelegt (Empfänger-Verifikation braucht ihn). NICHT
+  live getestet – beim ersten Lauf prüfen.
+- **FOLLOW-UPS ZWEISTUFIG** (vorher: genau einer, danach nie wieder). Stufe 1 nach 4 Tagen,
+  Stufe 2 nach weiteren 7 Tagen (sehr kurz, ehrlicher Schlussstrich). DANACH NIE WIEDER – wer
+  zweimal nicht antwortet, will nicht (Ruf + Report-Risiko). `messagedAwaitingFollowup(days, limit,
+  days2)` in crm.ts kennt beide Wartezeiten; ein OFFENER Follow-up-Entwurf blockiert den nächsten.
+  `followupMessage(c, stufe)` in personalize.ts. Logik gegen SQLite mit 5 Fällen verifiziert.
+- OFFEN / als Nächstes: Echtzeit-Chat im Postfach, Multi-Kampagnen-Ordner (Datenmodell:
+  Kampagne je Kontakt/Entwurf), Beitrags-Planer.
+
 ## UPDATE 2026-07-23 — EIN Bot, Not-Aus, Doppel-Versand-Sperre, Browser-Posten
 - **EIN Regler statt zwei.** Dashboard hat jetzt EINE „Automatik-Stufe" (`#automatikseg`, 4 Stufen:
   vorschlaege/halb/agent_test/agent_live) statt der zwei verwirrenden Schalter (Modus + Sales-Agent).
