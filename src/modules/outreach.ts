@@ -87,6 +87,15 @@ const SEL = {
   // Like-Button des Haupt-Posts. aria-pressed wechselt false→true = unser Beleg. Read-only
   // verifiziert 2026-07-17: Label "Mit „Gefällt mir" reagieren", aria-pressed anfangs false.
   likeBtn: "button[aria-label*='efällt mir'][aria-pressed], button[aria-label='Like'][aria-pressed]",
+  // EIGENEN Beitrag posten (Browser-Weg, ohne API). Der "Beitrag starten"-Knopf im Feed öffnet
+  // den Post-Dialog. Selektoren defensiv mit Fallbacks – NICHT automatisiert testbar (realer
+  // öffentlicher Post), beim ersten echten Lauf engine.log prüfen.
+  startPostBtn:
+    "button.share-box-feed-entry__trigger, .share-box-feed-entry__trigger, button[aria-label*='Beitrag'], button:has-text('Beitrag starten'), button:has-text('Start a post')",
+  postEditor:
+    "div[role='dialog'] .ql-editor, .share-creation-state__text-editor .ql-editor, div[role='textbox'][contenteditable='true']",
+  postSubmit:
+    "div[role='dialog'] .share-actions__primary-action, div[role='dialog'] button.share-actions__primary-action, div[role='dialog'] button:has-text('Posten'), div[role='dialog'] button:has-text('Post')",
 };
 
 /** Findet den Vernetzen-Button – direkt oder nach Öffnen des "Mehr"-Menüs. */
@@ -406,4 +415,62 @@ export async function sendComment(postUrl: string, text: string) {
       .catch(() => 0);
     if (drin === 0) throw new Error("Kommentar nicht bestätigt: steht nicht im Kommentarbereich");
   });
+}
+
+/**
+ * EIGENEN BEITRAG posten über die BROWSER-SESSION (ohne LinkedIn-API-Schlüssel). Damit funktioniert
+ * das Posten für jeden – der offizielle API-Weg (posting.ts) bleibt als Alternative, wenn ein Token
+ * da ist. Beitrag ist eigener Inhalt unter eigenem Namen → geringes Ban-Risiko, deshalb NICHT über
+ * die connect/message-Caps des Governors (wie beim API-Weg bewusst getrennt), aber mit menschlichem
+ * Delay + DOPPEL-POST-SPERRE (dasselbe Ledger wie bei DMs, Schlüssel "__eigener_post__").
+ * Beleg für "gepostet": der Post-Dialog schließt sich nach erfolgreichem Klick (Editor verschwindet).
+ * HINWEIS: der scharfe Versand ist nicht automatisiert testbar – Selektoren defensiv, beim ersten
+ * echten Lauf prüfen (engine.log).
+ */
+export async function publishPostBrowser(body: string): Promise<void> {
+  const text = normText(body);
+  if (text.length < 20) throw new UnsichereNachricht("Post-Text zu kurz – nicht gepostet");
+  if (schonGesendet("__eigener_post__", text)) {
+    console.warn("[post] Duplikat verhindert – identischer Beitrag ging kürzlich schon raus.");
+    throw new DuplikatBlockiert("__eigener_post__");
+  }
+
+  const page = await newPage();
+  await page.goto("https://www.linkedin.com/feed/", { waitUntil: "domcontentloaded" });
+  if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
+  await humanScroll(page); // erst schauen wie ein Mensch
+  await humanDelay(1500, 3000);
+
+  const start = page.locator(SEL.startPostBtn).first();
+  if ((await start.count()) === 0) throw new Error("Beitrag-starten-Knopf nicht gefunden (Selektor prüfen)");
+  await start.evaluate((el) => (el as HTMLElement).click());
+  await humanDelay(1500, 3000);
+
+  const editor = page.locator(SEL.postEditor).first();
+  await editor.waitFor({ timeout: 12000 });
+  await editor.click();
+  await humanDelay(300, 700);
+  await page.keyboard.insertText(body); // Original mit Absätzen, nicht normalisiert
+  await humanDelay(800, 1800);
+
+  // Rücklesen: steht unser Text wirklich im Editor? Sonst NICHT posten.
+  const ist = normText(await editor.evaluate((el) => (el as HTMLElement).innerText || "").catch(() => ""));
+  if (!ist.includes(text.slice(0, 40)))
+    throw new UnsichereNachricht("Post-Editor-Inhalt stimmt nicht mit dem Entwurf überein – nicht gepostet");
+
+  const submit = page.locator(SEL.postSubmit).first();
+  if ((await submit.count()) === 0) throw new Error("Posten-Knopf nicht gefunden (Selektor prüfen)");
+  if (!(await submit.isEnabled().catch(() => false))) throw new Error("Posten-Knopf nicht aktiv");
+  await submit.click();
+
+  // BELEG: der Dialog/Editor schließt sich nach erfolgreichem Posten.
+  let zu = false;
+  for (let i = 0; i < 4 && !zu; i++) {
+    await humanDelay(1000, 1800);
+    zu = (await page.locator(SEL.postEditor).count().catch(() => 1)) === 0;
+  }
+  if (!zu) throw new Error("Posten nicht bestätigt: Editor ist noch offen (vermutlich nicht gepostet)");
+
+  ledgerEintragen("__eigener_post__", text);
+  console.info("[post] Beitrag über Browser gepostet.");
 }

@@ -108,11 +108,35 @@ NextLead-mac-arm64.dmg` bzw. `-Setup-win.exe`) und der Update-Check (pickt per E
 mehr beim Versionssprung. Release muss VERÖFFENTLICHT sein (nicht Draft), sonst greift `releases/latest`
 weder für Download noch Update-Check.
 
-## Automatik-Modi (db state 'mode', default 'manual', umschaltbar im Dashboard)
+## UPDATE 2026-07-23 — EIN Bot, Not-Aus, Doppel-Versand-Sperre, Browser-Posten
+- **EIN Regler statt zwei.** Dashboard hat jetzt EINE „Automatik-Stufe" (`#automatikseg`, 4 Stufen:
+  vorschlaege/halb/agent_test/agent_live) statt der zwei verwirrenden Schalter (Modus + Sales-Agent).
+  Jede Stufe setzt intern `mode` + `agent_mode` (POST /api/automatik). Ableitung im Dashboard:
+  `automatikLevel()` aus (mode, agentMode). Der ALTE Autopilot (`runAutopilot`/autopilot.ts) ist
+  STILLGELEGT (Cron raus) — der Sales-Agent (`agent/`) ist die EINZIGE Gesprächs-Engine. Migration
+  beim Engine-Start: `mode==='full'` → semi + agent live. generateInboxDrafts-Gate jetzt nur noch
+  `getAgentMode()==='off'`.
+- **NOT-AUS** (`governor.setNotAus`/`notAusAktiv`, state `send_stop`): Dashboard-Knopf `#notaus-btn`
+  (POST /api/notaus) blockiert JEDEN Versand mit einem Klick, UNABHÄNGIG vom Auto-Circuit-Breaker
+  (`paused`) — canDoAction prüft `send_stop` ganz zuerst. Engine läuft weiter.
+- **DOPPEL-VERSAND-SPERRE** (outreach.ts): persistentes `sent_ledger` (recipient + djb2-fingerprint
+  + at). `tippenUndSenden` prüft `schonGesendet()` VOR dem Tippen → identische Nachricht geht in 24h
+  nie zweimal an dieselbe Person; Eintrag erst nach bestätigtem Versand (`ledgerEintragen`).
+  `DuplikatBlockiert extends GovernorBlocked` → alle bestehenden Catch-Blöcke behandeln es als
+  „übersprungen, kein Drama", kein Resend, keine record()-Zählung.
+- **POSTEN OHNE API** (`publishPostBrowser` in outreach.ts): eigene Beiträge über die Browser-Session
+  (SEL.startPostBtn/postEditor/postSubmit, defensiv, NICHT live-testbar). `hatPosting` wählt nur noch
+  den WEG (API `publishPost` bevorzugt, sonst Browser), schaltet Posten NICHT mehr ab. Publish-Cron
+  in `einzeln("post")` + atomarer Status-Claim ('approved'→'posting'→'posted') gegen Doppel-Post +
+  Ledger-Schlüssel „__eigener_post__". Post-Ideen (`generatePostIdeas`) laufen jetzt für jeden (nicht
+  mehr an hatPosting gebunden) + beim Start 2 Ideen, falls keine offen. Freigabe bleibt Pflicht.
+
+## Automatik-Modi (db state 'mode', default 'manual' + 'agent_mode', umschaltbar im Dashboard)
+Historische Beschreibung — die drei `mode`-Werte existieren weiter, werden aber über die neue
+Automatik-Stufe gesetzt (siehe UPDATE oben). `full` wird beim Start auf den Agent migriert.
 - **manual**: vernetzt auto; Erstnachricht + Antworten + Follow-ups = Entwürfe zur Freigabe.
 - **semi**: + Erstnachricht auto (deliverFirstMessage → sendMessage, Fallback Entwurf).
-- **full**: + Autopilot (Antworten/Follow-ups autonom, Termin-Handoff). `getMode()` in db/index.ts.
-  index.ts: generateInboxDrafts nur wenn !full; runAutopilot self-gated auf full.
+- **full**: (stillgelegt/migriert) früher Autopilot. `getMode()` in db/index.ts.
 - `db/` — SQLite-Schema + Zugriff
 - `index.ts` — Cron-Loop (Posting + Outreach + Acceptance-Check + Draft-Generierung + Status).
   Schreibt jede Minute `engine_heartbeat` in state → Dashboard erkennt "Bot arbeitet".

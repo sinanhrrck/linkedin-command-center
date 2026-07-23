@@ -3,6 +3,7 @@ import { db, setState, getState, getMode, setMode, getAgentMode, setAgentMode } 
 import { governor } from "./core/safetyGovernor.js";
 import { events } from "./core/events.js";
 import { publishPost } from "./modules/posting.js";
+import { publishPostBrowser } from "./modules/outreach.js";
 import { outreachTick } from "./modules/outreachTick.js";
 import { checkAcceptances } from "./modules/acceptance.js";
 import { feedTick } from "./modules/leadFeed.js";
@@ -78,36 +79,49 @@ setTimeout(async () => {
   // Beim Start einmal Nachschub holen: wer Quellen angelegt + den Bot gestartet hat, bekommt
   // gleich Leads, statt bis zum nächsten festen Fütter-Termin zu warten.
   await einzeln("feed", () => feedTick());
+  // Post-Ideen: nur nachlegen, wenn KEINE offen sind (schont das Gemini-Limit). So sieht der
+  // Nutzer gleich beim ersten Start Beitrags-Entwürfe zum Freigeben, statt bis Montag zu warten.
+  await einzeln("content", async () => {
+    const offen = (db.prepare("SELECT COUNT(*) AS n FROM posts WHERE status='draft'").get() as { n: number }).n;
+    if (offen === 0) await generatePostIdeas(2);
+  });
 }, 4000);
 
 /**
- * OFFIZIELLE-API-FEATURES sind OPTIONAL. Das eigene Posten über die LinkedIn-Posts-API braucht
- * eine LinkedIn-Developer-App (Client-ID/Secret + Token) – das kann ein Laie kaum anlegen.
- * Der KERN (Vernetzen, DMs, Kommentare, Likes) läuft über die Browser-Session und braucht das
- * NICHT. Fehlen die LinkedIn-Keys, überspringen wir Posting + Post-Ideen komplett und still,
- * statt Fehler zu spammen. Ein neuer Nutzer braucht dann nur: Gemini-Key + einmal einloggen.
+ * POSTEN läuft jetzt für JEDEN – auch OHNE LinkedIn-API-Schlüssel: dann über die Browser-Session
+ * (publishPostBrowser), genau wie Vernetzen/Kommentieren. Ist ein API-Token da, wird der saubere
+ * API-Weg (publishPost) bevorzugt (kein Selektor-Risiko). `hatPosting` wählt also nur noch den WEG,
+ * schaltet Posten aber nicht mehr ab.
  */
 const hatPosting = !!(config.linkedin.accessToken || config.linkedin.clientId);
-if (!hatPosting) console.info("[post] Kein LinkedIn-API-Zugang konfiguriert – Posten/Post-Ideen deaktiviert (optional). Vernetzen & DMs laufen normal.");
+console.info(hatPosting ? "[post] Posten über offizielle LinkedIn-API." : "[post] Kein API-Token – Posten läuft über die Browser-Session.");
 
-// Fällige Posts veröffentlichen (offizielle API, kein Governor nötig). Nur wenn API konfiguriert.
-if (hatPosting)
-  cron.schedule("* * * * *", async () => {
-    const due = db
-      .prepare(
-        "SELECT id, body FROM posts WHERE status='approved' AND scheduled_for <= datetime('now') ORDER BY scheduled_for LIMIT 1",
-      )
-      .get() as { id: number; body: string } | undefined;
+// Fällige, freigegebene Posts veröffentlichen. In `einzeln` gekapselt (kein Doppel-Feuern), und der
+// Status wird VOR dem Versuch atomar auf 'posting' gesetzt → derselbe Post kann nie zweimal rausgehen.
+cron.schedule("* * * * *", () =>
+  einzeln("post", async () => {
+    const claim = db.prepare(
+      "UPDATE posts SET status='posting' WHERE id=(SELECT id FROM posts WHERE status='approved' AND scheduled_for <= datetime('now') ORDER BY scheduled_for LIMIT 1)",
+    ).run();
+    if (claim.changes === 0) return; // nichts fällig
+    const due = db.prepare("SELECT id, body FROM posts WHERE status='posting' ORDER BY scheduled_for LIMIT 1").get() as { id: number; body: string } | undefined;
     if (!due) return;
     try {
-      const urn = await publishPost(due.body);
-      db.prepare("UPDATE posts SET status='posted', posted_urn=? WHERE id=?").run(urn, due.id);
-      console.info(`[post] veröffentlicht: ${urn}`);
+      if (hatPosting) {
+        const urn = await publishPost(due.body);
+        db.prepare("UPDATE posts SET status='posted', posted_urn=? WHERE id=?").run(urn, due.id);
+        console.info(`[post] veröffentlicht (API): ${urn}`);
+      } else {
+        await publishPostBrowser(due.body);
+        db.prepare("UPDATE posts SET status='posted' WHERE id=?").run(due.id);
+        console.info("[post] veröffentlicht (Browser).");
+      }
     } catch (e) {
       db.prepare("UPDATE posts SET status='failed' WHERE id=?").run(due.id);
-      console.error(`[post] fehlgeschlagen (#${due.id}):`, e);
+      console.error(`[post] fehlgeschlagen (#${due.id}):`, (e as Error)?.message?.slice(0, 120));
     }
-  });
+  }),
+);
 
 // Outreach-Tick alle 12 Minuten. Der Governor drosselt intern (Caps/Warm-up/Zeitfenster/Delays).
 cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick()));
@@ -180,10 +194,10 @@ cron.schedule(`*/${config.agent.intervalMinutes} * * * *`, () => einzeln("agent"
 // entsteht durch stetige, gute Kommentare, nicht durch Masse. Governor-gated erst beim Senden.
 cron.schedule("30 12 * * 1-5", () => einzeln("comment", () => commentTick(3)));
 
-// CONTENT: 1x pro Woche (Montag 8 Uhr) Post-Ideen erzeugen. Sie landen als Entwürfe und
-// werden erst nach Sinans Freigabe über die offizielle API veröffentlicht (öffentlich = nie
-// autonom). Rein KI, kein Governor (Posting läuft über die API, nicht die Browser-Session).
-if (hatPosting) cron.schedule("0 8 * * 1", () => einzeln("content", () => generatePostIdeas(3)));
+// CONTENT: 1x pro Woche (Montag 8 Uhr) Post-Ideen erzeugen. Sie landen als Entwürfe und werden
+// erst nach Freigabe veröffentlicht (öffentlich = nie autonom). Läuft für JEDEN – das Posten
+// selbst geht per API oder Browser (siehe oben), deshalb nicht mehr an `hatPosting` gebunden.
+cron.schedule("0 8 * * 1", () => einzeln("content", () => generatePostIdeas(3)));
 
 // WOCHEN-BILANZ automatisch: Montag 9:05 Uhr per Telegram, ohne dass Sinan etwas tippt.
 // "sowas muss automatisch passieren" – der Report kommt von allein, reife Kategorien
