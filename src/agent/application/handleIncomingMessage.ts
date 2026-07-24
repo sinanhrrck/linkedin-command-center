@@ -57,6 +57,16 @@ export async function handleIncomingMessage(conv: Conversation, verlauf: Nachric
     return { typ: "eskalieren", grund: "Termin/Kontakt – Übergabe an dich", entwurf: null, kontakt: analyse.kontakt, conversation: { ...basis, status: "gebucht" } };
   }
 
+  // ZUSAGE ZUM ANGEBOT: Ist das Angebot draußen (Phase call_angebot/nummer) und die Person sagt zu
+  // oder fragt nach dem Wie, übergibt der Bot an den Menschen (Sinan schickt den Code + macht das
+  // Auswertungsgespräch). Der Bot schließt den Deal NICHT selbst ab.
+  if (
+    (stage === "call_angebot" || stage === "nummer") &&
+    (analyse.intents.includes("positives_signal") || analyse.intents.includes("interesse") || analyse.intents.includes("offene_frage"))
+  ) {
+    return { typ: "eskalieren", grund: "Zusage/Interesse am Angebot – Übergabe an dich (Code + Auswertung)", entwurf: null, conversation: { ...basis, stage: "nummer", status: "gebucht" } };
+  }
+
   // 5) Antwort erzeugen + Schutzschleife: Humanizer → Validator → bei Verstoß regenerieren.
   const triggers = deriveTriggers(profile, analyse.intents, scores);
   const hinweise = triggerHinweise(triggers);

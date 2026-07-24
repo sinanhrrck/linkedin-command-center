@@ -84,8 +84,11 @@ Phase abgeschlossen, wenn: ${d.exit.join(" · ")}`;
 
 const STILREGELN = `# Stil (Pflicht)
 - kurze, lockere LinkedIn-DM in Umgangssprache, keine langen Absätze
-- höchstens EINE Frage – und nicht jede Nachricht mit einer Frage beenden
+- höchstens EINE Frage – oft ist gar keine Frage besser. Nicht ausfragen.
+- WICHTIG: Sobald die Person einen echten Bedarf zeigt (Jobsuche, Orientierung, Unsicherheit),
+  NICHT weiter Fragen stapeln – spiegle kurz und führe zum konkreten nächsten Schritt (dein Angebot).
 - keine Marketing-/Verkaufsbegriffe, keine Aufzählungen, keine Bindestrich-Floskeln
+- kein Verknappungs-Druck ("nur noch X Plätze"), kein Skript-Aufsagen – eigene Worte
 - gelegentlich (nicht immer) mal ein Emoji, sparsam und passend
 - klingt wie ein echter Mensch, nicht wie ChatGPT`;
 

@@ -34,6 +34,9 @@ export const ZIEL = profil.ziel;
 /** Harte Tabus/Grenzen (aus dem Profil). */
 export const TABUS = profil.tabus;
 
+/** DEIN konkretes Angebot (Mehrwert-Türöffner). Leer = kein Angebot, reines Kennenlernen. */
+export const ANGEBOT = (profil.angebot ?? "").trim();
+
 /** Stil-Regeln (aus dem Profil). */
 export const STIL_REGELN: string[] = profil.stilRegeln;
 
@@ -68,10 +71,13 @@ export function promptKontext(): string {
   const beispiele = BEISPIEL_NACHRICHTEN.length
     ? `\nSo klingt ${name} (Beispiele, Stil nachahmen – NICHT Inhalt kopieren):\n${BEISPIEL_NACHRICHTEN.map((b, i) => `Beispiel ${i + 1}: ${b}`).join("\n")}\n`
     : "";
+  const angebotBlock = ANGEBOT
+    ? `\nDein Angebot (Mehrwert-Türöffner – NUR anbieten, wenn ein echter Bedarf sichtbar ist, z.B. Jobsuche/Orientierung; nie kalt reinpitchen):\n${ANGEBOT}\n`
+    : "";
   return `Über ${name}: ${PERSONA}
 Ziel der Nachricht: ${ZIEL}
 ${TABUS}
-Stil-Regeln:
+${angebotBlock}Stil-Regeln:
 ${regeln}
 ${beispiele}`;
 }

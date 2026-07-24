@@ -22,6 +22,10 @@ export type Profil = {
   persona: string;
   /** Was eine Nachricht erreichen soll (Mehrwert-first, nicht verkaufen …). */
   ziel: string;
+  /** DEIN konkretes Angebot als Mehrwert-Türöffner: was es ist, für wen, der nächste Schritt.
+   *  Der Agent bietet es an, sobald ein echter Bedarf sichtbar wird (z.B. Jobsuche). Optional –
+   *  leer = der Agent bleibt rein beim Kennenlernen. */
+  angebot?: string;
   /** Harte Grenzen, die kein Gesprächsziel aushebeln darf (Vertriebs-Timing, Tabus). */
   tabus: string;
   /** Konkrete Stil-Regeln, eine pro Eintrag. */
@@ -45,6 +49,7 @@ const DEFAULT_PROFIL: Profil = {
   ziel:
     "Mehrwert zuerst: ehrlich hilfreich und sympathisch sein, echtes Interesse zeigen. " +
     "NICHT verkaufen, NICHT pitchen. Die Tür für ein späteres Gespräch sanft offen halten.",
+  angebot: "",
   tabus:
     "ZUERST VERDIENEN, DANN ANBIETEN. Solange die Person keinen Bedarf, Zweifel oder Interesse " +
     "gezeigt hat, ist jede Nachricht reines Kennenlernen. Kein Angebot, keine Beratung. " +

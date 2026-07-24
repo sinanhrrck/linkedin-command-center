@@ -31,21 +31,23 @@ export interface StageDef {
   exit: string[];
 }
 
-/** Schwellen, ab denen ein Angebot/Call überhaupt erlaubt ist (Scores 0..100, Zähler absolut). */
-export const SCHWELLEN = { callTrust: 55, callInterest: 55, callReadiness: 60, minAntworten: 4, minNachrichten: 6 } as const;
+/** Schwellen, ab denen ein Angebot überhaupt erlaubt ist (Scores 0..100, Zähler absolut).
+ *  Bewusst moderat: bei klarem Kaufsignal (Jobsuche/Karriere) senkt nextStage die Schwelle
+ *  zusätzlich, damit der Bot dann zügig zum Angebot führt statt weiter zu fragen. */
+export const SCHWELLEN = { callTrust: 50, callInterest: 50, callReadiness: 52, minAntworten: 3, minNachrichten: 4 } as const;
 
 export const STAGE_DEF: Record<Stage, StageDef> = {
   connection:  { ziel: "Vernetzung angenommen, Gespräch eröffnen.", erlaubt: ["frage_stellen", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"], exit: ["Person hat geantwortet → icebreaker/smalltalk"] },
   icebreaker:  { ziel: "Lockerer Einstieg, echtes Interesse zeigen.", erlaubt: ["frage_stellen", "spiegeln", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen"], exit: ["lockerer Austausch läuft → smalltalk/discovery"] },
   smalltalk:   { ziel: "Beziehung aufwärmen, sympathisch bleiben.", erlaubt: ["frage_stellen", "spiegeln", "validieren"], verboten: ["call_anbieten", "nummer_fragen"], exit: ["genug Wärme/Rapport → discovery"] },
-  discovery:   { ziel: "Situation/Motivation/Ambitionen verstehen. NICHT verkaufen.", erlaubt: ["frage_stellen", "spiegeln", "validieren"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"], exit: ["Bedarf/Unsicherheit sichtbar → bedarf", "Skepsis/Preisfrage → einwand", "Absage → verloren"] },
-  bedarf:      { ziel: "Bedarf/Problem herausarbeiten und vertiefen.", erlaubt: ["frage_stellen", "spiegeln", "validieren", "story_teilen"], verboten: ["nummer_fragen"], exit: ["Bedarf klar & Vertrauen wächst → vertrauen", "Einwand → einwand"] },
+  discovery:   { ziel: "SCHNELL den echten Bedarf/die Orientierungsfrage erkennen – höchstens eine Frage, nicht ausfragen. Sobald ein Bedarf sichtbar ist (z.B. Jobsuche), weiter.", erlaubt: ["frage_stellen", "spiegeln", "validieren"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"], exit: ["Bedarf/Jobsuche/Unsicherheit sichtbar → bedarf", "Skepsis/Preisfrage → einwand", "Absage → verloren"] },
+  bedarf:      { ziel: "Bedarf kurz spiegeln und die kostenlose Analyse als konkrete Hilfe ins Spiel bringen. Nicht weiter ausfragen.", erlaubt: ["spiegeln", "validieren", "story_teilen", "leichter_next_step"], verboten: ["nummer_fragen"], exit: ["Bedarf gespiegelt & offen → vertrauen/call_angebot", "Einwand → einwand"] },
   vertrauen:   { ziel: "Vertrauen festigen, eigene Erfahrung teilen.", erlaubt: ["story_teilen", "validieren", "spiegeln"], verboten: ["nummer_fragen"], exit: ["Trust hoch → validierung", "Einwand → einwand"] },
   validierung: { ziel: "Interesse konkret validieren (Micro-Commitment).", erlaubt: ["frage_stellen", "leichter_next_step", "validieren"], verboten: ["nummer_fragen"], exit: ["Scores über Schwelle (Trust≥55, Interest≥55, CallReadiness≥60) → call_angebot", "sonst zurück in vertrauen"] },
   einwand:     { ziel: "Einwand mit Fingerspitzengefühl auflösen. Nie diskutieren.", erlaubt: ["validieren", "spiegeln", "story_teilen"], verboten: ["call_anbieten", "nummer_fragen", "termin_bestaetigen"], exit: ["Einwand aufgelöst, positives Signal → vertrauen", "sonst zurück in discovery", "hartes Nein → verloren"] },
-  call_angebot:{ ziel: "Ein Telefonat sinnvoll erscheinen lassen (kein Pitch).", erlaubt: ["call_anbieten", "leichter_next_step", "validieren"], verboten: ["nummer_fragen"], exit: ["Person offen für Call → nummer", "zögert → zurück in vertrauen", "Einwand → einwand"] },
-  nummer:      { ziel: "Nummer/Termin-Kanal erhalten – erst wenn die Tür offen ist.", erlaubt: ["nummer_fragen", "call_anbieten"], verboten: [], exit: ["Nummer/Kontakt genannt → termin", "Zusage zum Termin → termin"] },
-  termin:      { ziel: "Termin fix bestätigen.", erlaubt: ["termin_bestaetigen"], verboten: [], exit: ["Termin bestätigt → abgeschlossen (Übergabe an Mensch)"] },
+  call_angebot:{ ziel: "Die KOSTENLOSE Potenzialanalyse als echte Hilfe anbieten (siehe Angebot) – locker, kein Druck, kein Skript. Genau EIN klarer Vorschlag.", erlaubt: ["call_anbieten", "leichter_next_step", "validieren"], verboten: ["nummer_fragen"], exit: ["Person sagt zu / fragt nach dem Wie → nummer (Übergabe)", "zögert → zurück in vertrauen", "Einwand → einwand"] },
+  nummer:      { ziel: "Zusage zur Analyse festhalten und an Sinan übergeben – er schickt den Zugangscode und macht das Auswertungsgespräch. Der Bot schließt nicht selbst ab.", erlaubt: ["leichter_next_step", "validieren", "eskalieren"], verboten: [], exit: ["Zusage/Interesse → Übergabe an den Menschen"] },
+  termin:      { ziel: "Übergabe an Sinan bestätigen (Code + Auswertungsgespräch).", erlaubt: ["termin_bestaetigen", "eskalieren"], verboten: [], exit: ["Übergabe steht → abgeschlossen"] },
   abgeschlossen:{ ziel: "Termin steht – Übergabe an den Menschen.", erlaubt: ["eskalieren"], verboten: ["nummer_fragen"], exit: ["terminal – Bot fasst den Thread nicht mehr an"] },
   verloren:    { ziel: "Abschied respektieren, Tür freundlich offen lassen.", erlaubt: ["abschied"], verboten: ["frage_stellen", "call_anbieten", "nummer_fragen"], exit: ["terminal – kein Nachfassen gegen ein Nein"] },
 };
@@ -68,7 +70,15 @@ export function nextStage(current: Stage, intents: IntentSet, s: Scores): Stage 
   // Aus einem behandelten Einwand: zurück in die Beziehungsarbeit (nicht sofort weiterdrücken).
   if (current === "einwand") return intents.includes("positives_signal") ? "vertrauen" : "discovery";
 
-  const darfCall = s.trust >= SCHWELLEN.callTrust && s.interest >= SCHWELLEN.callInterest && s.callReadiness >= SCHWELLEN.callReadiness;
+  // KAUFSIGNAL (Jobsuche/Karriere/klares Interesse): den Trichter straffen. Smalltalk überspringen
+  // und – wenn die Scores stimmen – etwas früher zum Angebot dürfen (senkt die Schwelle um 8).
+  const kaufsignal = intents.includes("karriere_interesse") || intents.includes("interesse") || intents.includes("investment_interesse");
+  if (kaufsignal && (current === "icebreaker" || current === "smalltalk")) return "bedarf";
+  const bonus = kaufsignal ? 8 : 0;
+  const darfCall =
+    s.trust >= SCHWELLEN.callTrust - bonus &&
+    s.interest >= SCHWELLEN.callInterest - bonus &&
+    s.callReadiness >= SCHWELLEN.callReadiness - bonus;
 
   // Regulärer, schrittweiser Fortschritt entlang der Reihenfolge – höchstens EINE Stufe pro Zug.
   const idx = REIHENFOLGE.indexOf(current);
