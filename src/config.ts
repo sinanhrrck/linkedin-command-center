@@ -30,9 +30,12 @@ export const config = {
    */
   llm: {
     anthropicKey: process.env.ANTHROPIC_API_KEY ?? "",
-    // Für kurze Chat-Antworten reicht Opus locker; wer Budget strecken will, kann hier auf
-    // "claude-haiku-4-5" wechseln (5x günstiger, für DM-Antworten völlig ausreichend).
-    model: "claude-opus-4-8",
+    // Modell für den Sales-Agent. Default HAIKU: ~5x günstiger als Opus, für kurze DM-Chats
+    // völlig ausreichend – nach dem Kosten-Vorfall die vernünftige Standardwahl. Wer mehr
+    // Qualität will, überschreibt per .env: LLM_MODEL=claude-sonnet-4-6 (Mittelweg) oder
+    // LLM_MODEL=claude-opus-4-8 (stärkstes, teuerstes). Preise (In/Out pro Mio Token):
+    // Haiku 4.5 $1/$5 · Sonnet 4.6 $3/$15 · Opus 4.8 $5/$25.
+    model: process.env.LLM_MODEL ?? "claude-haiku-4-5",
     // Welcher Anbieter treibt den Autopilot? "claude" = bezahlt (Produktion, Standard),
     // "gemini" = gratis erzwingen (spart Geld, aber 20/Tag-Limit reicht nur für Testläufe).
     autopilotProvider: (process.env.LLM_AUTOPILOT_PROVIDER ?? "claude") as "claude" | "gemini",
