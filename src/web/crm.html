@@ -308,6 +308,9 @@
   .dc-reject { margin-left: auto; font-family: var(--disp); font-weight: 500; font-size: 12px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-dim); border-radius: 10px; padding: 8px 13px; transition: all .15s; }
   .dc-reject:hover { border-color: var(--amber); color: var(--amber); }
   .dc-reject:disabled { cursor: default; }
+  .dc-delete { font-size: 13px; line-height: 1; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-faint); border-radius: 10px; padding: 8px 11px; transition: all .15s; }
+  .dc-delete:hover { border-color: var(--red); color: var(--red); }
+  .dc-delete:disabled { cursor: default; opacity: .5; }
   .draft-card.approved { opacity: .55; box-shadow: 0 0 0 2px rgba(31,157,99,.28), var(--shadow-sm); }
   .draft-card.rejecting { opacity: .5; }
   /* Intent-Flagge auf der Karte (was ist wichtig?) */
@@ -1720,6 +1723,7 @@ function zeichneEntwuerfe(list, grid) {
         <button class="dc-approve" title="Genehmigen – der Bot sendet es beim nächsten Lauf automatisch">✓ Genehmigen</button>
         <span class="draft-saved">gespeichert ✓</span>
         <button class="dc-reject" title="Ablehnen – der Bot schreibt einen neuen Entwurf">Ablehnen → neu</button>
+        <button class="dc-delete" title="Löschen – Entwurf entfernen, ohne Ersatz">🗑</button>
       </div>
     </div>`).join("");
   grid.querySelectorAll(".draft-card").forEach(card => {
@@ -1750,6 +1754,15 @@ function zeichneEntwuerfe(list, grid) {
       const r = await postDraft({ id, action: "reject" });
       if (r && r.ok && !r.regenerated) alert("Abgelehnt. Ein neuer Entwurf konnte gerade nicht erzeugt werden (evtl. KI-Limit) – beim nächsten Lauf versucht es der Bot erneut.");
       setTimeout(load, 1000);
+    });
+    // LÖSCHEN: Entwurf endgültig entfernen, OHNE Ersatz (anders als Ablehnen).
+    card.querySelector(".dc-delete").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      if (btn.disabled) return;
+      if (!confirm("Diesen Entwurf endgültig löschen? Es wird kein neuer erzeugt.")) return;
+      btn.disabled = true; card.classList.add("rejecting");
+      await postDraft({ id, action: "delete" });
+      setTimeout(load, 400);
     });
   });
 }

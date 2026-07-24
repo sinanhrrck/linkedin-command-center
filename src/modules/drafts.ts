@@ -229,6 +229,15 @@ export function setDraftStatus(id: number, status: string) {
 }
 
 /**
+ * Entwurf ENDGÜLTIG löschen (Zeile weg, KEIN Ersatz – anders als "ablehnen"). Für Entwürfe,
+ * die der Nutzer schlicht nicht will. Bereits gesendete werden NICHT gelöscht (Beleg-/Historien-
+ * schutz), die sind ohnehin nicht mehr in der Liste. Rückgabe: true, wenn etwas entfernt wurde.
+ */
+export function deleteDraft(id: number): boolean {
+  return db.prepare("DELETE FROM drafts WHERE id=? AND status != 'sent'").run(id).changes > 0;
+}
+
+/**
  * FREIGABE-WORKFLOW (Sinans Wunsch): Der Nutzer entscheidet nur genehmigen/ablehnen, das
  * SENDEN macht die Engine beim nächsten Lauf (governor-gedrosselt). Kein Direktversand mehr
  * aus dem Dashboard-Prozess – ein Ort weniger, an dem etwas schiefgeht.

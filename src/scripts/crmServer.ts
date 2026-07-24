@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
 import { getAnalytics } from "../modules/analytics.js";
-import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft } from "../modules/drafts.js";
+import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, deleteDraft } from "../modules/drafts.js";
 import { getPost, approvePost, discardPost, generatePostDraft } from "../modules/content.js";
 import { addSource, deleteSource } from "../modules/leadFeed.js";
 import { deleteContact } from "../modules/crm.js";
@@ -222,6 +222,9 @@ const server = createServer((req, res) => {
           db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), Number(id));
         } else if (action === "discard") {
           setDraftStatus(Number(id), "discarded");
+        } else if (action === "delete") {
+          // Endgültig löschen – KEIN Ersatz (anders als "reject"). Zeile ist danach weg.
+          deleteDraft(Number(id));
         } else if (action === "approve") {
           // Genehmigen: der Bot sendet beim nächsten Lauf (governor-gedrosselt). Kein Direktversand.
           approveDraft(Number(id), typeof text === "string" ? text : undefined);
