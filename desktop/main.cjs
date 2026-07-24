@@ -17,6 +17,9 @@ const DASHBOARD_URL = "http://localhost:4321";
 const UPDATE_REPO = "sinanhrrck/linkedin-command-center"; // GitHub-Repo mit den Releases
 let serverProc = null;
 let mainWin = null;
+let serverGewollt = false;     // läuft der Server absichtlich? (false = App wird beendet → nicht neu starten)
+let serverNeustartZaehler = 0; // Schutz vor Crash-Schleife
+let serverNeustartTimer = null;
 let latestUpdate = null; // gemerktes Ziel: { version, url, name }
 
 // ===== In-App-Update =====
@@ -122,6 +125,7 @@ ipcMain.handle("update:install", async () => {
  *    zeigt auf den (schreibgeschützten) App-Code, damit der Server Engine/Login-Skripte findet.
  */
 function startServer() {
+  serverGewollt = true; // ab jetzt soll der Server laufen (Watchdog darf neu starten)
   if (app.isPackaged) {
     const dataDir = app.getPath("userData");
     // Chromium liegt ENTPACKT in app.asar.unpacked (asarUnpack). Playwright würde ihn sonst im
@@ -139,6 +143,25 @@ function startServer() {
     serverProc = spawn(npm, ["run", "crm"], { cwd: ROOT, stdio: "inherit", env: process.env });
   }
   serverProc.on("error", (e) => console.error("[app] Server-Start fehlgeschlagen:", e.message));
+
+  /**
+   * WATCHDOG: stirbt der Dashboard-Server unerwartet (Absturz, versehentlich beendet), startet
+   * er automatisch neu – sonst zeigt das Dashboard "Verbindung zum Server verloren" und lässt
+   * sich nur per App-Neustart retten. Nur neu starten, wenn der Server gewollt läuft (nicht beim
+   * App-Beenden). Crash-Schleife wird begrenzt: nach 5 schnellen Neustarts wird aufgegeben.
+   */
+  serverProc.on("exit", (code) => {
+    if (!serverGewollt) return; // App wird beendet – kein Neustart
+    serverNeustartZaehler++;
+    if (serverNeustartZaehler > 5) {
+      console.error("[app] Dashboard-Server ist mehrfach abgestürzt – kein weiterer Neustart.");
+      return;
+    }
+    console.warn(`[app] Dashboard-Server beendet (Code ${code}) – Neustart in 1.5s (Versuch ${serverNeustartZaehler}).`);
+    serverNeustartTimer = setTimeout(() => { if (serverGewollt) startServer(); }, 1500);
+  });
+  // Läuft er ~30s stabil, gilt er als gesund → Zähler zurücksetzen.
+  setTimeout(() => { if (serverProc) serverNeustartZaehler = 0; }, 30_000);
 }
 
 /**
@@ -192,6 +215,8 @@ if (!gotLock) {
 
 // Server sauber beenden, wenn die App schließt.
 function stopServer() {
+  serverGewollt = false; // absichtliches Beenden → Watchdog startet NICHT neu
+  if (serverNeustartTimer) { clearTimeout(serverNeustartTimer); serverNeustartTimer = null; }
   if (serverProc) {
     try { serverProc.kill(); } catch { /* egal */ }
     serverProc = null;
