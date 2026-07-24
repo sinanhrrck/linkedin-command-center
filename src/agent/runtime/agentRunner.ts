@@ -33,6 +33,14 @@ const claudeAn = () => config.llm.autopilotProvider === "claude" && claudeAvaila
 const analyzeLlm = (p: string) => (claudeAn() ? generateClaude(p) : generateText(p));
 const replyLlm = (p: string) => (claudeAn() ? generateClaude(p) : generateText(p));
 
+/** Stabiler Kurz-Fingerabdruck (djb2) der eingegangenen Nachricht – Basis der Idempotenz-Sperre. */
+function fingerprint(text: string): string {
+  const s = (text || "").replace(/\s+/g, " ").trim().toLowerCase();
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return `${h}:${s.length}`;
+}
+
 export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesendet: number; entwuerfe: number; eskaliert: number }> {
   const res = { verarbeitet: 0, gesendet: 0, entwuerfe: 0, eskaliert: 0 };
   const mode = getAgentMode();
@@ -51,8 +59,46 @@ export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesende
     let conv = (await repo.load(t.threadUrl)) ?? neueConversation(t.threadUrl, t.participant);
     if (conv.status !== "aktiv") continue;
 
-    const e = await handleIncomingMessage(conv, t.messages, { persona, analyzeLlm, replyLlm });
+    // ---- IDEMPOTENZ: pro EINGEGANGENER Nachricht wird die KI genau EINMAL bemüht ----
+    const eingang = t.lastIncoming || last?.text || "";
+    const hash = fingerprint(eingang);
+    const stand = repo.verarbeitungsStand(t.threadUrl);
+    if (stand && stand.incomingHash === hash) {
+      // Diese Nachricht wurde schon durch die KI verarbeitet.
+      // Nur EIN Sonderfall darf noch etwas tun: Antwort war fertig, Versand aber (noch) nicht raus
+      // (z.B. Governor-Fenster/Limit). Dann NUR erneut SENDEN – ohne neuen, teuren KI-Aufruf.
+      if (!schatten && stand.decision === "senden" && !stand.sent && stand.replyText) {
+        try {
+          await sendThreadReply(t.threadUrl, stand.replyText, t.participant);
+          repo.markiereGesendet(t.threadUrl);
+          repo.saveMessage(t.threadUrl, "Sinan", stand.replyText);
+          res.gesendet++;
+          events.emit("agent:gesendet", { participant: t.participant, text: stand.replyText, threadUrl: t.threadUrl, stage: conv.stage });
+        } catch (err) {
+          if (err instanceof GovernorBlocked) { /* noch nicht dran – später erneut, kein KI-Aufruf */ }
+          else { // echter Sendefehler: als Entwurf ablegen, sperren, damit es NICHT in der Schleife hängt
+            queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, stand.replyText, "agent-sendefehler");
+            repo.markiereGesendet(t.threadUrl);
+            res.entwuerfe++;
+          }
+        }
+      }
+      continue; // in JEDEM Fall: kein neuer KI-Aufruf für dieselbe Nachricht
+    }
+
+    // ---- NEUE Nachricht → einmal durch die Pipeline (kostet KI) ----
+    let e;
+    try {
+      e = await handleIncomingMessage(conv, t.messages, { persona, analyzeLlm, replyLlm, maxRegenerierungen: 1 });
+    } catch (err) {
+      // Pipeline-Fehler nicht in einer Endlosschleife wiederholen: abhaken, weiter.
+      console.error("[agent] Pipeline-Fehler:", (err as Error)?.message?.slice(0, 90));
+      repo.merkeVerarbeitung(t.threadUrl, hash, "nichts", null);
+      continue;
+    }
     await repo.save(e.conversation);
+    // SOFORT abhaken (mit erzeugtem Text) – ab jetzt wird diese Nachricht nie wieder neu generiert.
+    repo.merkeVerarbeitung(t.threadUrl, hash, e.typ, e.typ === "senden" ? e.text : e.typ === "eskalieren" ? (e.entwurf ?? null) : null);
     res.verarbeitet++;
 
     // ---- SCHATTEN-MODUS: nur zeigen, was der Agent tun würde ----
@@ -70,13 +116,24 @@ export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesende
     if (e.typ === "senden") {
       try {
         await sendThreadReply(t.threadUrl, e.text, t.participant); // governor-gated + Sicherheits-Sende-Prüfung
+        repo.markiereGesendet(t.threadUrl);
         repo.saveMessage(t.threadUrl, "Sinan", e.text, e.intents);
         res.gesendet++;
         events.emit("agent:gesendet", { participant: t.participant, text: e.text, threadUrl: t.threadUrl, stage: e.conversation.stage });
         if (e.conversation.status === "verloren")
           repo.recordOutcome({ threadUrl: t.threadUrl, teilnehmer: t.participant, ergebnis: "verloren", letzterState: e.conversation.stage, nachrichten: t.messages.length, trust: e.conversation.scores.trust, interest: e.conversation.scores.interest });
       } catch (err) {
-        if (!(err instanceof GovernorBlocked)) console.error("[agent] Sendefehler:", (err as Error)?.message?.slice(0, 90));
+        // GovernorBlocked = vorübergehend (Arbeitszeit/Limit): NICHT gesendet-markieren → nächster
+        // Tick versucht NUR den Versand erneut (kein neuer KI-Aufruf, siehe oben). Echter Fehler:
+        // Text als Entwurf ablegen + abhaken, damit es nicht in der Schleife hängt.
+        if (err instanceof GovernorBlocked) {
+          console.info(`[agent] Versand vertagt (${t.participant}): ${(err as Error).message.slice(0, 60)}`);
+        } else {
+          console.error("[agent] Sendefehler → Entwurf:", (err as Error)?.message?.slice(0, 90));
+          queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, e.text, "agent-sendefehler");
+          repo.markiereGesendet(t.threadUrl); // abgehakt (als Entwurf gerettet)
+          res.entwuerfe++;
+        }
       }
     } else if (e.typ === "eskalieren") {
       if (e.conversation.status === "gebucht") {

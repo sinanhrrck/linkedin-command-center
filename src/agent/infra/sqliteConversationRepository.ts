@@ -42,6 +42,14 @@ export class SqliteConversationRepository implements ConversationRepository {
         ts         TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_agent_messages_thread ON agent_messages(thread_url);
+      CREATE TABLE IF NOT EXISTS agent_processed (
+        thread_url    TEXT PRIMARY KEY,
+        incoming_hash TEXT NOT NULL,   -- Fingerabdruck der zuletzt verarbeiteten EINGEGANGENEN Nachricht
+        decision      TEXT NOT NULL,   -- 'senden' | 'eskalieren' | 'nichts'
+        reply_text    TEXT,            -- die erzeugte Antwort (für erneuten Sendeversuch OHNE neuen KI-Aufruf)
+        sent          INTEGER NOT NULL DEFAULT 0,
+        ts            TEXT NOT NULL DEFAULT (datetime('now'))
+      );
       CREATE TABLE IF NOT EXISTS agent_outcomes (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         thread_url    TEXT NOT NULL,
@@ -93,6 +101,30 @@ export class SqliteConversationRepository implements ConversationRepository {
          teilnehmer=excluded.teilnehmer, stage=excluded.stage, profile=excluded.profile,
          memory=excluded.memory, scores=excluded.scores, status=excluded.status, updated_at=datetime('now')`,
     ).run(c.threadUrl, c.teilnehmer, c.stage, JSON.stringify(c.profile), JSON.stringify(c.memory), JSON.stringify(c.scores), c.status);
+  }
+
+  /**
+   * IDEMPOTENZ-SPERRE gegen die Geld-Schleife. Merkt sich pro Thread, welche eingegangene Nachricht
+   * schon durch die (teure) KI-Pipeline lief, WAS entschieden wurde und die erzeugte Antwort. So
+   * wird pro NEUER Nachricht der Person genau EINMAL Claude aufgerufen. Ist der Versand nur
+   * vorübergehend blockiert (Governor: Arbeitszeit/Limit), kann derselbe Text später erneut
+   * gesendet werden – OHNE neuen KI-Aufruf.
+   */
+  verarbeitungsStand(threadUrl: string): { incomingHash: string; decision: string; replyText: string | null; sent: boolean } | null {
+    const r = this.db.prepare("SELECT incoming_hash, decision, reply_text, sent FROM agent_processed WHERE thread_url=?").get(threadUrl) as
+      | { incoming_hash: string; decision: string; reply_text: string | null; sent: number }
+      | undefined;
+    return r ? { incomingHash: r.incoming_hash, decision: r.decision, replyText: r.reply_text, sent: !!r.sent } : null;
+  }
+  merkeVerarbeitung(threadUrl: string, incomingHash: string, decision: string, replyText: string | null): void {
+    this.db.prepare(
+      `INSERT INTO agent_processed(thread_url, incoming_hash, decision, reply_text, sent, ts)
+       VALUES(?,?,?,?,0,datetime('now'))
+       ON CONFLICT(thread_url) DO UPDATE SET incoming_hash=excluded.incoming_hash, decision=excluded.decision, reply_text=excluded.reply_text, sent=0, ts=datetime('now')`,
+    ).run(threadUrl, incomingHash, decision, replyText);
+  }
+  markiereGesendet(threadUrl: string): void {
+    this.db.prepare("UPDATE agent_processed SET sent=1 WHERE thread_url=?").run(threadUrl);
   }
 
   /** Audit/Learning: eine Nachricht protokollieren (nicht Teil des Ports, adapter-spezifisch). */
