@@ -250,11 +250,13 @@
   .modeseg button { flex: 1; font-family: var(--disp); font-weight: 600; font-size: 12px; border: none; background: transparent; color: var(--ink-dim); padding: 7px 12px; border-radius: 8px; transition: all .15s var(--ease); }
   .modeseg button.active { background: var(--panel); color: var(--accent); box-shadow: var(--shadow-sm); }
   .mode-note { font-size: 11.5px; color: var(--ink-dim); margin-top: 9px; line-height: 1.45; min-height: 15px; }
-  .act-tally { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
-  .act-tally > span { font-size: 11px; color: var(--ink-dim); }
-  .act-tally b { font-family: var(--display); font-size: 14px; color: var(--ink); font-weight: 700; margin-right: 4px; }
-  .act-right { min-width: 0; }
-  .act-feed { display: flex; flex-direction: column; gap: 2px; max-height: 340px; overflow-y: auto; margin: -4px -6px; padding: 4px 6px; }
+  .act-tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 12px 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .act-tally > div { display: flex; flex-direction: column; gap: 3px; }
+  .act-tally b { font-family: var(--display); font-size: 19px; color: var(--ink); font-weight: 700; line-height: 1; }
+  .act-tally > div > span { font-size: 10.5px; color: var(--ink-dim); line-height: 1.2; }
+  .act-right { min-width: 0; display: flex; flex-direction: column; }
+  .act-right > .eyebrow { flex: 0 0 auto; }
+  .act-feed { flex: 1 1 auto; min-height: 140px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; margin: -4px -6px; padding: 4px 6px; }
   .act-row { display: flex; align-items: center; gap: 12px; padding: 9px 8px; border-radius: 11px; transition: background .14s; }
   .act-row:hover { background: var(--panel-2); }
   .act-ic { width: 32px; height: 32px; flex: 0 0 32px; border-radius: 9px; display: grid; place-items: center; }
@@ -1332,7 +1334,7 @@ function renderActivity() {
   document.getElementById("act-tally").innerHTML = [
     ["neue Leads", td.leads || 0], ["vernetzt", a.connect || 0], ["Nachrichten", a.message || 0],
     ["Entwürfe", td.drafts || 0], ["Posts", td.posts || 0],
-  ].map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join("");
+  ].map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join("");
 
   const feed = document.getElementById("act-feed");
   const list = state.recentActions || [];

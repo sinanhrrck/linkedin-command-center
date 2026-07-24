@@ -57,6 +57,28 @@ if (getMode() === "full") {
   console.info("[migration] Modus 'full' → Sales-Agent (semi + agent live).");
 }
 
+/**
+ * EINZEL-ENGINE-SPERRE (bulletproof, start-weg-unabhängig). Die Electron-Einzelinstanz-Sperre
+ * greift nur für DENSELBEN App-Pfad – eine alte Version aus einem DMG läuft daran vorbei und
+ * würde als ZWEITE Engine dieselben Leads doppelt vernetzen. Deshalb hier zusätzlich: läuft
+ * bereits eine andere Engine (frischer Heartbeat < 150s + lebende, fremde PID), beendet sich
+ * dieser Prozess sofort, statt einen zweiten Sende-Loop zu starten.
+ */
+(function nurEineEngine() {
+  const hb = getState("engine_heartbeat");
+  const pidStr = getState("engine_pid");
+  const frisch = hb ? Date.now() - new Date(hb).getTime() < 150_000 : false;
+  const fremdePid = pidStr ? Number(pidStr) : 0;
+  if (frisch && fremdePid && fremdePid !== process.pid) {
+    let lebt = false;
+    try { process.kill(fremdePid, 0); lebt = true; } catch { lebt = false; }
+    if (lebt) {
+      console.error(`[engine] Es läuft bereits eine Engine (PID ${fremdePid}). Dieser Doppelstart beendet sich, um Doppel-Vernetzungen zu verhindern.`);
+      process.exit(0);
+    }
+  }
+})();
+
 setState("engine_heartbeat", new Date().toISOString());
 setState("engine_started", new Date().toISOString());
 setState("engine_pid", String(process.pid)); // fürs saubere Stoppen vom Dashboard

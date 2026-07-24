@@ -112,9 +112,26 @@ async function findConnectButton(page: import("playwright").Page) {
   return btn;
 }
 
+/** True, wenn diese Person in den letzten 24 h schon eine Vernetzungsanfrage bekam. */
+function schonVernetzt(profileUrl: string): boolean {
+  const row = db
+    .prepare(
+      "SELECT 1 AS x FROM actions WHERE type='connect' AND target=? AND created_at >= datetime('now','-1 day') LIMIT 1",
+    )
+    .get(profileUrl) as { x: number } | undefined;
+  return !!row;
+}
+
 /** Eine Vernetzungsanfrage mit optionaler personalisierter Notiz. */
 export async function sendConnectionRequest(profileUrl: string, note?: string) {
   try {
+    // DOPPEL-VERNETZUNGS-SPERRE: greift auch, wenn versehentlich zwei Engines laufen (z.B. alte
+    // Version aus einem DMG neben der installierten App). Dann bekommt dieselbe Person NIE zweimal
+    // eine Anfrage. Vor dem Governor geprüft → kostet kein Kontingent, keine Falschmeldung.
+    if (schonVernetzt(profileUrl)) {
+      console.info(`[outreach] Vernetzung übersprungen (${profileUrl}) – schon in den letzten 24h angefragt.`);
+      return;
+    }
     return await governor.execute("connect", profileUrl, async () => {
       const page = await newPage();
       await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
