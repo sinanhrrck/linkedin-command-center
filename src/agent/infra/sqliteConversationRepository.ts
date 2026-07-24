@@ -42,6 +42,11 @@ export class SqliteConversationRepository implements ConversationRepository {
         ts         TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_agent_messages_thread ON agent_messages(thread_url);
+      CREATE TABLE IF NOT EXISTS agent_send_errors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        thread_url TEXT, teilnehmer TEXT, grund TEXT NOT NULL,
+        ts TEXT NOT NULL DEFAULT (datetime('now'))
+      );
       CREATE TABLE IF NOT EXISTS agent_processed (
         thread_url    TEXT PRIMARY KEY,
         incoming_hash TEXT NOT NULL,   -- Fingerabdruck der zuletzt verarbeiteten EINGEGANGENEN Nachricht
@@ -125,6 +130,10 @@ export class SqliteConversationRepository implements ConversationRepository {
   }
   markiereGesendet(threadUrl: string): void {
     this.db.prepare("UPDATE agent_processed SET sent=1 WHERE thread_url=?").run(threadUrl);
+  }
+  /** Sendefehler protokollieren – damit man den ECHTEN Grund sieht, statt zu raten. */
+  protokolliereSendefehler(threadUrl: string, teilnehmer: string, grund: string): void {
+    this.db.prepare("INSERT INTO agent_send_errors(thread_url, teilnehmer, grund) VALUES(?,?,?)").run(threadUrl, teilnehmer, grund.slice(0, 200));
   }
 
   /** Audit/Learning: eine Nachricht protokollieren (nicht Teil des Ports, adapter-spezifisch). */

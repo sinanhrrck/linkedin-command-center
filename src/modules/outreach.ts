@@ -206,28 +206,42 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
  * Chat-Fenster → eine Nachricht ("Hey Jack …") ging an die FALSCHE Person. Der Inhalts-Abgleich
  * prüfte nur den Text, nie den Empfänger. Diese Zuordnung schließt die Lücke.
  */
-async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger: string) {
+async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger: string, nurHaupt = false) {
   const ziel = empfaenger.trim().toLowerCase();
   if (!ziel) return null;
-  const fenster = page
-    .locator(`${SEL.bubble}, .scaffold-layout__detail, .msg-thread`)
-    .filter({ has: page.locator(SEL.messageBox) });
+  // Thread-Modus (direkt zur Thread-URL navigiert): NUR den Haupt-Bereich betrachten, keine
+  // Overlay-Bubbles – die URL garantiert bereits den richtigen Empfänger.
+  const selektor = nurHaupt ? ".msg-thread, .scaffold-layout__detail" : `${SEL.bubble}, .scaffold-layout__detail, .msg-thread`;
+  const fenster = page.locator(selektor).filter({ has: page.locator(SEL.messageBox) });
   const anzahl = await fenster.count();
-  const treffer: import("playwright").Locator[] = [];
-  for (let i = 0; i < anzahl; i++) {
-    const f = fenster.nth(i);
-    // Kopf/Titel des Fensters lesen (dort steht der Name); Fallback: Anfang des Fenstertexts.
-    const kopf = (await f
+  const kopfVon = async (f: import("playwright").Locator) =>
+    ((await f
       .locator("[class*='bubble-header'], [class*='overlay-bubble-header'], [class*='entity-lockup__title'], h2, a[href*='/in/']")
       .first()
       .innerText()
-      .catch(() => "")) || (await f.innerText().catch(() => "")).slice(0, 150);
-    if (kopf.toLowerCase().includes(ziel)) treffer.push(f);
+      .catch(() => "")) || (await f.innerText().catch(() => "")).slice(0, 150)).toLowerCase();
+
+  const treffer: import("playwright").Locator[] = [];
+  for (let i = 0; i < anzahl; i++) {
+    const f = fenster.nth(i);
+    if ((await kopfVon(f)).includes(ziel)) treffer.push(f);
   }
-  return treffer.length === 1 ? treffer[0] : null; // eindeutig ODER gar nicht (fail-safe)
+  if (treffer.length === 1) return treffer[0]; // Name eindeutig getroffen
+
+  // Thread-Modus + genau EIN Haupt-Fenster, aber Name nicht sauber gematcht (Formatierung/emoji im
+  // Titel): die URL bürgt für den Empfänger. Nur abbrechen, wenn der Kopf AKTIV einen ANDEREN Namen
+  // zeigt (dann könnte die Navigation schiefgegangen sein) – sonst senden.
+  if (nurHaupt && anzahl === 1) {
+    const f = fenster.first();
+    const kopf = await kopfVon(f);
+    if (!kopf || kopf.includes(ziel)) return f;
+    console.warn(`[send] Thread-Kopf ("${kopf.slice(0, 40)}") passt nicht zu "${ziel}" – Versand abgebrochen.`);
+    return null;
+  }
+  return null; // mehrdeutig ODER gar nicht (fail-safe)
 }
 
-async function tippenUndSenden(page: import("playwright").Page, text: string, empfaenger: string) {
+async function tippenUndSenden(page: import("playwright").Page, text: string, empfaenger: string, nurHaupt = false) {
   // SICHERHEITSSCHLEIFE 1: kein Kauderwelsch/Fehler-Text. Im Zweifel gar nicht senden.
   const plaus = istPlausibleNachricht(text);
   if (!plaus.ok) throw new UnsichereNachricht(plaus.grund ?? "unplausibel");
@@ -248,7 +262,7 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
     throw new DuplikatBlockiert(empfaenger);
   }
 
-  const fenster = await fensterFuerEmpfaenger(page, empfaenger);
+  const fenster = await fensterFuerEmpfaenger(page, empfaenger, nurHaupt);
   if (!fenster)
     throw new UnsichereNachricht(`Empfänger-Fenster für "${empfaenger}" nicht eindeutig gefunden – Versand abgebrochen (Schutz vor Fehlleitung)`);
 
@@ -360,7 +374,9 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
     await page.goto(threadUrl, { waitUntil: "domcontentloaded" });
     if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
     await humanDelay(1200, 2500);
-    await tippenUndSenden(page, text, empfaenger); // Empfänger-Verifikation: nie ans falsche Fenster
+    // nurHaupt=true: wir sind direkt IN diesem Thread (URL bürgt für den Empfänger) → nur den
+    // Haupt-Bereich prüfen, nicht an Overlay-Bubbles scheitern.
+    await tippenUndSenden(page, text, empfaenger, true);
   });
 }
 

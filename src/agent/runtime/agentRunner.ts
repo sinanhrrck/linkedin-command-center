@@ -75,6 +75,7 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
         } catch (err) {
           if (err instanceof GovernorBlocked) { /* noch nicht dran – später erneut, kein KI-Aufruf */ }
           else { // echter Sendefehler: als Entwurf ablegen, sperren, damit es NICHT in der Schleife hängt
+            repo.protokolliereSendefehler(t.threadUrl, t.participant, (err as Error)?.message ?? "unbekannt");
             queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, stand.replyText, "agent-sendefehler");
             repo.markiereGesendet(t.threadUrl);
             res.entwuerfe++;
@@ -128,6 +129,7 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
           console.info(`[agent] Versand vertagt (${t.participant}): ${(err as Error).message.slice(0, 60)}`);
         } else {
           console.error("[agent] Sendefehler → Entwurf:", (err as Error)?.message?.slice(0, 90));
+          repo.protokolliereSendefehler(t.threadUrl, t.participant, (err as Error)?.message ?? "unbekannt");
           queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, e.text, "agent-sendefehler");
           repo.markiereGesendet(t.threadUrl); // abgehakt (als Entwurf gerettet)
           res.entwuerfe++;
