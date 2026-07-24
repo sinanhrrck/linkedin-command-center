@@ -41,7 +41,7 @@ function fingerprint(text: string): string {
   return `${h}:${s.length}`;
 }
 
-export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesendet: number; entwuerfe: number; eskaliert: number }> {
+export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesendet: number; entwuerfe: number; eskaliert: number }> {
   const res = { verarbeitet: 0, gesendet: 0, entwuerfe: 0, eskaliert: 0 };
   const mode = getAgentMode();
   if (mode === "off") return res;
@@ -52,15 +52,13 @@ export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesende
   const threads = await fetchThreads(max);
 
   for (const t of threads) {
-    const last = t.messages[t.messages.length - 1];
-    const theirTurn = last ? (last.sender ? last.sender === t.participant : t.unread) : false;
-    if (!theirTurn) continue; // nur reagieren, wenn die Person am Zug ist
+    if (!t.theirTurn) continue; // nur reagieren, wenn die Person am Zug ist (aus der Vorschau, zuverlässig)
 
     let conv = (await repo.load(t.threadUrl)) ?? neueConversation(t.threadUrl, t.participant);
     if (conv.status !== "aktiv") continue;
 
     // ---- IDEMPOTENZ: pro EINGEGANGENER Nachricht wird die KI genau EINMAL bemüht ----
-    const eingang = t.lastIncoming || last?.text || "";
+    const eingang = t.lastIncoming || t.messages[t.messages.length - 1]?.text || "";
     const hash = fingerprint(eingang);
     const stand = repo.verarbeitungsStand(t.threadUrl);
     if (stand && stand.incomingHash === hash) {
