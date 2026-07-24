@@ -289,7 +289,8 @@
   .dc-in { font-size: 12px; color: var(--ink-dim); background: var(--panel-2); border-radius: 9px; padding: 8px 11px; margin-bottom: 10px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; }
   .draft-card textarea { width: 100%; min-height: 96px; resize: vertical; font-family: var(--disp); font-size: 13px; line-height: 1.55; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; padding: 11px 13px; transition: border-color .15s; }
   .draft-card textarea:focus { outline: none; border-color: var(--accent); background: var(--panel); }
-  .dc-foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .dc-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .dc-foot button { white-space: nowrap; }
   .dc-send { font-family: var(--disp); font-weight: 600; font-size: 12.5px; border: none; border-radius: 10px; padding: 9px 16px; color: #fff; background: var(--hero-grad); box-shadow: 0 6px 14px -6px rgba(20,80,50,.5); transition: transform .12s, opacity .15s; }
   .dc-send:hover { transform: translateY(-1px); }
   .dc-send.busy { background: var(--ink-faint); box-shadow: none; }
@@ -299,18 +300,20 @@
   .dc-send:disabled { cursor: default; }
   .dc-discard { margin-left: auto; font-family: var(--disp); font-weight: 500; font-size: 12px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-dim); border-radius: 10px; padding: 8px 13px; transition: all .15s; }
   .dc-discard:hover { border-color: var(--red); color: var(--red); }
-  .draft-saved { font-size: 11px; color: var(--green); opacity: 0; transition: opacity .2s; }
-  .draft-saved.show { opacity: 1; }
+  /* "gespeichert ✓" nimmt im verborgenen Zustand KEINE Breite ein (sonst bricht die Knopfzeile um).
+     margin-left:auto schiebt die rechte Knopfgruppe (Ablehnen/Löschen) nach rechts. */
+  .draft-saved { margin-left: auto; font-size: 11px; color: var(--green); white-space: nowrap; max-width: 0; overflow: hidden; opacity: 0; transition: opacity .2s, max-width .2s; }
+  .draft-saved.show { max-width: 120px; opacity: 1; }
   .draft-card.sending { box-shadow: 0 0 0 2px rgba(22,133,90,.3), var(--shadow-sm); }
   /* Freigabe-Workflow: Genehmigen (primär grün) + Ablehnen (dezent) */
-  .dc-approve { font-family: var(--disp); font-weight: 600; font-size: 12.5px; border: none; border-radius: 10px; padding: 9px 16px; color: #fff; background: var(--hero-grad); box-shadow: 0 6px 14px -6px rgba(20,80,50,.5); transition: transform .12s, opacity .15s; }
+  .dc-approve { font-family: var(--disp); font-weight: 600; font-size: 12.5px; line-height: 1.2; border: none; border-radius: 10px; padding: 9px 15px; color: #fff; background: var(--hero-grad); box-shadow: 0 6px 14px -6px rgba(20,80,50,.5); transition: transform .12s, opacity .15s; }
   .dc-approve:hover { transform: translateY(-1px); }
   .dc-approve.ok { background: var(--green); }
   .dc-approve:disabled { cursor: default; opacity: .85; }
-  .dc-reject { margin-left: auto; font-family: var(--disp); font-weight: 500; font-size: 12px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-dim); border-radius: 10px; padding: 8px 13px; transition: all .15s; }
+  .dc-reject { font-family: var(--disp); font-weight: 500; font-size: 12px; line-height: 1.2; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-dim); border-radius: 10px; padding: 9px 13px; transition: all .15s; }
   .dc-reject:hover { border-color: var(--amber); color: var(--amber); }
   .dc-reject:disabled { cursor: default; }
-  .dc-delete { font-size: 13px; line-height: 1; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-faint); border-radius: 10px; padding: 8px 11px; transition: all .15s; }
+  .dc-delete { font-size: 14px; line-height: 1.2; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-faint); border-radius: 10px; padding: 9px 12px; transition: all .15s; }
   .dc-delete:hover { border-color: var(--red); color: var(--red); }
   .dc-delete:disabled { cursor: default; opacity: .5; }
   .draft-card.approved { opacity: .55; box-shadow: 0 0 0 2px rgba(31,157,99,.28), var(--shadow-sm); }

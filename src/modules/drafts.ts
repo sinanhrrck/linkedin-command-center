@@ -50,7 +50,8 @@ Gib NUR den Nachrichtentext aus, ohne Anführungszeichen, ohne Signatur.`;
 export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
   const exists = db
     .prepare(
-      "SELECT 1 FROM drafts WHERE thread_url=? AND kind='first' AND status IN ('pending','approved','sent') LIMIT 1",
+      // 'discarded' zählt mit: hat der Nutzer den Erstnachricht-Entwurf gelöscht, NICHT neu erzeugen.
+      "SELECT 1 FROM drafts WHERE thread_url=? AND kind='first' AND status IN ('pending','approved','sent','discarded') LIMIT 1",
     )
     .get(c.profile_url);
   if (exists) return false;
@@ -89,9 +90,9 @@ export async function createFollowupDraft(c: Contact): Promise<boolean> {
       .get(c.profile_url) as { n: number }
   ).n;
   if (bisher >= 2) return false; // Schluss nach zwei Versuchen
-  // Ein offener (noch nicht gesendeter) Follow-up blockiert einen weiteren – erst abarbeiten.
+  // Ein offener Follow-up (oder ein vom Nutzer GELÖSCHTER = 'discarded') blockiert einen weiteren.
   const offen = db
-    .prepare("SELECT 1 FROM drafts WHERE thread_url=? AND kind='followup' AND status IN ('pending','approved') LIMIT 1")
+    .prepare("SELECT 1 FROM drafts WHERE thread_url=? AND kind='followup' AND status IN ('pending','approved','discarded') LIMIT 1")
     .get(c.profile_url);
   if (offen) return false;
   const stufe: 1 | 2 = bisher === 0 ? 1 : 2;
@@ -229,12 +230,15 @@ export function setDraftStatus(id: number, status: string) {
 }
 
 /**
- * Entwurf ENDGÜLTIG löschen (Zeile weg, KEIN Ersatz – anders als "ablehnen"). Für Entwürfe,
- * die der Nutzer schlicht nicht will. Bereits gesendete werden NICHT gelöscht (Beleg-/Historien-
- * schutz), die sind ohnehin nicht mehr in der Liste. Rückgabe: true, wenn etwas entfernt wurde.
+ * Entwurf löschen: verschwindet aus der Liste (nur 'pending' wird angezeigt) und kommt NICHT
+ * wieder. WICHTIG: KEIN hartes DELETE – die Zeile bleibt als "Grabstein" (status='discarded')
+ * stehen, denn genau daran erkennt der Bot, dass diese eingegangene Nachricht schon abgehakt ist
+ * (siehe hasOpenDraft: `status='discarded' AND incoming IS ?`). Würde man die Zeile löschen,
+ * hielte der Bot die Nachricht wieder für unbeantwortet und erzeugte den Entwurf neu.
+ * Anders als "ablehnen" wird KEIN Ersatz erzeugt. Gesendetes bleibt unangetastet.
  */
 export function deleteDraft(id: number): boolean {
-  return db.prepare("DELETE FROM drafts WHERE id=? AND status != 'sent'").run(id).changes > 0;
+  return db.prepare("UPDATE drafts SET status='discarded' WHERE id=? AND status != 'sent'").run(id).changes > 0;
 }
 
 /**

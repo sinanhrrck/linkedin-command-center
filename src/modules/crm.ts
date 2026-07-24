@@ -218,7 +218,7 @@ export function messagedAwaitingFollowup(days: number, limit: number, days2 = 7)
        WHERE c.status='messaged' AND c.messaged_at IS NOT NULL
          AND NOT EXISTS (
            SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url
-             AND d.kind='followup' AND d.status IN ('pending','approved')
+             AND d.kind='followup' AND d.status IN ('pending','approved','discarded')
          )
          AND (
            (  (SELECT COUNT(*) FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='followup' AND d.${gesendetOderOffen}) = 0

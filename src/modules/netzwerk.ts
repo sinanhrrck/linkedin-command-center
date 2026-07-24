@@ -100,7 +100,7 @@ export function reaktivierbareKontakte(limit: number): Contact[] {
          AND status NOT IN ('messaged','replied','closed','skipped')
          AND NOT EXISTS (
            SELECT 1 FROM drafts d WHERE d.thread_url = contacts.profile_url
-             AND d.kind='reaktivierung' AND d.status IN ('pending','approved','sent')
+             AND d.kind='reaktivierung' AND d.status IN ('pending','approved','sent','discarded')
          )
        ORDER BY lead_score DESC, created_at
        LIMIT ?`,
