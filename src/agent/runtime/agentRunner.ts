@@ -22,9 +22,16 @@ import { SqliteConversationRepository } from "../infra/sqliteConversationReposit
 import { handleIncomingMessage } from "../application/handleIncomingMessage.js";
 import { neueConversation } from "../domain/conversation.js";
 
-/** KI-Kanäle: Analyse günstig (Gemini), Antwort stark (Claude, falls konfiguriert). */
-const analyzeLlm = (p: string) => generateText(p);
-const replyLlm = (p: string) => (config.llm.autopilotProvider === "claude" && claudeAvailable() ? generateClaude(p) : generateText(p));
+/**
+ * KI-Kanäle für den Agent. WICHTIG (Fix 2026-07-24): BEIDE Schritte (Analyse UND Antwort) laufen
+ * über Claude, sobald ein bezahlter Key konfiguriert ist. Vorher nutzte die Analyse immer das
+ * kostenlose Gemini (~20 Aufrufe/Tag, geteilt mit Erstnachrichten) → nach wenigen Gesprächen war
+ * das Kontingent leer und der Agent konnte NICHTS mehr analysieren = "der Agent macht nichts".
+ * Der Voll-Auto-Agent ist ohnehin der bezahlte Pfad; ohne Claude-Key fällt beides auf Gemini zurück.
+ */
+const claudeAn = () => config.llm.autopilotProvider === "claude" && claudeAvailable();
+const analyzeLlm = (p: string) => (claudeAn() ? generateClaude(p) : generateText(p));
+const replyLlm = (p: string) => (claudeAn() ? generateClaude(p) : generateText(p));
 
 export async function agentTick(max = 8): Promise<{ verarbeitet: number; gesendet: number; entwuerfe: number; eskaliert: number }> {
   const res = { verarbeitet: 0, gesendet: 0, entwuerfe: 0, eskaliert: 0 };
