@@ -209,9 +209,18 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
 async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger: string, nurHaupt = false) {
   const ziel = empfaenger.trim().toLowerCase();
   if (!ziel) return null;
-  // Thread-Modus (direkt zur Thread-URL navigiert): NUR den Haupt-Bereich betrachten, keine
-  // Overlay-Bubbles – die URL garantiert bereits den richtigen Empfänger.
-  const selektor = nurHaupt ? ".msg-thread, .scaffold-layout__detail" : `${SEL.bubble}, .scaffold-layout__detail, .msg-thread`;
+
+  // THREAD-MODUS: Wir sind direkt in dieser Thread-URL – die URL (in sendThreadReply geprüft)
+  // bürgt für den Empfänger. Auf den Haupt-Inhaltsbereich <main> scopen: das enthält das echte
+  // Thread-Eingabefeld und schließt Overlay-Bubbles (die liegen AUSSERHALB von <main>) sicher aus,
+  // OHNE auf fragile, sich ändernde LinkedIn-Container-Klassen angewiesen zu sein.
+  if (nurHaupt) {
+    const scope = page.locator("main").filter({ has: page.locator(SEL.messageBox) }).first();
+    if ((await scope.count()) === 0) return null; // kein Eingabefeld im Hauptbereich → abbrechen
+    return scope;
+  }
+
+  const selektor = `${SEL.bubble}, .scaffold-layout__detail, .msg-thread`;
   const fenster = page.locator(selektor).filter({ has: page.locator(SEL.messageBox) });
   const anzahl = await fenster.count();
   const kopfVon = async (f: import("playwright").Locator) =>
@@ -226,19 +235,7 @@ async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger
     const f = fenster.nth(i);
     if ((await kopfVon(f)).includes(ziel)) treffer.push(f);
   }
-  if (treffer.length === 1) return treffer[0]; // Name eindeutig getroffen
-
-  // Thread-Modus + genau EIN Haupt-Fenster, aber Name nicht sauber gematcht (Formatierung/emoji im
-  // Titel): die URL bürgt für den Empfänger. Nur abbrechen, wenn der Kopf AKTIV einen ANDEREN Namen
-  // zeigt (dann könnte die Navigation schiefgegangen sein) – sonst senden.
-  if (nurHaupt && anzahl === 1) {
-    const f = fenster.first();
-    const kopf = await kopfVon(f);
-    if (!kopf || kopf.includes(ziel)) return f;
-    console.warn(`[send] Thread-Kopf ("${kopf.slice(0, 40)}") passt nicht zu "${ziel}" – Versand abgebrochen.`);
-    return null;
-  }
-  return null; // mehrdeutig ODER gar nicht (fail-safe)
+  return treffer.length === 1 ? treffer[0] : null; // eindeutig ODER gar nicht (fail-safe, Overlay-Modus)
 }
 
 async function tippenUndSenden(page: import("playwright").Page, text: string, empfaenger: string, nurHaupt = false) {
@@ -264,7 +261,11 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
 
   const fenster = await fensterFuerEmpfaenger(page, empfaenger, nurHaupt);
   if (!fenster)
-    throw new UnsichereNachricht(`Empfänger-Fenster für "${empfaenger}" nicht eindeutig gefunden – Versand abgebrochen (Schutz vor Fehlleitung)`);
+    throw new UnsichereNachricht(
+      nurHaupt
+        ? `Thread-Eingabefeld im Hauptbereich (main) nicht gefunden für "${empfaenger}" – Versand abgebrochen`
+        : `Empfänger-Fenster für "${empfaenger}" nicht eindeutig gefunden – Versand abgebrochen (Schutz vor Fehlleitung)`,
+    );
 
   // AB HIER ist alles auf GENAU DIESES Fenster gescopt (Eingabefeld, Senden-Knopf, Prüfungen).
   const box = fenster.locator(SEL.messageBox).last();
@@ -374,8 +375,15 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
     await page.goto(threadUrl, { waitUntil: "domcontentloaded" });
     if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
     await humanDelay(1200, 2500);
-    // nurHaupt=true: wir sind direkt IN diesem Thread (URL bürgt für den Empfänger) → nur den
-    // Haupt-Bereich prüfen, nicht an Overlay-Bubbles scheitern.
+
+    // EMPFÄNGER-GARANTIE im Thread-Modus: Die Thread-ID muss nach dem Laden noch in der URL stehen
+    // (LinkedIn hat uns nicht wegnavigiert/umgeleitet). Das ersetzt die fragile Fenster-/Namens-
+    // Erkennung – zuverlässiger und ohne von LinkedIn-CSS-Klassen abzuhängen.
+    const idMatch = threadUrl.match(/thread\/([^/?#]+)/);
+    if (idMatch && !page.url().includes(idMatch[1]))
+      throw new UnsichereNachricht(`Thread-URL nach Laden verändert (erwartet ${idMatch[1]}) – Versand abgebrochen`);
+
+    // nurHaupt=true: ins Eingabefeld des Haupt-Bereichs <main> schreiben (Overlay-Bubbles ausgeschlossen).
     await tippenUndSenden(page, text, empfaenger, true);
   });
 }
