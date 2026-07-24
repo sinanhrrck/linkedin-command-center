@@ -1,6 +1,6 @@
 {
   "name": "linkedin-command-center",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "private": true,
   "type": "module",
   "description": "Lokales All-in-One LinkedIn-Tool: Posting, Outreach, Inbox, CRM, Analytics",
