@@ -217,6 +217,14 @@ async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger
   if (nurHaupt) {
     const scope = page.locator("main").filter({ has: page.locator(SEL.messageBox) }).first();
     if ((await scope.count()) === 0) return null; // kein Eingabefeld im Hauptbereich → abbrechen
+    // EMPFÄNGER-ABSICHERUNG (text-basiert, robust gegen CSS-Klassen-Änderungen): Der erwartete
+    // Name muss im Haupt-Bereich stehen (Thread-Kopf bzw. Empfänger-Chip im Compose). Steht er
+    // NICHT drin, brechen wir ab – Schutz vor Fehlleitung, auch wenn keine Thread-URL bürgt.
+    const txt = (await scope.innerText().catch(() => "")).toLowerCase();
+    if (ziel && txt && !txt.includes(ziel)) {
+      console.warn(`[send] Haupt-Bereich enthält "${ziel}" nicht – Versand abgebrochen (Schutz vor Fehlleitung).`);
+      return null;
+    }
     return scope;
   }
 
@@ -348,8 +356,10 @@ export async function sendMessage(profileUrl: string, text: string) {
       const c = db.prepare("SELECT full_name FROM contacts WHERE profile_url = ?").get(profileUrl) as { full_name?: string } | undefined;
       const empfaenger = (c?.full_name ?? "").trim();
 
-      // Wirft, wenn der Versand nicht nachweisbar ODER der Empfänger nicht eindeutig ist.
-      await tippenUndSenden(page, text, empfaenger);
+      // nurHaupt=true: wir haben gezielt den Nachricht-Button DIESES Profils geklickt → der
+      // Compose im Hauptbereich gehört dieser Person. Robuster Haupt-Bereich-Weg + text-basierte
+      // Namensprüfung (statt der kaputten Fenster-/Klassen-Erkennung, an der Follow-ups hingen).
+      await tippenUndSenden(page, text, empfaenger, true);
 
       db.prepare(
         "UPDATE contacts SET status='messaged', messaged_at=datetime('now') WHERE profile_url = ?",
