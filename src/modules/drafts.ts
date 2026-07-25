@@ -185,7 +185,13 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
     await sendMessage(c.profile_url, text); // setzt Status 'messaged' bei Erfolg
     console.info(`[first] ✅ Erstnachricht auto-gesendet an ${c.full_name}`);
   } catch (e) {
-    if (!(e instanceof GovernorBlocked)) console.error("[first] Sendefehler → Entwurf:", (e as Error)?.message);
+    // GovernorBlocked (z.B. Sonntag/außerhalb der Zeit/Limit) = nur vertagt: Kontakt bleibt
+    // 'accepted' und wird beim nächsten Lauf erneut versucht. KEIN Entwurf daraus machen.
+    if (e instanceof GovernorBlocked) {
+      console.info(`[first] ${c.full_name} vertagt (${e.message.slice(0, 50)}) – nächster Versuch später.`);
+      return;
+    }
+    console.error("[first] Sendefehler → Entwurf:", (e as Error)?.message);
     const info = db
       .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('first',?,?,?,?)")
       .run(c.profile_url, c.full_name ?? null, "", text);

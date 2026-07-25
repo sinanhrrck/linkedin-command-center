@@ -85,11 +85,12 @@ class SafetyGovernor {
       const h = now.getHours();
       if (h < config.safety.workingHours.start || h >= config.safety.workingHours.end) return false;
     }
-    // Wochenend-Regel gilt IMMER (unabhängig vom Zeitfenster): Sa/So nur weekendActions,
-    // Direktnachrichten & Kommentare bleiben werktags (wirken menschlicher).
-    const weekend = now.getDay() === 0 || now.getDay() === 6;
-    if (weekend) {
-      if (!type) return true; // Ohne Typ (Telemetrie): Wochenende gilt als "aktiv".
+    // NACHRICHTEN-Regel: nur am SONNTAG gesperrt (Sinans Vorgabe 2026-07-25: Mo–Sa senden).
+    // Vernetzen/Liken/Profilbesuche laufen 7 Tage; Direktnachrichten & Kommentare gehen Mo–Sa,
+    // am Sonntag nicht (ein reiner Ruhetag wirkt menschlicher als 7 Tage Dauerfeuer).
+    const sonntag = now.getDay() === 0;
+    if (sonntag) {
+      if (!type) return true; // Ohne Typ (Telemetrie): Sonntag gilt als "aktiv" (Vernetzen läuft).
       return (config.safety.weekendActions as readonly string[]).includes(type);
     }
     return true;

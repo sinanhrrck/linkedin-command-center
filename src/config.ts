@@ -112,11 +112,10 @@ export const config = {
     // Nachrichten auch abends rausgehen (Sinans Vorgabe 2026-07-23). Alle übrigen Schutz-
     // Mechanismen (Caps, Pausen, Circuit-Breaker) bleiben unverändert scharf.
     workingHours: { start: 9, end: 22 },
-    // Am Wochenende (Sa/So) NUR diese Aktionstypen: Vernetzungsanfragen wirken auch am
-    // Wochenende natürlich, Direktnachrichten/Kommentare NICHT (die sollen wie ein Mensch
-    // Mo-Fr kommen). Likes/Profilbesuche sind harmlos und dürfen ebenfalls am Wochenende.
-    // Sinans Vorgabe: "Vernetzungsanfragen können auch Samstag und Sonntag gemacht werden,
-    // Nachrichten nur Montag bis Freitag."
+    // Am SONNTAG NUR diese Aktionstypen (Sinans Vorgabe 2026-07-25: Nachrichten Mo–Sa, Sonntag
+    // Ruhetag). Vernetzen/Liken/Profilbesuche laufen 7 Tage; Direktnachrichten & Kommentare gehen
+    // Mo–Sa, am Sonntag nicht. (Der Name „weekendActions" bleibt aus Kompatibilität; gemeint ist
+    // jetzt „Sonntags-Aktionen".) Die Wochentags-Logik sitzt in safetyGovernor.withinWorkingHours.
     weekendActions: ["connect", "like", "profileView"],
     workOnWeekends: true, // Wochenende NICHT komplett sperren – die Feinsteuerung macht weekendActions
 

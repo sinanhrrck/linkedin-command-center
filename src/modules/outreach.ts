@@ -356,10 +356,11 @@ export async function sendMessage(profileUrl: string, text: string) {
       ).run(profileUrl);
     });
   } catch (e) {
-    if (e instanceof GovernorBlocked) {
-      console.info(`[outreach] Nachricht übersprungen (${profileUrl}): ${e.message}`);
-      return;
-    }
+    // GovernorBlocked NICHT verschlucken (Bug-Fix 2026-07-25): sonst denkt der Aufrufer sendDraft,
+    // die Nachricht sei raus, und markiert den Entwurf fälschlich als 'sent' – obwohl der Governor
+    // sie z.B. am Sonntag/außerhalb der Zeit blockiert hat. Weiterreichen → der Aufrufer behält den
+    // Entwurf 'approved' und versucht es, wenn wieder gesendet werden darf.
+    if (e instanceof GovernorBlocked) console.info(`[outreach] Nachricht blockiert (${profileUrl}): ${e.message}`);
     throw e;
   }
 }
