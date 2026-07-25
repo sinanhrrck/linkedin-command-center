@@ -114,19 +114,19 @@ export async function fetchThreads(max = 8, onlyUnread = false): Promise<ThreadC
       clean[clean.length - 1]?.text ||
       "";
 
-    // Ist die Person am Zug? Drei unabhängige Signale in Prioritätsreihenfolge, damit die Erkennung
-    // nicht an EINEM Selektor hängt (LinkedIn ändert die UI regelmäßig):
-    //  1) Listen-Vorschau ("Sie:" = du zuletzt) – am zuverlässigsten, greift auch bei gelesenen Chats.
-    //  2) letzte Nachricht trägt "--other" (= vom Gegenüber).
-    //  3) Absender der letzten Nachricht == Teilnehmer.
-    //  4) letzter Rückfall: ungelesen.
+    // Ist die Person am Zug? KONSERVATIV (2026-07-25, gegen Doppel-Texten): der Agent sendet nur,
+    // wenn ein SICHERES Signal sagt "die Person schrieb zuletzt". Im Zweifel FALSE → lieber eine
+    // Antwort verpassen (der Mensch kann sie manuell geben) als eine zweite Nachricht hinterher
+    // schicken, ohne dass die Person geantwortet hat (das sieht nach Bot aus, beschädigt Vertrauen).
+    //  1) Listen-Vorschau: beginnt sie mit "Sie:/Du:/You:" → DU zuletzt → NICHT am Zug (am robustesten).
+    //  2) letzte Nachricht trägt "--other" (= eindeutig vom Gegenüber) → am Zug.
+    //  3) Absender der letzten Nachricht ist eindeutig der Teilnehmer → am Zug.
+    //  Sonst (kein sicheres Signal, z.B. Selektoren greifen nicht): NICHT senden.
     const letzte = clean[clean.length - 1];
-    const senderBekannt = clean.some((m) => m.sender);
     const theirTurn =
-      t.amZug !== null ? t.amZug
-      : letzte?.other ? true
-      : senderBekannt ? letzte?.sender === participant
-      : t.unread;
+      t.amZug !== null ? t.amZug               // Vorschau vorhanden → sie ist maßgeblich
+      : letzte?.other === true ? true          // letzte Nachricht klar vom Gegenüber
+      : !!(letzte?.sender && letzte.sender === participant); // Absender klar = Person; sonst false
 
     // 'other' vor der Rückgabe entfernen (ThreadContext.messages = {sender,text}).
     const ausgabe = clean.slice(-12).map((m) => ({ sender: m.sender, text: m.text }));
