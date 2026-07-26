@@ -229,6 +229,11 @@
   .engine-btn { font-family: var(--disp); font-weight: 600; font-size: 13px; border: none; border-radius: 12px; padding: 11px 16px; color: #fff; background: var(--hero-grad); box-shadow: 0 8px 18px -8px rgba(20,80,50,.5); transition: transform .12s var(--ease), box-shadow .16s; }
   .engine-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 22px -8px rgba(20,80,50,.55); }
   .engine-btn.stop { background: linear-gradient(155deg, #e05a60, #c23940); box-shadow: 0 8px 18px -8px rgba(180,50,60,.5); }
+  .sys-health { border-radius: 14px; padding: 14px 18px; margin-bottom: 16px; font-size: 13.5px; line-height: 1.5; border: 1px solid; }
+  .sys-health.bad { background: rgba(200,60,60,.08); border-color: var(--red); color: var(--ink); }
+  .sys-health.warn { background: rgba(192,122,18,.08); border-color: var(--amber); color: var(--ink); }
+  .sys-health b { font-family: var(--disp); }
+  .sys-health .sh-list { margin: 8px 0 0; padding-left: 16px; font-size: 12px; color: var(--ink-dim); }
   .notaus-btn { display: block; width: 100%; margin-top: 9px; font-family: var(--disp); font-weight: 700; font-size: 12.5px; border: 1.5px solid var(--red); border-radius: 12px; padding: 9px 16px; color: var(--red); background: rgba(200,60,60,.06); cursor: pointer; transition: all .14s var(--ease); }
   .notaus-btn:hover { background: rgba(200,60,60,.12); }
   .notaus-btn.armed { color: #fff; background: linear-gradient(155deg, #e05a60, #c23940); border-color: transparent; box-shadow: 0 8px 18px -8px rgba(180,50,60,.55); }
@@ -646,6 +651,9 @@
   </header>
 
   <div id="view-dashboard" class="view">
+
+  <!-- SYSTEMSTATUS-BANNER: nur sichtbar, wenn etwas nicht stimmt (Sende-Weg defekt / Fehler). -->
+  <div id="sys-health" class="sys-health" style="display:none"></div>
 
   <!-- Hero-Kommandozeile -->
   <section class="command">
@@ -1230,6 +1238,7 @@ function render() {
 
   renderChart();
   renderTrend();
+  renderSystemHealth();
   renderActionCenter();
   renderActivity();
   renderAutomatik();
@@ -1450,6 +1459,36 @@ const AC_IC = {
   alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20z"/><path d="M12 9v5M12 17v.5"/></svg>',
 };
 // Action-Center: sammelt alles, was JETZT deine Hand braucht, und springt hin. Spart das Suchen.
+/**
+ * Systemstatus + Fehler sichtbar machen: Banner nur, wenn etwas nicht stimmt – Sende-Weg defekt
+ * (Selbst-Check) oder blockierte/fehlgeschlagene Sends. So sieht der Nutzer immer die Wahrheit,
+ * statt ein stilles "alles gut".
+ */
+function renderSystemHealth() {
+  const el = document.getElementById("sys-health");
+  if (!el) return;
+  const h = state.systemHealth || {};
+  const f = state.sendeFehler || { letzte: [], blockiertGesamt: 0 };
+  const defekt = h.sendeWeg === "broken";
+  const fehler = (f.letzte || []).slice(0, 4);
+  if (!defekt && !fehler.length && !f.blockiertGesamt) { el.style.display = "none"; return; }
+
+  el.style.display = "block";
+  el.className = "sys-health " + (defekt ? "bad" : "warn");
+  let html = "";
+  if (defekt) {
+    html += `<b>🛑 Sende-Weg gestört – Nachrichten pausiert.</b><br>${esc(h.grund || "Der Selbst-Check hat ein Problem gefunden.")}<br>` +
+            `<span style="color:var(--ink-dim);font-size:12px">Vernetzen läuft weiter. Meist hilft: App neu starten. Bleibt es, hat LinkedIn die Oberfläche geändert.</span>`;
+  } else {
+    html += `<b>⚠️ Ein paar Nachrichten gingen nicht raus.</b>`;
+    if (f.blockiertGesamt) html += ` ${f.blockiertGesamt} blockiert (kein Duplikat/unsicher).`;
+  }
+  if (fehler.length) {
+    html += `<ul class="sh-list">` + fehler.map(e => `<li>${esc(e.teilnehmer || "?")}: ${esc((e.grund || "").slice(0, 70))}</li>`).join("") + `</ul>`;
+  }
+  el.innerHTML = html;
+}
+
 function renderActionCenter() {
   const el = document.getElementById("action-center");
   if (!el) return;

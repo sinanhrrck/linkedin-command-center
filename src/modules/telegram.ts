@@ -198,6 +198,28 @@ export function startTelegram() {
    * Guthaben angefasst wird, bevor es passiert. Das Event wird in core/textLlm.ts synchron
    * gefeuert, BEVOR Claude angefragt wird. Höchstens 1 Meldung pro Stunde (kein Spam).
    */
+  // SELBST-CHECK: der Sende-Weg ist technisch defekt (Selektor gebrochen, nicht eingeloggt …).
+  // Der Bot pausiert Nachrichten von selbst; hier die Warnung, damit du es sofort weißt.
+  events.on("health:broken", (d: { grund: string }) => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api
+      .sendMessage(
+        config.telegram.chatId,
+        `🛑 *Sende-Weg gestört – Nachrichten pausiert*\n\n` +
+          `Der Selbst-Check hat ein Problem gefunden:\n\`${d.grund}\`\n\n` +
+          `Ich sende sicherheitshalber KEINE Nachrichten mehr (Vernetzen läuft weiter), ` +
+          `bis das behoben ist – lieber nichts als etwas Falsches.\n` +
+          `Meist hilft: App neu starten. Bleibt es, ist ein LinkedIn-UI-Update schuld ` +
+          `(Selektor muss angepasst werden).`,
+        { parse_mode: "Markdown" },
+      )
+      .catch(() => {});
+  });
+  events.on("health:ok", () => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api.sendMessage(config.telegram.chatId, `✅ *Sende-Weg wieder in Ordnung* – Nachrichten laufen wieder.`, { parse_mode: "Markdown" }).catch(() => {});
+  });
+
   events.on("llm:fallback", (d: { grund: string; modell: string }) => {
     if (!bot || !config.telegram.chatId) return;
     bot.api

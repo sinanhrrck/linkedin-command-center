@@ -147,6 +147,12 @@ class SafetyGovernor {
     if (this.isPaused())
       return { ok: false, reason: `pausiert (${getState("pause_reason") ?? "unbekannt"})` };
 
+    // SELBST-CHECK: Ist der Sende-Weg als defekt gemeldet (Selektor gebrochen o.ä.), gehen
+    // Nachrichten/Kommentare NICHT raus (sonst still Mist bauen). Vernetzen nutzt einen anderen
+    // Weg und läuft weiter. Der Nutzer wurde bereits per Telegram/Dashboard gewarnt.
+    if ((type === "message" || type === "comment") && getState("send_health") === "broken")
+      return { ok: false, reason: "Selbst-Check: Sende-Weg defekt – pausiert, bis wieder funktionsfähig" };
+
     if (!this.withinWorkingHours(type)) {
       const now = new Date();
       const inHours = now.getHours() >= config.safety.workingHours.start && now.getHours() < config.safety.workingHours.end;

@@ -12,9 +12,10 @@ import { generatePostIdeas } from "./modules/content.js";
 import { commentTick } from "./modules/comment.js";
 import { scanNetzwerk, generateReaktivierung } from "./modules/netzwerk.js";
 import { agentTick } from "./agent/runtime/agentRunner.js";
+import { selbstCheck } from "./modules/healthcheck.js";
 import { config } from "./config.js";
 import { startTelegram } from "./modules/telegram.js";
-import { countByStatus } from "./modules/crm.js";
+import { countByStatus, resetHaengendeInvites } from "./modules/crm.js";
 import { saveLiveShot } from "./core/session.js";
 
 /**
@@ -79,6 +80,13 @@ if (getMode() === "full") {
   }
 })();
 
+// Beim Start hängengebliebene Lead-Ansprüche freigeben: Starb ein Prozess mitten im Vernetzen,
+// blieb ein Lead auf 'inviting' stehen. Wieder auf 'new' setzen, damit er normal weiterläuft.
+{
+  const frei = resetHaengendeInvites();
+  if (frei) console.info(`[start] ${frei} hängende Lead-Ansprüche ('inviting') wieder freigegeben.`);
+}
+
 setState("engine_heartbeat", new Date().toISOString());
 setState("engine_started", new Date().toISOString());
 setState("engine_pid", String(process.pid)); // fürs saubere Stoppen vom Dashboard
@@ -90,6 +98,9 @@ cron.schedule("* * * * *", async () => {
 // Beim Start EINMAL sofort loslegen, statt bis zu 12 Min auf den ersten Cron-Tick zu warten.
 // (Governor drosselt weiterhin – Delay/Caps/Arbeitszeit gelten.)
 setTimeout(async () => {
+  // ZUERST der Selbst-Check: Funktioniert der Sende-Weg überhaupt? Ist er defekt, blockiert der
+  // Governor Nachrichten von vornherein (statt still zu scheitern) und meldet es dir.
+  await einzeln("healthcheck", () => selbstCheck());
   await einzeln("acceptance", () => checkAcceptances());
   await einzeln("outreach", () => outreachTick());
   // Auch das Postfach sofort prüfen: wer den Bot mittags startet, soll nicht bis zur
@@ -145,6 +156,11 @@ cron.schedule("* * * * *", () =>
     }
   }),
 );
+
+// SELBST-CHECK alle 3 Stunden (rein lesend): prüft, ob der Sende-Weg (Login/Postfach/Eingabefeld/
+// Senden-Knopf) technisch funktioniert. Bricht ein Selektor, wird der Sende-Weg als defekt markiert
+// → Governor pausiert Nachrichten + Telegram-/Dashboard-Alarm, statt still Fehler zu produzieren.
+cron.schedule("15 9-21/3 * * *", () => einzeln("healthcheck", () => selbstCheck()));
 
 // Outreach-Tick alle 12 Minuten. Der Governor drosselt intern (Caps/Warm-up/Zeitfenster/Delays).
 cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick()));

@@ -174,6 +174,25 @@ export function getDashboardData() {
     leadSources,
     todayDone: { drafts: draftsToday, posts: postsToday, leads: leadsToday },
     governor: governor.snapshot(),
+    // SYSTEMSTATUS + FEHLER SICHTBAR: der Selbst-Check-Zustand und was zuletzt schiefging.
+    systemHealth: {
+      sendeWeg: getState("send_health") || "unbekannt", // "ok" | "broken" | "unbekannt"
+      grund: getState("send_health_grund") || null,
+      geprueft: getState("send_health_ts") || null,
+    },
+    sendeFehler: (() => {
+      const errs = (() => {
+        try {
+          return db
+            .prepare("SELECT teilnehmer, grund, ts FROM agent_send_errors WHERE ts >= datetime('now','-2 days') ORDER BY ts DESC LIMIT 8")
+            .all() as { teilnehmer: string; grund: string; ts: string }[];
+        } catch {
+          return [];
+        }
+      })();
+      const blockiert = (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status='blockiert'").get() as { n: number }).n;
+      return { letzte: errs, blockiertGesamt: blockiert };
+    })(),
     pipeline: PIPELINE.map((stage) => ({ stage, count: counts[stage] ?? 0 })), // AKTUELLER Status (für Chips/Tabellenfilter)
     funnel, // KUMULATIV (für den Conversion-Funnel) – echte Stufen-Zählung
     totals: { contacts: contacts.length },

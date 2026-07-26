@@ -67,6 +67,25 @@ export function setStatus(profileUrl: string, status: string) {
   db.prepare("UPDATE contacts SET status = ? WHERE profile_url = ?").run(status, profileUrl);
 }
 
+/**
+ * ATOMARER LEAD-ANSPRUCH gegen Doppel-Vernetzungen (auch bei zwei parallel laufenden Engines).
+ * Setzt 'new' → 'inviting' und gibt NUR true zurück, wenn DIESER Aufruf den Lead geschnappt hat.
+ * SQLite serialisiert das UPDATE → selbst wenn zwei Prozesse gleichzeitig zugreifen, gewinnt genau
+ * einer (changes=1), der andere bekommt changes=0 und lässt den Lead in Ruhe. Das schließt die
+ * Rennbedingung der reinen actions-Prüfung, weil hier NICHTS erst nach einem langsamen Klick passiert.
+ */
+export function claimForInvite(profileUrl: string): boolean {
+  return db.prepare("UPDATE contacts SET status='inviting' WHERE profile_url=? AND status='new'").run(profileUrl).changes > 0;
+}
+/** Anspruch zurückgeben (Versand scheiterte/wurde übersprungen) → Lead wieder 'new', wird neu versucht. */
+export function releaseInvite(profileUrl: string): void {
+  db.prepare("UPDATE contacts SET status='new' WHERE profile_url=? AND status='inviting'").run(profileUrl);
+}
+/** Beim Engine-Start: hängengebliebene 'inviting' (Prozess starb mitten im Versand) wieder freigeben. */
+export function resetHaengendeInvites(): number {
+  return db.prepare("UPDATE contacts SET status='new' WHERE status='inviting'").run().changes;
+}
+
 /** Kontakt endgültig aus dem CRM entfernen. Rückgabe: true, wenn gelöscht. */
 export function deleteContact(id: number): boolean {
   return db.prepare("DELETE FROM contacts WHERE id = ?").run(id).changes > 0;
