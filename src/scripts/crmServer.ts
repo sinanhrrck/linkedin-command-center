@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
 import { getAnalytics } from "../modules/analytics.js";
-import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, deleteDraft } from "../modules/drafts.js";
+import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, deleteDraft, retryBlockierte } from "../modules/drafts.js";
 import { getPost, approvePost, discardPost, generatePostDraft } from "../modules/content.js";
 import { addSource, deleteSource } from "../modules/leadFeed.js";
 import { deleteContact } from "../modules/crm.js";
@@ -392,6 +392,17 @@ const server = createServer((req, res) => {
 
   // BEITRAG SCHREIBEN LASSEN: sofort einen neuen Post-Entwurf erzeugen (nur Gemini + DB, KEIN
   // Browser nötig → der Dashboard-Prozess kann das direkt). Erscheint danach in "Post-Entwürfe".
+  // BLOCKIERTE erneut senden: behebbare Fehler zurück in die Warteschlange, Duplikate verwerfen.
+  if (url.pathname === "/api/retry-blocked" && req.method === "POST") {
+    try {
+      const r = retryBlockierte();
+      res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...r }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String(e) }));
+    }
+    return;
+  }
+
   if (url.pathname === "/api/generate-post" && req.method === "POST") {
     generatePostDraft()
       .then((id) => {

@@ -1480,13 +1480,27 @@ function renderSystemHealth() {
     html += `<b>🛑 Sende-Weg gestört – Nachrichten pausiert.</b><br>${esc(h.grund || "Der Selbst-Check hat ein Problem gefunden.")}<br>` +
             `<span style="color:var(--ink-dim);font-size:12px">Vernetzen läuft weiter. Meist hilft: App neu starten. Bleibt es, hat LinkedIn die Oberfläche geändert.</span>`;
   } else {
-    html += `<b>⚠️ Ein paar Nachrichten gingen nicht raus.</b>`;
-    if (f.blockiertGesamt) html += ` ${f.blockiertGesamt} blockiert (kein Duplikat/unsicher).`;
+    html += `<b>⚠️ ${f.blockiertGesamt} Nachricht${f.blockiertGesamt === 1 ? "" : "en"} sind hängengeblieben.</b> ` +
+            `<span style="color:var(--ink-dim);font-size:12.5px">Meist alte Sendefehler, die mit dem reparierten Sende-Weg erneut rausgehen können. Duplikate (schon angeschrieben) werden dabei aussortiert.</span>` +
+            `<div style="margin-top:10px"><button id="retry-blocked-btn" class="content-btn" style="max-width:280px;display:inline-block;width:auto">🔄 Erneut senden</button> <span id="retry-blocked-msg" style="font-size:12px;color:var(--ink-dim)"></span></div>`;
   }
   if (fehler.length) {
     html += `<ul class="sh-list">` + fehler.map(e => `<li>${esc(e.teilnehmer || "?")}: ${esc((e.grund || "").slice(0, 70))}</li>`).join("") + `</ul>`;
   }
   el.innerHTML = html;
+
+  const btn = document.getElementById("retry-blocked-btn");
+  if (btn) btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = "wird eingereiht …";
+    const msg = document.getElementById("retry-blocked-msg");
+    try {
+      const r = await (await fetch("/api/retry-blocked", { method: "POST" })).json();
+      if (r && r.ok) {
+        if (msg) msg.innerHTML = `<b>✓ ${r.erneut} erneut in der Warteschlange</b>${r.verworfen ? `, ${r.verworfen} Duplikat${r.verworfen === 1 ? "" : "e"} verworfen` : ""}. Gehen jetzt gedrosselt raus.`;
+        setTimeout(load, 1500);
+      } else { if (msg) msg.textContent = "Fehler."; btn.disabled = false; btn.textContent = "🔄 Erneut senden"; }
+    } catch { if (msg) msg.textContent = "Fehler."; btn.disabled = false; btn.textContent = "🔄 Erneut senden"; }
+  };
 }
 
 function renderActionCenter() {

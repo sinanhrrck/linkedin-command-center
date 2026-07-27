@@ -236,6 +236,27 @@ export function setDraftStatus(id: number, status: string) {
 }
 
 /**
+ * BLOCKIERTE Entwürfe wieder in Gang bringen – der handelbare Teil von "Fehler sichtbar machen".
+ * 'blockiert' = Versand scheiterte technisch ODER es war ein Duplikat. Diese Funktion trennt beides:
+ *  - Duplikat (Erst-/Follow-up-/Reaktivierungs-Nachricht an eine schon angeschriebene Person) → VERWERFEN.
+ *  - Sonst (echter Sendefehler) → zurück auf 'approved' → geht mit dem gefixten Sende-Weg erneut raus.
+ */
+export function retryBlockierte(): { erneut: number; verworfen: number } {
+  const rows = db.prepare("SELECT id, kind, thread_url FROM drafts WHERE status='blockiert'").all() as { id: number; kind: string; thread_url: string }[];
+  let erneut = 0,
+    verworfen = 0;
+  for (const r of rows) {
+    const c = db.prepare("SELECT status, messaged_at FROM contacts WHERE profile_url=?").get(r.thread_url) as { status?: string; messaged_at?: string } | undefined;
+    const istDuplikat =
+      ["first", "followup", "reaktivierung"].includes(r.kind) && !!c && (!!c.messaged_at || ["messaged", "replied", "closed"].includes(c.status ?? ""));
+    db.prepare("UPDATE drafts SET status=? WHERE id=?").run(istDuplikat ? "discarded" : "approved", r.id);
+    if (istDuplikat) verworfen++;
+    else erneut++;
+  }
+  return { erneut, verworfen };
+}
+
+/**
  * Entwurf löschen: verschwindet aus der Liste (nur 'pending' wird angezeigt) und kommt NICHT
  * wieder. WICHTIG: KEIN hartes DELETE – die Zeile bleibt als "Grabstein" (status='discarded')
  * stehen, denn genau daran erkennt der Bot, dass diese eingegangene Nachricht schon abgehakt ist
