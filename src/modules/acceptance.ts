@@ -76,14 +76,19 @@ export async function checkAcceptances(): Promise<number> {
     }
   }
 
-  // Nachholen: angenommene Kontakte ohne Erstnachricht-Entwurf (z.B. weil das Gemini-Kontingent
-  // beim Annehmen leer war). Begrenzt, um das Kontingent zu schonen.
+  // Nachholen: angenommene Kontakte, die noch KEINE Erstnachricht bekommen haben. Früher auf 3
+  // gedrosselt wegen des Gemini-Tageslimits – das ist weg (nur noch Claude), also holen wir den
+  // Rückstau zügiger auf (bis 10/Lauf). Der Governor drosselt den Versand ohnehin (Delay/Cap).
+  // Ausschluss nur bei einem OFFENEN (pending/approved) oder GESENDETEN first-Entwurf – ein
+  // 'blockiert'/'discarded' Alt-Entwurf blockiert einen frischen Versuch NICHT (der wird über den
+  // "Als Entwürfe holen"-Knopf separat behandelt).
   const missing = db
     .prepare(
       `SELECT c.* FROM contacts c
        WHERE c.status='accepted'
-         AND NOT EXISTS (SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='first')
-       ORDER BY c.accepted_at DESC LIMIT 3`,
+         AND NOT EXISTS (SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='first'
+                          AND d.status IN ('pending','approved','sent'))
+       ORDER BY c.accepted_at DESC LIMIT 10`,
     )
     .all() as Contact[];
   let backfilled = 0;

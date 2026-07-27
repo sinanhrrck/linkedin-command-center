@@ -394,6 +394,21 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
     if (idMatch && !page.url().includes(idMatch[1]))
       throw new UnsichereNachricht(`Thread-URL nach Laden verändert (erwartet ${idMatch[1]}) – Versand abgebrochen`);
 
+    /**
+     * FRISCHE-CHECK (Bug-Fix 2026-07-26): Zwischen dem Lesen des Postfachs und diesem Versand
+     * vergehen Minuten (Governor-Pausen). In der Zeit kann SINAN selbst geantwortet haben – dann
+     * ist eine Bot-Antwort redundant/peinlich (genau der Vorfall). Deshalb JETZT, direkt vor dem
+     * Tippen, nochmal in den Chat schauen: Ist die LETZTE Nachricht wirklich von der Person
+     * (Klasse „--other")? Ist sie es NICHT (also von Sinan/dem Bot), NICHT senden → wird Entwurf.
+     */
+    const letzteVonPerson = await page
+      .locator(SEL.threadItem)
+      .last()
+      .evaluate((el) => /--other\b/.test(el.className) || !!el.closest(".msg-s-event-listitem--other"))
+      .catch(() => null);
+    if (letzteVonPerson === false)
+      throw new UnsichereNachricht("Letzte Nachricht im Chat ist nicht von der Person (jemand hat schon geantwortet) – Versand abgebrochen, wird Entwurf");
+
     // nurHaupt=true: ins Eingabefeld des Haupt-Bereichs <main> schreiben (Overlay-Bubbles ausgeschlossen).
     await tippenUndSenden(page, text, empfaenger, true);
   });
