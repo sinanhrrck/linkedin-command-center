@@ -12,6 +12,7 @@ import { config } from "../../config.js";
 import { fetchThreads } from "../../modules/inbox.js";
 import { sendThreadReply } from "../../modules/outreach.js";
 import { queueReplyDraft } from "../../modules/drafts.js";
+import { markRepliedByName } from "../../modules/crm.js";
 import { db, getAgentMode } from "../../db/index.js";
 import { events } from "../../core/events.js";
 import { generateText } from "../../core/textLlm.js";
@@ -53,6 +54,11 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
 
   for (const t of threads) {
     if (!t.theirTurn) continue; // nur reagieren, wenn die Person am Zug ist (aus der Vorschau, zuverlässig)
+
+    // Person ist am Zug = sie hat geantwortet → im CRM als 'replied' markieren (Hot Lead). WICHTIG:
+    // Sonst bleibt sie 'messaged' und bekäme fälschlich ein Follow-up/Reminder, obwohl SINAN am Zug
+    // ist (der Grund, warum trotz Antwort Reminder rausgingen, wenn der Agent aktiv war).
+    if (t.participant) markRepliedByName(t.participant);
 
     let conv = (await repo.load(t.threadUrl)) ?? neueConversation(t.threadUrl, t.participant);
     if (conv.status !== "aktiv") continue;

@@ -236,24 +236,30 @@ export function setDraftStatus(id: number, status: string) {
 }
 
 /**
- * BLOCKIERTE Entwürfe wieder in Gang bringen – der handelbare Teil von "Fehler sichtbar machen".
- * 'blockiert' = Versand scheiterte technisch ODER es war ein Duplikat. Diese Funktion trennt beides:
- *  - Duplikat (Erst-/Follow-up-/Reaktivierungs-Nachricht an eine schon angeschriebene Person) → VERWERFEN.
- *  - Sonst (echter Sendefehler) → zurück auf 'approved' → geht mit dem gefixten Sende-Weg erneut raus.
+ * BLOCKIERTE Entwürfe HANDELBAR machen – als ENTWÜRFE ZUR PRÜFUNG (Sinans Vorgabe 2026-07-26:
+ * NICHT automatisch nachsenden, weil eine alte Nachricht oft keinen Sinn mehr macht, wenn sich
+ * das Gespräch weiterbewegt hat). Diese Funktion trennt:
+ *  - Sinnlos (Duplikat: Person schon angeschrieben / Follow-up an jemanden, der geantwortet hat)
+ *    → VERWERFEN (die würden nie mehr passen).
+ *  - Rest (echter Sendefehler) → zurück auf 'pending' = Entwurf, den DU prüfst/anpasst/freigibst.
+ * So geht nie eine veraltete Nachricht ungeprüft raus.
  */
-export function retryBlockierte(): { erneut: number; verworfen: number } {
+export function retryBlockierte(): { entwuerfe: number; verworfen: number } {
   const rows = db.prepare("SELECT id, kind, thread_url FROM drafts WHERE status='blockiert'").all() as { id: number; kind: string; thread_url: string }[];
-  let erneut = 0,
+  let entwuerfe = 0,
     verworfen = 0;
   for (const r of rows) {
-    const c = db.prepare("SELECT status, messaged_at FROM contacts WHERE profile_url=?").get(r.thread_url) as { status?: string; messaged_at?: string } | undefined;
-    const istDuplikat =
-      ["first", "followup", "reaktivierung"].includes(r.kind) && !!c && (!!c.messaged_at || ["messaged", "replied", "closed"].includes(c.status ?? ""));
-    db.prepare("UPDATE drafts SET status=? WHERE id=?").run(istDuplikat ? "discarded" : "approved", r.id);
-    if (istDuplikat) verworfen++;
-    else erneut++;
+    const c = db.prepare("SELECT status, messaged_at, replied_at FROM contacts WHERE profile_url=?").get(r.thread_url) as { status?: string; messaged_at?: string; replied_at?: string } | undefined;
+    // Erst-/Reaktivierungs-Nachricht an schon Angeschriebene = Duplikat. Follow-up an jemanden,
+    // der geantwortet hat = hinfällig. Beides verwerfen.
+    const sinnlos =
+      (["first", "reaktivierung"].includes(r.kind) && !!c && (!!c.messaged_at || ["messaged", "replied", "closed"].includes(c.status ?? ""))) ||
+      (r.kind === "followup" && !!c && (!!c.replied_at || ["replied", "closed"].includes(c.status ?? "")));
+    db.prepare("UPDATE drafts SET status=? WHERE id=?").run(sinnlos ? "discarded" : "pending", r.id);
+    if (sinnlos) verworfen++;
+    else entwuerfe++;
   }
-  return { erneut, verworfen };
+  return { entwuerfe, verworfen };
 }
 
 /**
@@ -371,6 +377,17 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
       db.prepare("UPDATE drafts SET status='blockiert' WHERE id=?").run(id);
       console.info(`[sicherheit] Entwurf #${id} nicht gesendet – ${d.participant ?? "Kontakt"} wurde schon angeschrieben (kein Duplikat).`);
       return { ok: false, reason: "Schon angeschrieben – kein Duplikat" };
+    }
+  }
+  // STALENESS-SPERRE für Follow-ups (Bug-Fix 2026-07-26): Hat die Person INZWISCHEN geantwortet,
+  // ist ein Follow-up/Reminder sinnlos (SINAN ist am Zug, nicht die Person). Solche veralteten
+  // Follow-ups NICHT senden – verwerfen. Die Antwort behandelt der Agent bzw. ein frischer Entwurf.
+  if (d.kind === "followup") {
+    const st = db.prepare("SELECT status, replied_at FROM contacts WHERE profile_url=?").get(d.thread_url) as { status?: string; replied_at?: string } | undefined;
+    if (st && (st.replied_at || ["replied", "closed"].includes(st.status ?? ""))) {
+      db.prepare("UPDATE drafts SET status='discarded' WHERE id=?").run(id);
+      console.info(`[sicherheit] Follow-up #${id} verworfen – ${d.participant ?? "Kontakt"} hat inzwischen geantwortet (kein Reminder an Antwortende).`);
+      return { ok: false, reason: "Person hat geantwortet – Follow-up hinfällig" };
     }
   }
   try {
