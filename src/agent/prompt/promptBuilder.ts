@@ -35,7 +35,12 @@ Gib AUSSCHLIESSLICH dieses JSON zurück (kein Text drumherum):
 Regeln:
 - "intents": alle zutreffenden (mehrere möglich), NUR aus der Liste. Nichts erfinden.
 - "signale": jede Dimension NUR setzen, wenn die Nachricht sie belegt – sonst null. Nicht raten.
-- Werte 0..1: 0 = gar nicht, 1 = sehr stark.`;
+- Werte 0..1: 0 = gar nicht, 1 = sehr stark.
+- WICHTIG für die Angebots-Erkennung: Setze careerInterest HOCH (0.7+) und "karriere_interesse",
+  wenn die Person Begeisterung für ihren Weg/Beruf zeigt, sich neu orientiert, eine Jobsuche
+  aufmacht, über Perspektive/Führung/Weiterkommen spricht ODER klar sagt, was ihr Spaß macht /
+  wofür sie brennt. Das sind die Momente, in denen ein Mehrwert-Angebot (Potenzialanalyse) passt.
+- "positives_signal" bei erkennbarer Öffnung/Zustimmung/Wärme (auch ohne konkrete Zusage).`;
 }
 
 // ---------- Antwort-Prompt (modular) ----------
@@ -98,6 +103,15 @@ export function buildReplyPrompt(inp: ReplyPromptInput): string {
   const fokus = interessenFokus(inp.profile);
   const mem = memoryAlsText(inp.memory);
   const wenigInfo = inp.profile.beobachtungen < 2;
+  // BRÜCKE ZUM ANGEBOT ("langsam vorbereiten"): Zeigt die Person klares Interesse/Passung (hoher
+  // careerInterest ODER Vertrauen wächst) und sind wir noch in der Beziehungs-/Bedarfsphase, dann
+  // SANFT die Brücke zum konkreten nächsten Schritt (dein Angebot) bauen – erst der Bezug, noch
+  // KEIN Hard-Pitch. Ein Gedanke pro Nachricht. In der Angebots-Phase selbst wird konkret angeboten.
+  const warm = inp.profile.careerInterest > 0.55 || inp.profile.trust > 0.6;
+  const bruecke =
+    warm && ["bedarf", "vertrauen", "validierung", "call_angebot"].includes(inp.stage)
+      ? "\n# Jetzt: Brücke zum Angebot bauen\nDie Person zeigt klares Interesse/Passung. Steuere in DIESER oder der nächsten Nachricht sanft Richtung deines konkreten Angebots (siehe Abschnitt Dein Angebot oben): erst der ehrliche Bezug (etwa: genau dafür hab ich was, das dir wirklich weiterhilft) und dein Warum – noch KEIN Druck, kein Verkaufston. Ein Schritt nach dem anderen."
+      : "";
   return `${inp.persona}
 
 ${stateBlock(inp.stage)}
@@ -109,7 +123,7 @@ ${mem || "Noch wenig – finde behutsam mehr heraus."}
 ${hinweise.length ? hinweise.join(" ") : "Noch neutral – tastend und freundlich bleiben."}${wenigInfo ? "\n(Erst wenige Signale – nicht überinterpretieren, mehr zuhören.)" : ""}
 
 # Woran die Person andockt
-${fokus.length ? "Zeigt Interesse an: " + fokus.join(", ") + ". Knüpf hier an, aber ohne zu pitchen." : "Noch kein klares Interessens-Signal – neugierig bleiben, herausfinden was sie bewegt."}
+${fokus.length ? "Zeigt Interesse an: " + fokus.join(", ") + ". Knüpf hier an." : "Noch kein klares Interessens-Signal – neugierig bleiben, herausfinden was sie bewegt."}${bruecke}
 
 ${STILREGELN}
 
