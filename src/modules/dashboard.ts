@@ -205,6 +205,35 @@ export function getDashboardData() {
     trend,
     deltas,
     hotLeads: hotLeads(),
+    // CHAT-ÜBERSICHT (Sinan 2026-07-27): alle Kontakte, mit denen ein Chat läuft, an EINEM Ort –
+    // Überblick behalten, Chats wiederfinden, eingeschlafene wiederbeleben. Rein lesend.
+    chatUebersicht: (() => {
+      const offen = new Set(
+        (db
+          .prepare(
+            "SELECT DISTINCT thread_url FROM drafts WHERE status IN ('pending','approved') AND kind IN ('message','first','followup','reaktivierung')",
+          )
+          .all() as { thread_url: string }[]).map((r) => r.thread_url),
+      );
+      return (
+        db
+          .prepare(
+            `SELECT full_name, profile_url, headline, status, messaged_at, replied_at
+               FROM contacts
+              WHERE messaged_at IS NOT NULL OR replied_at IS NOT NULL OR status IN ('messaged','replied','closed')
+              ORDER BY COALESCE(replied_at, messaged_at) DESC
+              LIMIT 400`,
+          )
+          .all() as {
+          full_name: string; profile_url: string; headline: string;
+          status: string; messaged_at: string | null; replied_at: string | null;
+        }[]
+      ).map((c) => {
+        const letzte = c.replied_at || c.messaged_at || null;
+        const tage = letzte ? Math.floor((Date.now() - new Date(letzte.replace(" ", "T") + "Z").getTime()) / 86_400_000) : null;
+        return { name: c.full_name, url: c.profile_url, headline: c.headline, status: c.status, letzte, tage, hatEntwurf: offen.has(c.profile_url) };
+      });
+    })(),
     mode: getMode(),
     agentMode: getAgentMode(),
     focus: getFocus(),

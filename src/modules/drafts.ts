@@ -110,6 +110,17 @@ export async function createFollowupDraft(c: Contact): Promise<boolean> {
   return true;
 }
 
+/**
+ * Einen eingeschlafenen Chat WIEDERBELEBEN (Dashboard-Knopf, Sinan 2026-07-27): erzeugt für den
+ * Kontakt einen Nachfass-Entwurf zur Freigabe. Nutzt dieselben Schutzregeln wie createFollowupDraft
+ * (max. 2 Stufen, kein zweiter offener Entwurf) – lieber kein Entwurf als Belästigung.
+ */
+export async function reviveChat(profileUrl: string): Promise<boolean> {
+  const c = db.prepare("SELECT * FROM contacts WHERE profile_url=?").get(profileUrl) as Contact | undefined;
+  if (!c) return false;
+  return createFollowupDraft(c);
+}
+
 /** Erzeugt Follow-up-Entwürfe für Kontakte, die seit >= `days` Tagen nicht geantwortet haben. */
 export async function generateFollowups(days = 4, limit = 5): Promise<number> {
   const candidates = messagedAwaitingFollowup(days, limit);

@@ -8,7 +8,7 @@ import { publishPostBrowser } from "./modules/outreach.js";
 import { outreachTick } from "./modules/outreachTick.js";
 import { checkAcceptances } from "./modules/acceptance.js";
 import { feedTick } from "./modules/leadFeed.js";
-import { generateInboxDrafts, generateFollowups, sendApprovedDrafts } from "./modules/drafts.js";
+import { generateInboxDrafts, generateFollowups, sendApprovedDrafts, reviveChat } from "./modules/drafts.js";
 import { generatePostIdeas } from "./modules/content.js";
 import { commentTick } from "./modules/comment.js";
 import { scanNetzwerk, generateReaktivierung } from "./modules/netzwerk.js";
@@ -240,6 +240,17 @@ cron.schedule("*/2 * * * *", () =>
   }),
 );
 cron.schedule("5 9 * * *", () => einzeln("offene", () => offeneAntwortenScan(40)));
+
+// CHAT WIEDERBELEBEN auf Knopfdruck: Dashboard setzt "wiederbeleben_now"=<profil-url> → der Loop
+// erzeugt einen Nachfass-Entwurf für genau diesen eingeschlafenen Chat (nur LLM, kein Browser).
+cron.schedule("*/2 * * * *", () =>
+  einzeln("wiederbeleben", async () => {
+    const ziel = getState("wiederbeleben_now");
+    if (!ziel) return;
+    setState("wiederbeleben_now", "");
+    await reviveChat(ziel).catch((e: Error) => console.error(`[wiederbeleben] ${e?.message?.slice(0, 90)}`));
+  }),
+);
 
 // REICHWEITE JETZT auf Knopfdruck: Dashboard setzt "comment_now"=1 → der Loop liked + erzeugt
 // Kommentar-Entwürfe sofort (statt bis werktags 12:30 zu warten). Browser gehört der Engine.

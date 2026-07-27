@@ -445,6 +445,25 @@
   .mod-row .mr-name { font-weight: 600; color: var(--ink); }
   .mod-row .mr-meta { margin-left: auto; font-size: 11.5px; color: var(--ink-faint); }
   .mod-empty { padding: 18px 4px; color: var(--ink-faint); font-size: 13px; }
+  /* ---------- Chat-Überblick ---------- */
+  #cu-list { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm); overflow: hidden; margin-top: 6px; }
+  .cu-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .cu-row:last-child { border-bottom: none; }
+  .cu-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .cu-name { font-weight: 600; color: var(--ink); font-size: 13.5px; }
+  .cu-head { font-size: 11.5px; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
+  .cu-meta { margin-left: auto; display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+  .cu-badge { font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 8px; white-space: nowrap; }
+  .cu-offen  { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .cu-hot    { background: color-mix(in srgb, var(--green) 16%, transparent);  color: var(--green); }
+  .cu-warten { background: color-mix(in srgb, var(--amber) 16%, transparent);  color: var(--amber); }
+  .cu-schlaf { background: color-mix(in srgb, var(--ink-faint) 14%, transparent); color: var(--ink-dim); }
+  .cu-age { font-size: 11.5px; color: var(--ink-faint); white-space: nowrap; }
+  .cu-link { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .cu-link:hover { text-decoration: underline; }
+  .cu-revive { font-size: 12px; font-weight: 600; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 6px 11px; cursor: pointer; white-space: nowrap; box-shadow: var(--shadow-sm); }
+  .cu-revive:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .cu-revive:disabled { opacity: .7; cursor: default; }
   /* ---------- Analytics-Seite ---------- */
   .an-guide { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); margin: 4px 0 22px; overflow: hidden; }
   .an-guide > summary { list-style: none; cursor: pointer; padding: 16px 22px; font-family: var(--disp); font-weight: 600; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
@@ -1001,9 +1020,6 @@
       <div class="mode-note" id="ls-note">Die Suche wird als dauerhafte Quelle gespeichert — der Bot holt daraus regelmäßig Nachschub.</div>
     </div>
 
-    <div class="section-head"><p class="sec-title">Deine Such-Quellen</p><span class="sec-hint">Warteschlange · liefern laufend neue Profile</span></div>
-    <div class="panel" id="ls-quellen"></div>
-
     <div class="section-head"><p class="sec-title">Bestehendes Netzwerk reaktivieren</p><span class="sec-hint">schon vernetzt · nie geschrieben</span></div>
     <div class="panel mod-panel">
       <p class="mod-lead">Dein größter ungenutzter Hebel: Leute, mit denen du <b>schon vernetzt</b> bist, aber nie geschrieben hast. Keine Anfrage nötig, keine Wartezeit — und die Antwortquote ist deutlich höher als bei Kaltkontakten.</p>
@@ -1028,14 +1044,25 @@
   </div>
 
   <div id="view-gespraech" class="view" style="display:none">
-    <div class="section-head" style="margin-top:8px"><p class="sec-title">Laufende Gespräche</p><span class="sec-hint">Antworten deiner Leads</span></div>
-    <div class="drafts-grid" id="mod-chat"></div>
-    <div class="view-empty" id="mod-chat-empty">Noch keine laufenden Gespräche. Sobald jemand antwortet, erscheint der Chat hier.</div>
-    <div class="section-head"><p class="sec-title">Direkt schreiben &amp; Kampagnen</p><span class="sec-hint">geplant</span></div>
-    <div class="panel mod-soon">
-      <b>Echtzeit-Chat im Postfach</b>
-      <p>Direkt aus dem Dashboard mit deinen Leads schreiben — ohne Umweg über LinkedIn. Dazu Ordner/Filter, um mehrere Kampagnen und Strategien sauber zu trennen. <span class="mod-tag">In Arbeit</span></p>
+    <div class="section-head" style="margin-top:8px;align-items:flex-start">
+      <div>
+        <p class="sec-title">Alle Chats · Überblick</p>
+        <div class="mode-note" id="cu-note" style="margin-top:4px">Alle Gespräche an einem Ort — such einen Chat, öffne ihn direkt, oder lass eingeschlafene wiederbeleben.</div>
+      </div>
+      <button id="of-go2" class="content-btn" style="max-width:260px">🔎 Alle Chats durchsehen</button>
     </div>
+    <div class="controls" style="margin-top:6px">
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="cu-q" type="search" placeholder="Chat nach Name suchen…" autocomplete="off" />
+      </div>
+      <div class="chips" id="cu-chips"></div>
+    </div>
+    <div id="cu-list"></div>
+
+    <div class="section-head"><p class="sec-title">Vorbereitete Antworten</p><span class="sec-hint">warten auf deine Freigabe</span></div>
+    <div class="drafts-grid" id="mod-chat"></div>
+    <div class="view-empty" id="mod-chat-empty">Gerade keine vorbereiteten Antworten. Nutze oben „Alle Chats durchsehen", damit der Bot offene Antworten vorbereitet.</div>
   </div>
 
   <div id="view-followups" class="view" style="display:none">
@@ -2146,13 +2173,53 @@ function renderModulViews(v) {
   }
 
   if (v === "leadsuche") {
-    const q = state.leadSources || [];
-    document.getElementById("ls-quellen").innerHTML = q.length
-      ? q.map(s => zeile(s.label || s.search_url, `Seite ${s.cursor_page ?? 0} · ${s.last_added ?? 0} zuletzt`)).join("")
-      : leer("Noch keine Quelle angelegt. Trag oben deine Zielgruppe ein — der Bot legt die Suche an und sammelt daraus laufend Profile.");
-    // Reaktivierungs-Entwürfe (bestehendes Netzwerk) direkt hier zur Freigabe.
+    // Such-Quellen-Liste bewusst entfernt (Sinan 2026-07-27): der Bot zieht Nachschub automatisch,
+    // hier zählt nur die Entscheidung "welche Zielgruppe" (oben). Reaktivierungs-Entwürfe bleiben.
     zeichneEntwuerfe(drafts.filter(d => d.kind === "reaktivierung"), document.getElementById("mod-reak"));
   }
+
+  if (v === "gespraech") renderChatUebersicht();
+}
+
+// CHAT-ÜBERBLICK: alle Gespräche an einem Ort (Buckets, Suche, direkt öffnen, wiederbeleben).
+let cuFilter = "alle";
+function renderChatUebersicht() {
+  const list = state.chatUebersicht || [];
+  const bucketOf = (c) => {
+    if (c.hatEntwurf) return "offen";
+    if (c.status === "replied" && (c.tage ?? 99) <= 14) return "hot";
+    if ((c.tage ?? 0) > 14) return "schlaf";
+    return "warten";
+  };
+  const META = {
+    offen:  { label: "✍️ Entwurf bereit", cls: "cu-offen" },
+    hot:    { label: "🔥 Antwort da",     cls: "cu-hot" },
+    warten: { label: "⏳ Warten",          cls: "cu-warten" },
+    schlaf: { label: "😴 Eingeschlafen",   cls: "cu-schlaf" },
+  };
+  const withB = list.map((c) => ({ ...c, bucket: bucketOf(c) }));
+  const z = { alle: withB.length, offen: 0, hot: 0, warten: 0, schlaf: 0 };
+  withB.forEach((c) => z[c.bucket]++);
+  const chips = [["alle","Alle"],["offen","✍️ Entwurf"],["hot","🔥 Antwort"],["warten","⏳ Warten"],["schlaf","😴 Eingeschlafen"]];
+  const chipsEl = document.getElementById("cu-chips");
+  if (chipsEl) chipsEl.innerHTML = chips.map(([k,lab]) =>
+    `<button class="chip${cuFilter===k?" active":""}" data-cu="${k}">${lab} <b>${z[k]??0}</b></button>`).join("");
+  const q = (document.getElementById("cu-q")?.value || "").toLowerCase().trim();
+  let rows = withB;
+  if (cuFilter !== "alle") rows = rows.filter((c) => c.bucket === cuFilter);
+  if (q) rows = rows.filter((c) => (c.name||"").toLowerCase().includes(q) || (c.headline||"").toLowerCase().includes(q));
+  const alter = (t) => t == null ? "" : t === 0 ? "heute" : t === 1 ? "gestern" : "vor " + t + " Tagen";
+  const el = document.getElementById("cu-list");
+  if (!el) return;
+  el.innerHTML = rows.length ? rows.slice(0, 200).map((c) => {
+    const m = META[c.bucket];
+    const revive = c.bucket === "schlaf" ? `<button class="cu-revive" data-url="${esc(c.url||"")}">wiederbeleben</button>` : "";
+    const link = c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener" class="cu-link">Chat öffnen ↗</a>` : "";
+    return `<div class="cu-row">
+      <div class="cu-main"><span class="cu-name">${esc(c.name||"—")}</span><span class="cu-head">${esc(c.headline||"")}</span></div>
+      <div class="cu-meta"><span class="cu-badge ${m.cls}">${m.label}</span><span class="cu-age">${alter(c.tage)}</span>${link}${revive}</div>
+    </div>`;
+  }).join("") : `<div class="mod-empty">Keine Chats in dieser Ansicht.</div>`;
 }
 
 const VIEWS = {
@@ -2247,17 +2314,39 @@ document.querySelectorAll(".nav-grp").forEach(btn => {
     nw.textContent = alt; nw.disabled = false;
   });
 
-  // --- Sales Agent: alle Chats auf offene Antworten durchsehen ---
-  const of = document.getElementById("of-go");
-  if (of) of.addEventListener("click", async () => {
-    const note = document.getElementById("of-note");
-    if (!(state.engine && state.engine.alive)) { note.textContent = "Dafür muss der Bot laufen – starte ihn auf der Übersicht."; return; }
-    of.disabled = true; const alt = of.textContent; of.textContent = "wird geprüft …";
+  // --- Sales Agent: alle Chats auf offene Antworten durchsehen (zwei Knöpfe: Entwürfe-Seite + Chat-Überblick) ---
+  const alleChatsScan = async (btn, noteId) => {
+    const note = document.getElementById(noteId);
+    if (!(state.engine && state.engine.alive)) { if (note) note.textContent = "Dafür muss der Bot laufen – starte ihn auf der Übersicht."; return; }
+    btn.disabled = true; const alt = btn.textContent; btn.textContent = "wird geprüft …";
     try {
       await fetch("/api/offene", { method: "POST" });
-      note.innerHTML = "<b>Wird geprüft ✓</b> – der Bot geht jetzt alle Chats durch und legt für jede offene Antwort einen Entwurf hier ab (dauert ein paar Minuten).";
-    } catch { note.textContent = "Fehler."; }
-    of.textContent = alt; of.disabled = false;
+      if (note) note.innerHTML = "<b>Wird geprüft ✓</b> – der Bot geht jetzt alle Chats durch und legt für jede offene Antwort einen Entwurf ab (dauert ein paar Minuten).";
+    } catch { if (note) note.textContent = "Fehler."; }
+    btn.textContent = alt; btn.disabled = false;
+  };
+  const of = document.getElementById("of-go");
+  if (of) of.addEventListener("click", () => alleChatsScan(of, "of-note"));
+  const of2 = document.getElementById("of-go2");
+  if (of2) of2.addEventListener("click", () => alleChatsScan(of2, "cu-note"));
+
+  // --- Chat-Überblick: Suche, Filter-Chips, wiederbeleben ---
+  const cuQ = document.getElementById("cu-q");
+  if (cuQ) cuQ.addEventListener("input", () => renderChatUebersicht());
+  const cuChips = document.getElementById("cu-chips");
+  if (cuChips) cuChips.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-cu]"); if (!b) return;
+    cuFilter = b.getAttribute("data-cu"); renderChatUebersicht();
+  });
+  const cuList = document.getElementById("cu-list");
+  if (cuList) cuList.addEventListener("click", async (e) => {
+    const b = e.target.closest(".cu-revive"); if (!b) return;
+    if (!(state.engine && state.engine.alive)) { b.textContent = "Bot muss laufen"; return; }
+    const url = b.getAttribute("data-url"); b.disabled = true; b.textContent = "wird angestoßen …";
+    try {
+      await fetch("/api/wiederbeleben", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+      b.textContent = "✓ Entwurf kommt";
+    } catch { b.textContent = "Fehler"; b.disabled = false; }
   });
 
   // --- Brand Engine: Beitrag schreiben lassen ---

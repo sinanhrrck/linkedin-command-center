@@ -565,6 +565,27 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // CHAT WIEDERBELEBEN: eingeschlafenen Chat anstoßen → Engine erzeugt einen Nachfass-Entwurf.
+  // Kein Browser hier – nur Flag setzen (mit der Profil-URL des Kontakts), Loop holt es ab.
+  if (url.pathname === "/api/wiederbeleben" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { url: profilUrl } = JSON.parse(body || "{}");
+        if (!profilUrl) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "keine url" }));
+          return;
+        }
+        setState("wiederbeleben_now", String(profilUrl));
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, running: engineAlive() }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
   // Live-Ansicht: letzter Schnappschuss des versteckten Browsers (von der Engine geschrieben).
   // Getrennte Prozesse → Umweg über Datei. 404, solange die Engine noch keinen geschrieben hat.
   if (url.pathname === "/api/live.jpg") {
