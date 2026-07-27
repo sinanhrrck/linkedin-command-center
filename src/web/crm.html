@@ -853,6 +853,14 @@
 
   <!-- ENTWÜRFE -->
   <div id="view-drafts" class="view" style="display:none">
+  <!-- Offene Antworten prüfen: geht ALLE Chats durch (auch alte) und legt Entwürfe für jeden Thread an, in dem Sinan am Zug ist -->
+  <div class="section-head" style="margin-top:8px;align-items:flex-start">
+    <div>
+      <p class="sec-title">Offene Antworten prüfen</p>
+      <div class="mode-note" id="of-note" style="margin-top:4px">Der Bot geht ALLE deine Chats durch — auch alte, längst gelesene — und legt für jeden, in dem du noch am Zug bist, einen Entwurf hier ab.</div>
+    </div>
+    <button id="of-go" class="content-btn" style="max-width:280px">🔎 Alle Chats durchsehen</button>
+  </div>
   <!-- Entwürfe -->
   <section id="drafts-section" style="display:none">
     <div class="section-head">
@@ -2237,6 +2245,19 @@ document.querySelectorAll(".nav-grp").forEach(btn => {
       note.innerHTML = "<b>Angestoßen ✓</b> – der Bot liest dein Netzwerk und legt gleich Entwürfe hier ab (dauert ein paar Minuten).";
     } catch { note.textContent = "Fehler."; }
     nw.textContent = alt; nw.disabled = false;
+  });
+
+  // --- Sales Agent: alle Chats auf offene Antworten durchsehen ---
+  const of = document.getElementById("of-go");
+  if (of) of.addEventListener("click", async () => {
+    const note = document.getElementById("of-note");
+    if (!(state.engine && state.engine.alive)) { note.textContent = "Dafür muss der Bot laufen – starte ihn auf der Übersicht."; return; }
+    of.disabled = true; const alt = of.textContent; of.textContent = "wird geprüft …";
+    try {
+      await fetch("/api/offene", { method: "POST" });
+      note.innerHTML = "<b>Wird geprüft ✓</b> – der Bot geht jetzt alle Chats durch und legt für jede offene Antwort einen Entwurf hier ab (dauert ein paar Minuten).";
+    } catch { note.textContent = "Fehler."; }
+    of.textContent = alt; of.disabled = false;
   });
 
   // --- Brand Engine: Beitrag schreiben lassen ---

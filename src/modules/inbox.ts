@@ -45,6 +45,22 @@ export async function fetchThreads(max = 8, onlyUnread = false): Promise<ThreadC
   await humanDelay(2500, 4000);
   await humanScroll(page);
 
+  // TIEFER SCAN (für "alle offenen Antworten prüfen"): LinkedIn rendert nur die obersten Zeilen
+  // der Konversationsliste; ältere Chats kommen erst nach, wenn man die LISTE (nicht die Seite)
+  // scrollt. Je größer max, desto mehr Runden – so erreichen wir auch alte, längst gelesene Chats,
+  // in denen noch eine Antwort von Sinan offen ist.
+  const scrollRunden = Math.min(15, Math.max(1, Math.ceil(max / 8)));
+  for (let i = 0; i < scrollRunden; i++) {
+    await page
+      .evaluate((sel) => {
+        const li = document.querySelector(sel);
+        const liste = (li?.closest("ul") as HTMLElement | null) || (li?.parentElement as HTMLElement | null);
+        (liste || document.scrollingElement || document.body)?.scrollBy(0, 5000);
+      }, SEL.listItem)
+      .catch(() => {});
+    await humanDelay(800, 1500);
+  }
+
   // Listen-Metadaten (Name, ungelesen, VORSCHAU) je Position einsammeln. Die Vorschau ist der
   // Schlüssel: LinkedIn stellt "Sie: …" voran, wenn DU zuletzt geschrieben hast. Fehlt das,
   // ist die PERSON am Zug – zuverlässig auch bei GELESENEN Alt-Chats (der frühere "ungelesen"-

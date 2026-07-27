@@ -219,6 +219,28 @@ cron.schedule("*/2 * * * *", () =>
 );
 cron.schedule("30 9 * * 2", () => einzeln("netzwerk", () => netzwerkLauf(3)));
 
+/**
+ * OFFENE-ANTWORTEN-SCAN (Sinans Vorgabe 2026-07-27): geht ALLE Chats durch – auch alte, längst
+ * gelesene – und legt für jeden, in dem eine Antwort von Sinan offen ist (die Person zuletzt
+ * geschrieben hat), einen Entwurf zur Prüfung an. Der tiefe Listen-Scroll in fetchThreads erreicht
+ * auch weit unten liegende Konversationen. Rein lesend + Entwurf; gesendet wird nur nach Freigabe.
+ *  - auf Knopfdruck (Dashboard setzt "offene_now"=1) – alle 2 Min abgeholt,
+ *  - automatisch 1x täglich (9:05), damit nichts liegen bleibt.
+ * Läuft nur, wenn der Agent NICHT live antwortet (sonst doppelte Entwürfe zum selben Thread).
+ */
+async function offeneAntwortenScan(max = 40) {
+  if (getAgentMode() !== "off") return;
+  await generateInboxDrafts(max, false);
+}
+cron.schedule("*/2 * * * *", () =>
+  einzeln("offene", async () => {
+    if (getState("offene_now") !== "1") return;
+    setState("offene_now", "");
+    await offeneAntwortenScan(40);
+  }),
+);
+cron.schedule("5 9 * * *", () => einzeln("offene", () => offeneAntwortenScan(40)));
+
 // REICHWEITE JETZT auf Knopfdruck: Dashboard setzt "comment_now"=1 → der Loop liked + erzeugt
 // Kommentar-Entwürfe sofort (statt bis werktags 12:30 zu warten). Browser gehört der Engine.
 cron.schedule("*/2 * * * *", () =>
