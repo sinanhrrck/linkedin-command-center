@@ -90,7 +90,8 @@ export const config = {
     // Harte Tages-Obergrenzen pro Aktionstyp
     dailyCaps: {
       connect: 20, // Vernetzungsanfragen (Wochenlimit bremst zusätzlich)
-      message: 30, // Nachrichten an Erstkontakte
+      message: 30, // KALTE Erstnachrichten (+ Follow-ups) an neue Kontakte – das ist der riskante Teil, den LinkedIn beobachtet
+      reply: 120, // ANTWORTEN in bestehenden Gesprächen (jemand hat DIR geschrieben) – quasi risikofrei, eigener Topf, damit heiße Leads nie durch kalte Outreach blockiert werden
       comment: 15,
       like: 40, // Likes sind harmlos, duerfen autonom + haeufiger; Governor-Delay bremst trotzdem
       profileView: 120,

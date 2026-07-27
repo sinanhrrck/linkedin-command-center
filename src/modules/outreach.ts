@@ -413,7 +413,11 @@ export async function sendMessage(profileUrl: string, text: string) {
  * dass die Nachricht wirklich im Verlauf steht. Governor-gated.
  */
 export async function sendThreadReply(threadUrl: string, text: string, empfaenger: string) {
-  return governor.execute("message", threadUrl, async () => {
+  // "reply" statt "message": Antworten in bestehende Gespräche laufen in einen eigenen, großzügigen
+  // Tages-Topf (config.safety.dailyCaps.reply) – so blockieren kalte Erstnachrichten nie eine Antwort
+  // an einen heißen Lead. Alle übrigen Schutzmechanismen (Delay, Arbeitszeit, Not-Aus, send_health)
+  // gelten unverändert.
+  return governor.execute("reply", threadUrl, async () => {
     const page = await newPage();
     await page.goto(threadUrl, { waitUntil: "domcontentloaded" });
     if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");

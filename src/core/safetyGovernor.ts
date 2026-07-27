@@ -3,7 +3,10 @@ import { db, getStartDate, getState, setState } from "../db/index.js";
 import { humanDelay } from "./humanize.js";
 import { events } from "./events.js";
 
-export type ActionType = "connect" | "message" | "comment" | "profileView" | "like";
+// "message" = KALTE Erstnachricht/Follow-up an neue Kontakte (riskant, eng gecappt).
+// "reply"   = Antwort in einem bestehenden Gespräch (jemand schrieb DIR) – risikoarm, eigener,
+//             großzügiger Cap, damit Antworten an heiße Leads nie durch kalte Outreach blockiert werden.
+export type ActionType = "connect" | "message" | "reply" | "comment" | "profileView" | "like";
 
 type Decision = { ok: true } | { ok: false; reason: string };
 
@@ -150,7 +153,7 @@ class SafetyGovernor {
     // SELBST-CHECK: Ist der Sende-Weg als defekt gemeldet (Selektor gebrochen o.ä.), gehen
     // Nachrichten/Kommentare NICHT raus (sonst still Mist bauen). Vernetzen nutzt einen anderen
     // Weg und läuft weiter. Der Nutzer wurde bereits per Telegram/Dashboard gewarnt.
-    if ((type === "message" || type === "comment") && getState("send_health") === "broken")
+    if ((type === "message" || type === "reply" || type === "comment") && getState("send_health") === "broken")
       return { ok: false, reason: "Selbst-Check: Sende-Weg defekt – pausiert, bis wieder funktionsfähig" };
 
     if (!this.withinWorkingHours(type)) {
