@@ -278,6 +278,38 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
   // AB HIER ist alles auf GENAU DIESES Fenster gescopt (Eingabefeld, Senden-Knopf, Prüfungen).
   const box = fenster.locator(SEL.messageBox).last();
 
+  /**
+   * EMPFÄNGER-IDENTITÄT DIREKT AM EINGABEFELD (Fix Fehlleitung Alexej→Lion, 2026-07-27).
+   * Der frühere Check las den GESAMTEN <main> – inklusive der linken Gesprächsliste, die ALLE
+   * Namen enthält. Dadurch galt "Alexej" als gefunden, obwohl rechts ein FREMDER Thread (Lion)
+   * offen war → Nachricht landete beim Falschen. Jetzt laufen wir vom Chatfeld nach oben zum
+   * Thread-Kopf und prüfen NUR dessen Namen. Sobald ein Container mit mehreren /in/-Links
+   * auftaucht (= die Gesprächsliste), gilt der Empfänger als NICHT bestätigt → Abbruch (Entwurf).
+   * Strikt gewollt: lieber ein Entwurf zu viel als eine Nachricht an die falsche Person.
+   */
+  const namePasst = await box.evaluate((el, ziel) => {
+    const norm = (s: string | null) => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
+    const z = norm(ziel);
+    if (!z) return false;
+    const nachname = z.split(" ").filter(Boolean).pop() || z;
+    let n: HTMLElement | null = (el as HTMLElement).parentElement;
+    for (let i = 0; i < 14 && n; i++, n = n.parentElement) {
+      // Die Gesprächsliste enthält viele Profil-Links – erreichen wir sie, ist der Thread-Kopf
+      // schon überschritten → Empfänger NICHT am offenen Thread bestätigt.
+      if (n.querySelectorAll('a[href*="/in/"]').length > 3) return false;
+      // Thread-Kopf des OFFENEN Chats: Überschrift oder einzelner Profil-Link im Container.
+      const kopf = n.querySelector('h2, [class*="entity-lockup__title"], a[href*="/in/"]');
+      const ktxt = norm(kopf?.textContent ?? null);
+      // Voller Name ODER (als Fallback) der Nachname im Thread-Kopf → bestätigt.
+      if (ktxt && (ktxt.includes(z) || ktxt.includes(nachname))) return true;
+    }
+    return false;
+  }, empfaenger);
+  if (!namePasst)
+    throw new UnsichereNachricht(
+      `Empfänger "${empfaenger}" am offenen Thread nicht bestätigt – Versand abgebrochen (Schutz vor Fehlleitung), wird Entwurf`,
+    );
+
   const sollNorm = normText(text);
 
   /**
