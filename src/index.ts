@@ -1,3 +1,4 @@
+import net from "node:net";
 import cron from "node-cron";
 import { db, setState, getState, getMode, setMode, getAgentMode, setAgentMode } from "./db/index.js";
 import { governor } from "./core/safetyGovernor.js";
@@ -59,26 +60,38 @@ if (getMode() === "full") {
 }
 
 /**
- * EINZEL-ENGINE-SPERRE (bulletproof, start-weg-unabhängig). Die Electron-Einzelinstanz-Sperre
- * greift nur für DENSELBEN App-Pfad – eine alte Version aus einem DMG läuft daran vorbei und
- * würde als ZWEITE Engine dieselben Leads doppelt vernetzen. Deshalb hier zusätzlich: läuft
- * bereits eine andere Engine (frischer Heartbeat < 150s + lebende, fremde PID), beendet sich
- * dieser Prozess sofort, statt einen zweiten Sende-Loop zu starten.
+ * EINZEL-ENGINE-SPERRE via OS-PORTBINDUNG (RENNSICHER, start-weg-unabhängig).
+ *
+ * Warum nicht mehr der frühere Heartbeat-Check: der prüfte "läuft schon eine?" und schrieb ERST
+ * danach die eigene PID – dazwischen klafft ein Zeitfenster. Starten zwei Engines fast gleichzeitig
+ * (genau der reale Fall: alte App aus einem DMG + neue aus dem Programme-Ordner), sehen BEIDE noch
+ * keinen frischen Heartbeat → beide laufen los → Doppel-Nachrichten/Doppel-Vernetzungen.
+ *
+ * Eine Portbindung dagegen ist vom Betriebssystem ATOMAR exklusiv: die zweite Bindung scheitert
+ * garantiert mit EADDRINUSE – ganz ohne Zeitfenster oder tote-PID-Rätsel. Der Socket bleibt für die
+ * gesamte Prozess-Lebensdauer offen (= der Lock); stirbt der Prozess (auch per kill -9), gibt das OS
+ * den Port automatisch wieder frei (self-healing, kein hängender Lock). Top-Level-await: alle
+ * folgenden Start-Schritte warten, bis der Lock steht.
  */
-(function nurEineEngine() {
-  const hb = getState("engine_heartbeat");
-  const pidStr = getState("engine_pid");
-  const frisch = hb ? Date.now() - new Date(hb).getTime() < 150_000 : false;
-  const fremdePid = pidStr ? Number(pidStr) : 0;
-  if (frisch && fremdePid && fremdePid !== process.pid) {
-    let lebt = false;
-    try { process.kill(fremdePid, 0); lebt = true; } catch { lebt = false; }
-    if (lebt) {
-      console.error(`[engine] Es läuft bereits eine Engine (PID ${fremdePid}). Dieser Doppelstart beendet sich, um Doppel-Vernetzungen zu verhindern.`);
+const ENGINE_LOCK_PORT = 43217; // nur lokal (127.0.0.1), kein echter Dienst – reine Sperre
+await new Promise<void>((resolve) => {
+  const lock = net.createServer();
+  lock.once("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(
+        "[engine] Es läuft bereits eine Engine (Lock-Port belegt). Dieser Doppelstart beendet sich SOFORT – verhindert Doppel-Nachrichten und Doppel-Vernetzungen.",
+      );
       process.exit(0);
     }
-  }
-})();
+    // Unerwarteter Bind-Fehler → NICHT blockieren, damit die Engine nicht komplett ausfällt.
+    console.warn(`[engine] Lock-Port ${ENGINE_LOCK_PORT} nicht bindbar (${err.code}) – fahre ohne Portlock fort.`);
+    resolve();
+  });
+  lock.listen(ENGINE_LOCK_PORT, "127.0.0.1", () => {
+    lock.unref(); // hält den Prozess nicht künstlich am Leben
+    resolve();
+  });
+});
 
 // Beim Start hängengebliebene Lead-Ansprüche freigeben: Starb ein Prozess mitten im Vernetzen,
 // blieb ein Lead auf 'inviting' stehen. Wieder auf 'new' setzen, damit er normal weiterläuft.
