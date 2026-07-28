@@ -333,6 +333,15 @@
   .dc-flag.einwand b { color: var(--amber); }
   .dc-flag.absage { background: var(--panel-2); border-color: var(--ink-faint); }
   .dc-flag.absage b { color: var(--ink-dim); }
+  /* Pitch-Ideen-Karte */
+  .pitch-ideas { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
+  .pitch-pick { text-align: left; display: flex; flex-direction: column; gap: 3px; border: 1px solid var(--line-strong); background: var(--panel); border-radius: 11px; padding: 11px 13px; cursor: pointer; transition: all .14s; width: 100%; }
+  .pitch-pick:hover:not(:disabled) { border-color: var(--green); background: rgba(31,157,99,.05); transform: translateY(-1px); }
+  .pitch-pick b { font-family: var(--disp); font-size: 12px; font-weight: 700; color: #12855a; }
+  .pitch-pick span { font-size: 12.5px; color: var(--ink); line-height: 1.4; }
+  .pitch-pick.chosen { border-color: var(--green); background: rgba(31,157,99,.08); }
+  .pitch-pick:disabled { cursor: default; opacity: .6; }
+  .pitch-pick.chosen { opacity: 1; }
   /* Action-Center CTA + Wichtig-Tag */
   .ac-cta { font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; }
   .ac-item.hot .ac-cta { color: var(--red); }
@@ -1798,10 +1807,26 @@ function renderHotLeads() {
  * Ausgelagert, damit die Modul-Views (Erstnachricht / Gespräch / Follow-Ups / Kommentare)
  * exakt dieselben Karten mit derselben Logik nutzen – gefiltert nach kind.
  */
+// PITCH-IDEEN-KARTE (Stufe 1): zeigt mehrere Ansätze zur Auswahl statt einer fertigen Nachricht.
+function pitchIdeeCard(d) {
+  let ideen = [];
+  try { ideen = JSON.parse(d.draft || "[]"); } catch { ideen = []; }
+  return `
+    <div class="draft-card pitch-card" data-id="${d.id}">
+      <div class="dc-top"><span class="dc-name">${esc(d.participant || "—")}</span><span class="dc-kind">Pitch-Ideen</span></div>
+      <div class="dc-flag chance"><b>Pitchbereit — wähle einen Ansatz</b><span>Daraus schreibt der Bot die Nachricht, die du danach nochmal freigibst.</span></div>
+      ${d.incoming ? `<div class="dc-in">Auf: „${esc(d.incoming)}"</div>` : ""}
+      <div class="pitch-ideas">
+        ${ideen.map((idee, i) => `<button class="pitch-pick" data-idx="${i}"><b>Ansatz ${i + 1}</b><span>${esc(idee)}</span></button>`).join("")}
+      </div>
+      <div class="dc-foot"><button class="dc-delete" title="Löschen – ohne Ersatz">🗑</button></div>
+    </div>`;
+}
+
 function zeichneEntwuerfe(list, grid) {
   if (!grid) return;
   if (grid.contains(document.activeElement)) return; // nicht neu bauen, während getippt wird
-  grid.innerHTML = list.map(d => `
+  grid.innerHTML = list.map(d => d.kind === "pitchidee" ? pitchIdeeCard(d) : `
     <div class="draft-card" data-id="${d.id}">
       <div class="dc-top">
         <span class="dc-name">${esc(d.participant || "—")}</span>
@@ -1821,6 +1846,35 @@ function zeichneEntwuerfe(list, grid) {
     </div>`).join("");
   grid.querySelectorAll(".draft-card").forEach(card => {
     const id = Number(card.dataset.id);
+    // LÖSCHEN gilt für ALLE Karten (auch Pitch-Ideen): endgültig entfernen, OHNE Ersatz.
+    const del = card.querySelector(".dc-delete");
+    if (del) del.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      if (btn.disabled) return;
+      if (!confirm("Diesen Entwurf endgültig löschen? Es wird kein neuer erzeugt.")) return;
+      btn.disabled = true; card.classList.add("rejecting");
+      await postDraft({ id, action: "delete" });
+      setTimeout(load, 400);
+    });
+    // PITCH-IDEEN-KARTE: einen Ansatz wählen → Engine generiert daraus die Nachricht (die du
+    // danach NOCHMAL freigibst). Kein Textfeld/Genehmigen/Ablehnen auf dieser Karte.
+    const picks = card.querySelectorAll(".pitch-pick");
+    if (picks.length) {
+      picks.forEach(pick => pick.addEventListener("click", async (e) => {
+        const btn = e.currentTarget;
+        if (btn.disabled) return;
+        const idx = Number(btn.dataset.idx);
+        let ideen = []; try { ideen = JSON.parse((list.find(x => x.id === id) || {}).draft || "[]"); } catch {}
+        const idee = ideen[idx];
+        if (!idee) return;
+        if (!(state.engine && state.engine.alive)) { const s = btn.querySelector("b"); if (s) s.textContent = "Bot muss laufen"; return; }
+        picks.forEach(b => b.disabled = true); btn.classList.add("chosen");
+        const b0 = btn.querySelector("b"); if (b0) b0.textContent = "✓ Nachricht wird geschrieben …";
+        try { await fetch("/api/pitch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, idee }) }); } catch {}
+        setTimeout(load, 1500);
+      }));
+      return;
+    }
     const ta = card.querySelector("textarea");
     const saved = card.querySelector(".draft-saved");
     ta.addEventListener("blur", async () => {
@@ -1848,15 +1902,6 @@ function zeichneEntwuerfe(list, grid) {
       if (r && r.ok && !r.regenerated) alert("Abgelehnt. Ein neuer Entwurf konnte gerade nicht erzeugt werden (evtl. KI-Limit) – beim nächsten Lauf versucht es der Bot erneut.");
       setTimeout(load, 1000);
     });
-    // LÖSCHEN: Entwurf endgültig entfernen, OHNE Ersatz (anders als Ablehnen).
-    card.querySelector(".dc-delete").addEventListener("click", async (e) => {
-      const btn = e.currentTarget;
-      if (btn.disabled) return;
-      if (!confirm("Diesen Entwurf endgültig löschen? Es wird kein neuer erzeugt.")) return;
-      btn.disabled = true; card.classList.add("rejecting");
-      await postDraft({ id, action: "delete" });
-      setTimeout(load, 400);
-    });
   });
 }
 
@@ -1881,7 +1926,8 @@ function renderDrafts() {
     if (!list.length) return;
     if (!confirm(`Alle ${list.length} Entwürfe genehmigen? Der Bot sendet sie danach nacheinander (Nachrichten nur Mo–Fr, governor-gedrosselt).`)) return;
     bulk.disabled = true; bulk.textContent = "…";
-    for (const d of list) await postDraft({ id: d.id, action: "approve" });
+    // Pitch-Ideen sind KEINE sendbare Nachricht (Stufe 1) → nie mit-genehmigen.
+    for (const d of list) if (d.kind !== "pitchidee") await postDraft({ id: d.id, action: "approve" });
     load();
   };
 }
@@ -2130,7 +2176,7 @@ function renderModulViews(v) {
   const leer = (t) => `<div class="mod-empty">${t}</div>`;
 
   if (v === "erstnachricht") grid("mod-first", drafts.filter(d => d.kind === "first"), "mod-first-empty");
-  if (v === "gespraech")     grid("mod-chat", drafts.filter(d => d.kind === "message"), "mod-chat-empty");
+  if (v === "gespraech")     grid("mod-chat", drafts.filter(d => d.kind === "message" || d.kind === "pitchidee"), "mod-chat-empty");
   if (v === "followups")     grid("mod-fup", drafts.filter(d => d.kind === "followup"), "mod-fup-empty");
   if (v === "kommentare")    grid("mod-comments", drafts.filter(d => d.kind === "comment"), "mod-comments-empty");
 

@@ -164,6 +164,49 @@ Wiederholung des intents.`;
   }
 }
 
+/**
+ * PITCH-IDEEN statt fertiger Nachricht (Sinan 2026-07-28): Ist ein Chat pitchbereit, schlägt der
+ * Bot ERST mehrere Ansätze vor, WIE man jetzt pitchen könnte – Sinan wählt einen, DANN wird daraus
+ * die Nachricht generiert (und nochmal freigegeben). Gibt kurze Ansätze (je 1 Satz) zurück.
+ */
+export async function pitchIdeen(messages: { sender: string; text: string }[], participant: string): Promise<string[]> {
+  const transcript = messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
+  const prompt = `Du bist Sinan. Der LinkedIn-Chat mit ${participant} ist PITCHBEREIT – die Person hat ein Signal gegeben (Unsicherheit, Unzufriedenheit, echtes Interesse oder fragt selbst nach).
+${promptKontext()}
+
+Deine Aufgabe: Schlage 3 VERSCHIEDENE Ansätze vor, WIE Sinan das Gespräch jetzt behutsam Richtung Angebot bzw. kurzes Telefonat drehen könnte. Nur die Ansätze als kurze Beschreibung in Klartext (je EIN Satz), KEINE fertige Nachricht. Nutze verschiedene Winkel, z.B.: über den genannten Pain anknüpfen, über eine ehrliche Zahl/Rechnung, über Sinans eigene Geschichte, über eine lockere offene Frage. Kein Druck, kein Verhör.
+
+Bisheriger Verlauf:
+${transcript}
+
+Antworte AUSSCHLIESSLICH mit einem JSON-Array aus genau 3 Strings, z.B. ["Ansatz eins ...","Ansatz zwei ...","Ansatz drei ..."].`;
+  try {
+    const raw = await generateAutopilot(prompt);
+    const json = raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1);
+    const arr = JSON.parse(json) as unknown[];
+    return Array.isArray(arr) ? arr.map((x) => saubern(String(x)).trim()).filter(Boolean).slice(0, 4) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Aus einem GEWÄHLTEN Pitch-Ansatz die konkrete nächste Nachricht schreiben (Stufe 2). */
+export async function messageAusIdee(messages: { sender: string; text: string }[], participant: string, idee: string): Promise<string> {
+  const transcript = messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
+  const prompt = `Du bist Sinan und führst einen LinkedIn-Chat mit ${participant}.
+${promptKontext()}
+Schreibe Sinans nächste Nachricht, die GENAU diesen gewählten Ansatz umsetzt: "${idee}".
+Strenge Stil-Regeln: Du, keine Emojis, keine Gedankenstriche, kurze gesprochene Sätze, max 4-5 Zeilen,
+EIN Gedanke, kein Verhör, kein Druck. Kein Pitch-Overkill – ein leichter, echter nächster Schritt, der
+an das anknüpft, was die Person zuletzt gesagt hat.
+
+Bisheriger Verlauf:
+${transcript}
+
+Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
+  return saubern(await generateText(prompt));
+}
+
 /** Freundliches Follow-up, wenn die Erstnachricht unbeantwortet blieb. */
 /**
  * Follow-up in ZWEI Stufen. Mehr als zwei gibt es bewusst nicht – wer zweimal nicht antwortet,

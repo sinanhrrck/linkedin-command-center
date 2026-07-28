@@ -565,6 +565,27 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // PITCH Stufe 2: Sinan hat einen Pitch-Ansatz gewählt → Engine generiert daraus die Nachricht
+  // (als neuer 'message'-Entwurf zur zweiten Freigabe). Nur Flag setzen, Loop holt es ab.
+  if (url.pathname === "/api/pitch" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { id, idee } = JSON.parse(body || "{}");
+        if (!id || !idee) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "id/idee fehlt" }));
+          return;
+        }
+        setState("pitch_now", JSON.stringify({ id: Number(id), idee: String(idee) }));
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, running: engineAlive() }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
   // CHAT WIEDERBELEBEN: eingeschlafenen Chat anstoßen → Engine erzeugt einen Nachfass-Entwurf.
   // Kein Browser hier – nur Flag setzen (mit der Profil-URL des Kontakts), Loop holt es ab.
   if (url.pathname === "/api/wiederbeleben" && req.method === "POST") {

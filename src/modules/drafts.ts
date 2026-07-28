@@ -2,7 +2,7 @@ import { db, getMode } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { fetchThreads, type ThreadContext } from "./inbox.js";
 import { sendThreadReply, sendMessage, sendComment } from "./outreach.js";
-import { firstMessage, followupMessage , converseStep } from "./personalize.js";
+import { firstMessage, followupMessage , converseStep, pitchIdeen, messageAusIdee } from "./personalize.js";
 import { GovernorBlocked } from "../core/safetyGovernor.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { markRepliedByName, markDeclinedByName, messagedAwaitingFollowup, type Contact } from "./crm.js";
@@ -106,6 +106,31 @@ export async function createFollowupDraft(c: Contact): Promise<boolean> {
   const info = db
     .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('followup',?,?,?,?)")
     .run(c.profile_url, c.full_name ?? null, "", text);
+  events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
+  return true;
+}
+
+/**
+ * PITCH Stufe 2 (Sinan 2026-07-28): Aus einem gewählten Pitch-Ansatz die konkrete Nachricht
+ * generieren und als normalen 'message'-Entwurf zur (zweiten) Freigabe ablegen. Der 'pitchidee'-
+ * Entwurf wird dabei als erledigt markiert. Nutzt den in ki_original abgelegten Verlauf – kein
+ * erneutes Inbox-Lesen nötig.
+ */
+export async function pitchZuNachricht(id: number, idee: string): Promise<boolean> {
+  const d = getDraft(id);
+  if (!d || d.kind !== "pitchidee") return false;
+  let transcript: { sender: string; text: string }[] = [];
+  try {
+    transcript = JSON.parse(d.ki_original || "{}").transcript || [];
+  } catch {
+    transcript = [];
+  }
+  const text = await messageAusIdee(transcript, d.participant ?? "", idee).catch(() => "");
+  if (!text) return false;
+  const info = db
+    .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('message',?,?,?,?,?,?)")
+    .run(d.thread_url, d.participant ?? null, d.incoming ?? "", text, text, "chance");
+  db.prepare("UPDATE drafts SET status='discarded' WHERE id=?").run(id);
   events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
   return true;
 }
@@ -378,6 +403,9 @@ export async function sendApprovedDrafts(limit = 10): Promise<number> {
 export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: string }> {
   const d = getDraft(id);
   if (!d) return { ok: false, reason: "Entwurf nicht gefunden" };
+  // Pitch-Ideen sind KEINE Nachricht (Stufe 1) – niemals senden. Erst pitchZuNachricht erzeugt
+  // daraus einen echten 'message'-Entwurf. Schutz, falls so einer je 'approved' würde.
+  if (d.kind === "pitchidee") return { ok: false, reason: "Pitch-Idee ist keine sendbare Nachricht" };
   if (d.status === "sent") return { ok: false, reason: "Bereits gesendet" };
   if (!d.thread_url) return { ok: false, reason: "Kein Ziel (Thread/Profil)" };
   // DUPLIKAT-SPERRE für Erstnachrichten: wenn der Kontakt schon angeschrieben wurde, NICHT
@@ -461,6 +489,28 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
     const echtesInteresse = ["meeting", "chance", "positive"].includes(step.intent);
     if (echtesInteresse && markRepliedByName(t.participant)) replies++;
     if (step.intent === "absage") markDeclinedByName(t.participant);
+
+    // PITCHBEREIT (chance): Sinan will hier ERST Pitch-IDEEN statt einer fertigen Nachricht
+    // (2026-07-28). Der Bot legt einen 'pitchidee'-Entwurf mit mehreren Ansätzen ab; Sinan wählt
+    // einen → daraus wird die Nachricht generiert (pitchZuNachricht) → nochmal Freigabe. Den
+    // Verlauf legen wir in ki_original ab, damit Stufe 2 ohne erneutes Inbox-Lesen auskommt.
+    if (step.intent === "chance") {
+      const ideen = await pitchIdeen(t.messages, t.participant).catch(() => [] as string[]);
+      if (ideen.length) {
+        const info = db
+          .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('pitchidee',?,?,?,?,?,?)")
+          .run(t.threadUrl, t.participant, t.lastIncoming, JSON.stringify(ideen), JSON.stringify({ transcript: t.messages, ideen }), "chance");
+        const d = getDraft(Number(info.lastInsertRowid));
+        created++;
+        events.emit("lead:eskalation", {
+          draft: d, participant: t.participant, intent: "chance",
+          zusammenfassung: step.zusammenfassung, strategie: step.strategie,
+          threadUrl: t.threadUrl, contact: step.contact,
+        });
+        continue; // KEINE fertige Nachricht in dieser Stufe
+      }
+      // Keine Ideen erzeugt (KI-Limit o.ä.) → Fallback: normale Antwort wie bisher.
+    }
 
     const info = db
       .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('message',?,?,?,?,?,?)")

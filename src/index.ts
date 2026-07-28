@@ -8,7 +8,7 @@ import { publishPostBrowser } from "./modules/outreach.js";
 import { outreachTick } from "./modules/outreachTick.js";
 import { checkAcceptances } from "./modules/acceptance.js";
 import { feedTick } from "./modules/leadFeed.js";
-import { generateInboxDrafts, generateFollowups, sendApprovedDrafts, reviveChat } from "./modules/drafts.js";
+import { generateInboxDrafts, generateFollowups, sendApprovedDrafts, reviveChat, pitchZuNachricht } from "./modules/drafts.js";
 import { generatePostIdeas } from "./modules/content.js";
 import { commentTick } from "./modules/comment.js";
 import { scanNetzwerk, generateReaktivierung } from "./modules/netzwerk.js";
@@ -240,6 +240,22 @@ cron.schedule("*/2 * * * *", () =>
   }),
 );
 cron.schedule("5 9 * * *", () => einzeln("offene", () => offeneAntwortenScan(40)));
+
+// PITCH Stufe 2 auf Knopfdruck: Dashboard setzt "pitch_now"={id,idee} → der Loop generiert aus dem
+// gewählten Ansatz die Nachricht (neuer 'message'-Entwurf zur zweiten Freigabe). Nur LLM, kein Browser.
+cron.schedule("*/2 * * * *", () =>
+  einzeln("pitch", async () => {
+    const raw = getState("pitch_now");
+    if (!raw) return;
+    setState("pitch_now", "");
+    try {
+      const { id, idee } = JSON.parse(raw);
+      await pitchZuNachricht(Number(id), String(idee));
+    } catch (e) {
+      console.error(`[pitch] ${(e as Error)?.message?.slice(0, 90)}`);
+    }
+  }),
+);
 
 // CHAT WIEDERBELEBEN auf Knopfdruck: Dashboard setzt "wiederbeleben_now"=<profil-url> → der Loop
 // erzeugt einen Nachfass-Entwurf für genau diesen eingeschlafenen Chat (nur LLM, kein Browser).
