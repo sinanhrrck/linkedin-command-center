@@ -1,8 +1,30 @@
+import { statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { db, getState, getMode, getFocus, getAgentMode } from "../db/index.js";
 import { governor } from "../core/safetyGovernor.js";
 import { pendingDrafts, approvedCount } from "./drafts.js";
 import { pendingPosts } from "./content.js";
 import { hotLeads } from "./crm.js";
+
+// Pfad zur gebündelten app.asar-DATEI (nur in der gepackten App). Deren Änderungsdatum verrät ein
+// frisch installiertes Update; liegt es NACH dem Engine-Start, läuft die Engine noch mit altem Code.
+const ASAR_PFAD = (() => {
+  try { const p = fileURLToPath(import.meta.url); const i = p.indexOf("app.asar"); return i >= 0 ? p.slice(0, i + 8) : null; }
+  catch { return null; }
+})();
+
+/**
+ * Läuft die Engine mit veraltetem Code, weil nach ihrem Start ein Update installiert wurde?
+ * Reiner Datei-Stat der app.asar (kein asar-Content, daher kein Caching-Problem) vs. engine_started.
+ */
+function engineVeraltet(): boolean {
+  if (!ASAR_PFAD) return false; // Dev / nicht gepackt → keine Prüfung
+  try {
+    const started = getState("engine_started");
+    if (!started) return false;
+    return statSync(ASAR_PFAD).mtimeMs > new Date(started).getTime() + 5000;
+  } catch { return false; }
+}
 
 /**
  * Stellt den kompletten Dashboard-Zustand als JSON zusammen (rein lesend).
@@ -169,7 +191,7 @@ export function getDashboardData() {
 
   return {
     generatedAt: new Date().toISOString(),
-    engine: { heartbeat, alive: engineAlive, startedAt: getState("engine_started") || null },
+    engine: { heartbeat, alive: engineAlive, startedAt: getState("engine_started") || null, veraltet: engineVeraltet() },
     recentActions,
     leadSources,
     todayDone: { drafts: draftsToday, posts: postsToday, leads: leadsToday },

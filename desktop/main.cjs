@@ -126,6 +126,14 @@ ipcMain.handle("update:install", async () => {
  */
 function startServer() {
   serverGewollt = true; // ab jetzt soll der Server laufen (Watchdog darf neu starten)
+  // VERWAISTE ALT-ENGINE AUFRÄUMEN (Fix 2026-07-29): Nach einem Update kann eine detached gestartete
+  // Engine (Parent-PID 1) aus der Vorversion mit ALTEM Code weiterlaufen und über den Portlock jede
+  // neue Engine blockieren ("Nachrichten gehen nicht raus"). Beim echten App-Start (Single-Instance-
+  // Lock → nur bei Quit+Neuöffnen, nicht beim Fenster-Fokus) einmal hart beenden. Der frische Start
+  // lädt danach garantiert aktuellen Code. Nur gepackt (im Dev keine laufende tsx-Engine killen).
+  if (app.isPackaged) {
+    try { require("node:child_process").execFileSync("pkill", ["-f", "dist/index.js"]); } catch { /* keine laufende → ok */ }
+  }
   if (app.isPackaged) {
     const dataDir = app.getPath("userData");
     // Chromium liegt ENTPACKT in app.asar.unpacked (asarUnpack). Playwright würde ihn sonst im

@@ -521,17 +521,23 @@ const server = createServer((req, res) => {
       try {
         const { action } = JSON.parse(body || "{}");
         if (action === "start") {
-          if (engineAlive()) {
-            res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, already: true }));
-            return;
-          }
-          // Loop-Ausgabe in engine.log schreiben (statt still) – fürs Debuggen.
-          // process.cwd() ist im Dev der Projekt-Ordner, in der App der beschreibbare Nutzer-Ordner.
-          const logFd = openSync(join(process.cwd(), "engine.log"), "a");
-          // keepAwake: hält den Rechner im Dev via caffeinate wach (Mac), damit der Loop nicht stirbt.
-          const child = spawnJob("engine", { detached: true, logFd, keepAwake: true });
-          child.unref();
-          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, pid: child.pid }));
+          // NEUESTER START GEWINNT (Fix 2026-07-29): eine evtl. noch laufende – auch VERWAISTE,
+          // veraltete – Engine ZUERST killen, dann frisch starten. Sonst blockiert eine Alt-Waise
+          // (Parent-PID 1 aus einer Vorversion) über den Portlock dauerhaft die neue Engine, und
+          // Updates greifen nie (genau das Symptom "Nachrichten gehen nicht raus"). pkill ist
+          // versionsunabhängig; der frische Spawn lädt garantiert den aktuellen Code aus app.asar.
+          const muster = PACKAGED ? "dist/index.js" : "tsx src/index.ts";
+          setState("engine_heartbeat", ""); // während des Neustarts als offline markieren
+          execFile("pkill", ["-f", muster], () => {
+            setTimeout(() => {
+              // Loop-Ausgabe in engine.log schreiben (statt still) – fürs Debuggen.
+              const logFd = openSync(join(process.cwd(), "engine.log"), "a");
+              // keepAwake: hält den Rechner im Dev via caffeinate wach (Mac), damit der Loop nicht stirbt.
+              const child = spawnJob("engine", { detached: true, logFd, keepAwake: true });
+              child.unref();
+            }, 1200); // kurz warten, bis der alte Prozess weg ist und Port 43217 frei wird
+          });
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, restarting: true }));
         } else if (action === "stop") {
           // Robust: Loop-Prozess per Muster killen (egal wie gestartet), Lock aufräumen.
           execFile("pkill", ["-f", PACKAGED ? "dist/index.js" : "tsx src/index.ts"], () => {

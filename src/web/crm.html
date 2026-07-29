@@ -1606,6 +1606,10 @@ function renderKlartextStatus() {
     ton = "bad"; titel = "Der Bot ist gerade aus.";
     sub = "Starte ihn, damit er vernetzt und Nachrichten für dich vorbereitet.";
     btn = { label: "▶ Bot starten", act: "start" };
+  } else if (eng.veraltet) {
+    ton = "bad"; titel = "Neue Version installiert — der Bot läuft noch mit der alten.";
+    sub = "Nach dem Update muss der Bot einmal neu gestartet werden, damit die Verbesserungen (z.B. das Senden) wirken. Ein Klick genügt.";
+    btn = { label: "🔄 Bot neu starten", act: "restart" };
   } else if (g.notAus) {
     ton = "warn"; titel = "Not-Aus ist an — es geht gerade nichts raus.";
     sub = "Der Bot läuft, sendet aber nichts. Zum Fortsetzen unten den Not-Aus ausschalten.";
@@ -1649,15 +1653,17 @@ function renderKlartextStatus() {
     } else if (btn.act === "notaus") {
       const n = document.getElementById("notaus-btn");
       if (n) { n.scrollIntoView({ behavior: "smooth", block: "center" }); n.classList.add("pulse-hint"); setTimeout(() => n.classList.remove("pulse-hint"), 2100); }
-    } else if (btn.act === "start") {
-      if (!confirm("Bot starten? Er verschickt dann echte Vernetzungsanfragen an deine Leads (governor-gedrosselt).")) return;
-      b.disabled = true; b.textContent = "startet…";
+    } else if (btn.act === "start" || btn.act === "restart") {
+      if (btn.act === "start" && !confirm("Bot starten? Er verschickt dann echte Vernetzungsanfragen an deine Leads (governor-gedrosselt).")) return;
+      b.disabled = true; b.textContent = btn.act === "restart" ? "startet neu…" : "startet…";
+      // "start" killt jetzt serverseitig zuerst eine evtl. alte/veraltete Engine und spawnt frisch.
       await fetch("/api/engine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start" }) });
-      for (let i = 0; i < 14; i++) {
+      for (let i = 0; i < 16; i++) {
         await new Promise(r => setTimeout(r, 2000));
         const s = await fetch("/api/state").then(r => r.json()).catch(() => null);
-        if (s && s.engine && s.engine.alive) { state = s; render(); return; }
-        b.textContent = "startet… (" + (i + 1) + ")";
+        // Fertig, sobald die (neue) Engine läuft UND nicht mehr als veraltet gilt.
+        if (s && s.engine && s.engine.alive && !s.engine.veraltet) { state = s; render(); return; }
+        b.textContent = (btn.act === "restart" ? "startet neu… (" : "startet… (") + (i + 1) + ")";
       }
       load();
     }

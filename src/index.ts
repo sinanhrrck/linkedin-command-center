@@ -1,4 +1,5 @@
 import net from "node:net";
+import { createRequire } from "node:module";
 import cron from "node-cron";
 import { db, setState, getState, getMode, setMode, getAgentMode, setAgentMode } from "./db/index.js";
 import { governor } from "./core/safetyGovernor.js";
@@ -76,24 +77,49 @@ if (getMode() === "full") {
  * folgenden Start-Schritte warten, bis der Lock steht.
  */
 const ENGINE_LOCK_PORT = 43217; // nur lokal (127.0.0.1), kein echter Dienst – reine Sperre
-await new Promise<void>((resolve) => {
-  const lock = net.createServer();
-  lock.once("error", (err: NodeJS.ErrnoException) => {
-    if (err.code === "EADDRINUSE") {
-      console.error(
-        "[engine] Es läuft bereits eine Engine (Lock-Port belegt). Dieser Doppelstart beendet sich SOFORT – verhindert Doppel-Nachrichten und Doppel-Vernetzungen.",
-      );
+let lockServer: import("net").Server | null = null; // Referenz halten, damit der Lock offen bleibt
+function versucheBinden(): Promise<"ok" | "belegt" | "fehler"> {
+  return new Promise((resolve) => {
+    const lock = net.createServer();
+    lock.once("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") return resolve("belegt");
+      console.warn(`[engine] Lock-Port ${ENGINE_LOCK_PORT} nicht bindbar (${err.code}) – fahre ohne Portlock fort.`);
+      resolve("fehler");
+    });
+    lock.listen(ENGINE_LOCK_PORT, "127.0.0.1", () => {
+      lock.unref(); // hält den Prozess nicht künstlich am Leben
+      lockServer = lock;
+      resolve("ok");
+    });
+  });
+}
+{
+  let stand = await versucheBinden();
+  if (stand === "belegt") {
+    /**
+     * NEUESTER GEWINNT (Fix 2026-07-29): Der Port wird von einer ANDEREN Engine gehalten – oft eine
+     * VERALTETE Waise (Parent-PID 1) aus einer Vorversion, die nach einem Update mit altem Code
+     * weiterläuft und so JEDEN neuen Start blockiert (Symptom: "Nachrichten gehen nicht raus").
+     * Diese – neu gestartete – Engine löst sie ab: die zuvor gemeldete Engine (engine_pid) killen,
+     * kurz warten, EINMAL erneut binden. Erst wenn der Port DANN noch belegt ist, liegt ein echter
+     * Gleichzeitig-Start vor → beenden. Der Doppel-Engine-Schutz bleibt (es läuft nur eine – die neueste).
+     */
+    const fremd = Number(getState("engine_pid") || 0);
+    if (fremd && fremd !== process.pid) {
+      try {
+        process.kill(fremd, 0); // lebt der andere Prozess noch?
+        console.warn(`[engine] Lock-Port belegt von Engine PID ${fremd} – löse sie ab (neuester Code gewinnt).`);
+        try { process.kill(fremd, "SIGTERM"); } catch { /* schon weg */ }
+      } catch { /* fremd bereits tot */ }
+    }
+    await new Promise((r) => setTimeout(r, 1200));
+    stand = await versucheBinden();
+    if (stand === "belegt") {
+      console.error("[engine] Lock-Port weiterhin belegt (echter Doppelstart) – dieser Prozess beendet sich.");
       process.exit(0);
     }
-    // Unerwarteter Bind-Fehler → NICHT blockieren, damit die Engine nicht komplett ausfällt.
-    console.warn(`[engine] Lock-Port ${ENGINE_LOCK_PORT} nicht bindbar (${err.code}) – fahre ohne Portlock fort.`);
-    resolve();
-  });
-  lock.listen(ENGINE_LOCK_PORT, "127.0.0.1", () => {
-    lock.unref(); // hält den Prozess nicht künstlich am Leben
-    resolve();
-  });
-});
+  }
+}
 
 // Beim Start hängengebliebene Lead-Ansprüche freigeben: Starb ein Prozess mitten im Vernetzen,
 // blieb ein Lead auf 'inviting' stehen. Wieder auf 'new' setzen, damit er normal weiterläuft.
@@ -102,9 +128,17 @@ await new Promise<void>((resolve) => {
   if (frei) console.info(`[start] ${frei} hängende Lead-Ansprüche ('inviting') wieder freigegeben.`);
 }
 
+// Die tatsächlich laufende Code-Version festhalten (aus der mitgebündelten package.json – die kommt
+// aus DEMSELBEN app.asar wie dieser Engine-Code). Das Dashboard vergleicht sie mit der Version auf
+// der Platte und warnt, falls nach einem Update noch eine alte Engine im Speicher läuft.
+const ENGINE_CODE_VERSION = (() => {
+  try { return String(createRequire(import.meta.url)("../package.json").version || "?"); }
+  catch { return "?"; }
+})();
 setState("engine_heartbeat", new Date().toISOString());
 setState("engine_started", new Date().toISOString());
 setState("engine_pid", String(process.pid)); // fürs saubere Stoppen vom Dashboard
+setState("engine_code_version", ENGINE_CODE_VERSION);
 cron.schedule("* * * * *", async () => {
   setState("engine_heartbeat", new Date().toISOString());
   // Ein Screenshot auf derselben Seite darf keine Navigation/Interaktion unterbrechen.
