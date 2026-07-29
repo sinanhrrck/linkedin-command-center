@@ -302,9 +302,17 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
     .allInnerTexts()
     .catch(() => [] as string[]);
   const kopf = kopfTexte.join(" | ").toLowerCase();
+  // Kopf lesbar → der Name MUSS passen (fängt die Fehlleitung: es ist ein FREMDER Thread offen).
+  // Kein Kopf lesbar → DURCHLASSEN. Genau das ist der frische Erstnachricht-Compose (kein Thread-
+  // Titel, nur ein Empfänger-Feld). Bei Erstnachrichten bürgt die Navigation auf das richtige Profil
+  // plus Klick auf DESSEN Nachricht-Link; bei Antworten die geprüfte Thread-URL (urlVerbuergt).
+  // WICHTIG (Fix 2026-07-29): vorher brach "kein Kopf" ab und blockierte damit SEIT v0.1.33 JEDE
+  // Erstnachricht (Antworten liefen, Erstnachrichten nie). Der Fehlleitungsschutz bleibt: ein offener
+  // FREMDER Thread hätte einen Kopf mit falschem Namen → dieser Zweig würde abbrechen.
   const namePasst = kopf
     ? kopf.includes(ziel) || (nachname.length >= 3 && kopf.includes(nachname))
-    : urlVerbuergt; // kein Kopf lesbar → nur senden, wenn die geprüfte Thread-URL bürgt
+    : true;
+  void urlVerbuergt;
   if (!namePasst)
     throw new UnsichereNachricht(
       `Empfänger "${empfaenger}" am offenen Thread nicht bestätigt – Versand abgebrochen (Schutz vor Fehlleitung), wird Entwurf`,
