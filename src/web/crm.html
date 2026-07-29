@@ -701,9 +701,9 @@
         <span id="kpi-acc-delta"></span>
       </div>
       <div class="cmd-stat">
-        <div class="cs-top"><span class="cs-lab">Woche</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg></span></div>
+        <div class="cs-top"><span class="cs-lab">Letzte 7 Tage</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg></span></div>
         <span class="cs-val" id="cmd-week">0/100</span>
-        <span class="cs-sub">Invites · Cap 100</span>
+        <span class="cs-sub">Invites · rollend · sinkt automatisch</span>
       </div>
       <div class="cmd-stat">
         <div class="cs-top"><span class="cs-lab">Entwürfe</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h16M4 19h10"/></svg></span></div>
@@ -755,7 +755,7 @@
       <div class="status-meta">
         <div>Arbeitszeit<b id="st-hours">—</b></div>
         <div id="st-warm-wrap">Warm-up<b id="st-warm">—</b></div>
-        <div>Woche<b id="st-week">—</b></div>
+        <div>7 Tage<b id="st-week">—</b></div>
       </div>
       <!-- Geschäftszeiten-Schalter: prominent im Safety Governor, wo der Nutzer ihn erwartet. -->
       <div class="switch-row" id="gov-zeitfenster">
@@ -1515,7 +1515,11 @@ function renderSystemHealth() {
   const f = state.sendeFehler || { letzte: [], blockiertGesamt: 0, unklarGesamt: 0 };
   const defekt = h.sendeWeg === "broken";
   const fehler = (f.letzte || []).slice(0, 4);
-  if (!defekt && !fehler.length && !f.blockiertGesamt && !f.unklarGesamt) { el.style.display = "none"; return; }
+  // NUR bei echtem, JETZT offenem Handlungsbedarf zeigen: Sende-Weg defekt ODER es gibt tatsächlich
+  // blockierte/unklare Entwürfe. Ein reines Fehler-LOG (alte, längst behobene Rejects) darf die Box
+  // NICHT dauerhaft anzeigen (sonst steht "0 nicht rausgegangen" mit veralteter Liste, 2026-07-29).
+  const handlungsbedarf = defekt || f.blockiertGesamt > 0 || f.unklarGesamt > 0;
+  if (!handlungsbedarf) { el.style.display = "none"; return; }
 
   el.style.display = "block";
   el.className = "sys-health " + (defekt ? "bad" : "warn");
@@ -1530,7 +1534,8 @@ function renderSystemHealth() {
     if (f.blockiertGesamt || f.unklarGesamt) html +=
             `<div style="margin-top:10px"><button id="retry-blocked-btn" class="content-btn" style="max-width:320px;display:inline-block;width:auto">📝 Als Entwürfe zur Prüfung holen</button> <span id="retry-blocked-msg" style="font-size:12px;color:var(--ink-dim)"></span></div>`;
   }
-  if (fehler.length) {
+  // Detail-Liste nur als Kontext zu tatsächlich blockierten/unklaren Entwürfen – nicht als Dauer-Log.
+  if ((f.blockiertGesamt > 0 || f.unklarGesamt > 0) && fehler.length) {
     html += `<ul class="sh-list">` + fehler.map(e => `<li>${esc(e.teilnehmer || "?")}: ${esc((e.grund || "").slice(0, 70))}</li>`).join("") + `</ul>`;
   }
   el.innerHTML = html;
