@@ -19,6 +19,13 @@ function normText(s: string): string {
 db.exec(
   "CREATE TABLE IF NOT EXISTS sent_ledger (recipient TEXT NOT NULL, fingerprint TEXT NOT NULL, at TEXT NOT NULL DEFAULT (datetime('now')))",
 );
+// Atomare Reservierung VOR dem Browser-Klick. Der alte Ledger ist ein Audit-Log, aber sein
+// "erst prüfen, später eintragen" konnte bei zwei Prozessen gleichzeitig durchrutschen.
+// Die Reservierung bleibt auch nach einem Prozessabsturz bestehen: im Zweifel blockieren wir
+// einen erneuten Versand, statt eine bereits angenommene Nachricht doppelt zu schicken.
+db.exec(
+  "CREATE TABLE IF NOT EXISTS message_reservations (recipient TEXT NOT NULL, fingerprint TEXT NOT NULL, at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (recipient, fingerprint))",
+);
 /** Kurzer, stabiler Fingerabdruck des normalisierten Textes (djb2, kein Crypto-Import nötig). */
 function fingerprint(text: string): string {
   const s = normText(text).toLowerCase();
@@ -26,21 +33,25 @@ function fingerprint(text: string): string {
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return `${h}:${s.length}`;
 }
-/** True, wenn dieselbe Nachricht in den letzten 24 h schon an diese Person ging. */
-function schonGesendet(empfaenger: string, text: string): boolean {
-  const row = db
-    .prepare(
-      "SELECT 1 AS x FROM sent_ledger WHERE recipient = ? AND fingerprint = ? AND at >= datetime('now','-1 day') LIMIT 1",
-    )
-    .get(empfaenger.trim().toLowerCase(), fingerprint(text)) as { x: number } | undefined;
-  return !!row;
-}
 function ledgerEintragen(empfaenger: string, text: string) {
   db.prepare("INSERT INTO sent_ledger (recipient, fingerprint) VALUES (?, ?)").run(
     empfaenger.trim().toLowerCase(),
     fingerprint(text),
   );
 }
+
+/** Reserviert Empfänger + Text für 24 h in EINER SQLite-Transaktion. */
+const reserviereVersand = db.transaction((empfaenger: string, text: string): boolean => {
+  const recipient = empfaenger.trim().toLowerCase();
+  const fp = fingerprint(text);
+  db.prepare("DELETE FROM message_reservations WHERE at < datetime('now','-1 day')").run();
+  // Auch Direktversände aus einer älteren App-Version innerhalb der letzten 24h beachten.
+  const legacy = db
+    .prepare("SELECT 1 FROM sent_ledger WHERE recipient=? AND fingerprint=? AND at >= datetime('now','-1 day') LIMIT 1")
+    .get(recipient, fp);
+  if (legacy) return false;
+  return db.prepare("INSERT OR IGNORE INTO message_reservations(recipient, fingerprint) VALUES (?, ?)").run(recipient, fp).changes === 1;
+});
 
 /**
  * Cold Outreach über die echte Browser-Session.
@@ -165,7 +176,7 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
       const send = page.locator(SEL.sendInvite).first();
       if (await send.count()) {
         await send.evaluate((el) => (el as HTMLElement).click());
-      }
+      } else throw new Error("Einladung-Senden-Button nicht gefunden");
       await humanDelay(600, 1400);
 
       db.prepare(
@@ -246,7 +257,7 @@ async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger
   return treffer.length === 1 ? treffer[0] : null; // eindeutig ODER gar nicht (fail-safe, Overlay-Modus)
 }
 
-async function tippenUndSenden(page: import("playwright").Page, text: string, empfaenger: string, nurHaupt = false) {
+async function tippenUndSenden(page: import("playwright").Page, text: string, empfaenger: string, nurHaupt = false, urlVerbuergt = false) {
   // SICHERHEITSSCHLEIFE 1: kein Kauderwelsch/Fehler-Text. Im Zweifel gar nicht senden.
   const plaus = istPlausibleNachricht(text);
   if (!plaus.ok) throw new UnsichereNachricht(plaus.grund ?? "unplausibel");
@@ -261,12 +272,6 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
   if (!empfaenger || !empfaenger.trim())
     throw new UnsichereNachricht("Kein Empfängername übergeben – Versand abgebrochen (Schutz vor Fehlleitung)");
 
-  // DOPPEL-VERSAND-SPERRE: identische Nachricht ging kürzlich schon an diese Person → NICHT nochmal.
-  if (schonGesendet(empfaenger, text)) {
-    console.warn(`[send] Duplikat verhindert – "${empfaenger}" hat diese Nachricht schon bekommen.`);
-    throw new DuplikatBlockiert(empfaenger);
-  }
-
   const fenster = await fensterFuerEmpfaenger(page, empfaenger, nurHaupt);
   if (!fenster)
     throw new UnsichereNachricht(
@@ -279,32 +284,27 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
   const box = fenster.locator(SEL.messageBox).last();
 
   /**
-   * EMPFÄNGER-IDENTITÄT DIREKT AM EINGABEFELD (Fix Fehlleitung Alexej→Lion, 2026-07-27).
-   * Der frühere Check las den GESAMTEN <main> – inklusive der linken Gesprächsliste, die ALLE
-   * Namen enthält. Dadurch galt "Alexej" als gefunden, obwohl rechts ein FREMDER Thread (Lion)
-   * offen war → Nachricht landete beim Falschen. Jetzt laufen wir vom Chatfeld nach oben zum
-   * Thread-Kopf und prüfen NUR dessen Namen. Sobald ein Container mit mehreren /in/-Links
-   * auftaucht (= die Gesprächsliste), gilt der Empfänger als NICHT bestätigt → Abbruch (Entwurf).
-   * Strikt gewollt: lieber ein Entwurf zu viel als eine Nachricht an die falsche Person.
+   * EMPFÄNGER am THREAD-KOPF prüfen (überarbeitet 2026-07-29).
+   * Der frühere Aufwärts-Lauf vom Eingabefeld brach in AKTIVEN Threads fälschlich ab (die haben
+   * viele Profil-Links durch die Nachrichten-Avatare) → er lehnte praktisch JEDE Antwort ab, es
+   * ging nichts mehr raus. Jetzt lesen wir gezielt den h2-Titel des OFFENEN Chats (die linke
+   * Gesprächsliste nutzt eine ANDERE Klasse, wird also NICHT verwechselt – genau das war der
+   * Alexej→Lion-Bug). Regeln:
+   *   - Kopf gefunden & Name passt          → senden.
+   *   - Kopf gefunden & Name passt NICHT     → Fehlleitung! Abbruch (Entwurf).
+   *   - Kein Kopf lesbar → URL-Bürgschaft: bei sendThreadReply bürgt die bereits geprüfte
+   *     Thread-URL für den Empfänger (urlVerbuergt) → senden; sonst vorsichtshalber Abbruch.
    */
-  const namePasst = await box.evaluate((el, ziel) => {
-    const norm = (s: string | null) => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
-    const z = norm(ziel);
-    if (!z) return false;
-    const nachname = z.split(" ").filter(Boolean).pop() || z;
-    let n: HTMLElement | null = (el as HTMLElement).parentElement;
-    for (let i = 0; i < 14 && n; i++, n = n.parentElement) {
-      // Die Gesprächsliste enthält viele Profil-Links – erreichen wir sie, ist der Thread-Kopf
-      // schon überschritten → Empfänger NICHT am offenen Thread bestätigt.
-      if (n.querySelectorAll('a[href*="/in/"]').length > 3) return false;
-      // Thread-Kopf des OFFENEN Chats: Überschrift oder einzelner Profil-Link im Container.
-      const kopf = n.querySelector('h2, [class*="entity-lockup__title"], a[href*="/in/"]');
-      const ktxt = norm(kopf?.textContent ?? null);
-      // Voller Name ODER (als Fallback) der Nachname im Thread-Kopf → bestätigt.
-      if (ktxt && (ktxt.includes(z) || ktxt.includes(nachname))) return true;
-    }
-    return false;
-  }, empfaenger);
+  const ziel = empfaenger.trim().toLowerCase();
+  const nachname = ziel.split(/\s+/).filter(Boolean).pop() || ziel;
+  const kopfTexte = await fenster
+    .locator('h2.msg-entity-lockup__entity-title, .msg-entity-lockup__entity-title, h2[class*="entity-title"]')
+    .allInnerTexts()
+    .catch(() => [] as string[]);
+  const kopf = kopfTexte.join(" | ").toLowerCase();
+  const namePasst = kopf
+    ? kopf.includes(ziel) || (nachname.length >= 3 && kopf.includes(nachname))
+    : urlVerbuergt; // kein Kopf lesbar → nur senden, wenn die geprüfte Thread-URL bürgt
   if (!namePasst)
     throw new UnsichereNachricht(
       `Empfänger "${empfaenger}" am offenen Thread nicht bestätigt – Versand abgebrochen (Schutz vor Fehlleitung), wird Entwurf`,
@@ -337,6 +337,12 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
   if (!feldOk) throw new UnsichereNachricht("Feld-Inhalt stimmte nach 2 Versuchen nicht mit dem Entwurf überein");
 
   const sendBtn = fenster.locator(SEL.sendButton).last();
+  // Erst NACH allen rein lokalen Prüfungen reservieren. Scheitert ein Selektor oder das Tippen,
+  // bleibt der Entwurf normal korrigierbar; ab diesem Punkt kann LinkedIn den Versand annehmen.
+  if (!reserviereVersand(empfaenger, text)) {
+    console.warn(`[send] Duplikat verhindert – "${empfaenger}" hat diese Nachricht schon bekommen.`);
+    throw new DuplikatBlockiert(empfaenger);
+  }
   if (await sendBtn.isEnabled().catch(() => false)) await sendBtn.click();
   else await page.keyboard.press("Enter"); // Fallback
 
@@ -446,7 +452,9 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
       throw new UnsichereNachricht("Letzte Nachricht im Chat ist nicht von der Person (jemand hat schon geantwortet) – Versand abgebrochen, wird Entwurf");
 
     // nurHaupt=true: ins Eingabefeld des Haupt-Bereichs <main> schreiben (Overlay-Bubbles ausgeschlossen).
-    await tippenUndSenden(page, text, empfaenger, true);
+    // urlVerbuergt=true: die geprüfte Thread-URL (oben) bürgt bereits für den Empfänger – falls der
+    // h2-Kopf mal nicht lesbar ist, NICHT fälschlich abbrechen (das hatte hier alles blockiert).
+    await tippenUndSenden(page, text, empfaenger, true, true);
   });
 }
 
@@ -533,10 +541,6 @@ export async function sendComment(postUrl: string, text: string) {
 export async function publishPostBrowser(body: string): Promise<void> {
   const text = normText(body);
   if (text.length < 20) throw new UnsichereNachricht("Post-Text zu kurz – nicht gepostet");
-  if (schonGesendet("__eigener_post__", text)) {
-    console.warn("[post] Duplikat verhindert – identischer Beitrag ging kürzlich schon raus.");
-    throw new DuplikatBlockiert("__eigener_post__");
-  }
 
   const page = await newPage();
   await page.goto("https://www.linkedin.com/feed/", { waitUntil: "domcontentloaded" });
@@ -564,6 +568,10 @@ export async function publishPostBrowser(body: string): Promise<void> {
   const submit = page.locator(SEL.postSubmit).first();
   if ((await submit.count()) === 0) throw new Error("Posten-Knopf nicht gefunden (Selektor prüfen)");
   if (!(await submit.isEnabled().catch(() => false))) throw new Error("Posten-Knopf nicht aktiv");
+  if (!reserviereVersand("__eigener_post__", text)) {
+    console.warn("[post] Duplikat verhindert – identischer Beitrag ging kürzlich schon raus.");
+    throw new DuplikatBlockiert("__eigener_post__");
+  }
   await submit.click();
 
   // BELEG: der Dialog/Editor schließt sich nach erfolgreichem Posten.

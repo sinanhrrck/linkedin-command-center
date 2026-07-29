@@ -239,6 +239,14 @@ const server = createServer((req, res) => {
           if (typeof text === "string" && text.trim()) {
             db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), Number(id));
           }
+          // Während die Engine läuft, besitzt sie den Browser exklusiv. Der Klick wird daher
+          // sicher in ihre Warteschlange gelegt statt einen zweiten Playwright-Prozess gegen
+          // dieselbe LinkedIn-Session zu starten.
+          if (engineAlive()) {
+            approveDraft(Number(id));
+            res.writeHead(202, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, queued: true, reason: "Engine sendet den Entwurf sicher aus ihrer Warteschlange." }));
+            return;
+          }
           // Reiht sich ein: mehrere Klicks sind erlaubt, laufen aber garantiert nacheinander.
           nacheinander(() => sendDraft(Number(id)))
             .then((r) => {
@@ -663,7 +671,7 @@ const server = createServer((req, res) => {
   res.writeHead(404, { "Content-Type": "text/plain" }).end("Nicht gefunden");
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, "127.0.0.1", () => {
   console.info(`\n  CRM-Cockpit läuft →  http://localhost:${PORT}\n`);
   console.info("  Beenden mit STRG+C.\n");
 });

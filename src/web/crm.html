@@ -1512,10 +1512,10 @@ function renderSystemHealth() {
   const el = document.getElementById("sys-health");
   if (!el) return;
   const h = state.systemHealth || {};
-  const f = state.sendeFehler || { letzte: [], blockiertGesamt: 0 };
+  const f = state.sendeFehler || { letzte: [], blockiertGesamt: 0, unklarGesamt: 0 };
   const defekt = h.sendeWeg === "broken";
   const fehler = (f.letzte || []).slice(0, 4);
-  if (!defekt && !fehler.length && !f.blockiertGesamt) { el.style.display = "none"; return; }
+  if (!defekt && !fehler.length && !f.blockiertGesamt && !f.unklarGesamt) { el.style.display = "none"; return; }
 
   el.style.display = "block";
   el.className = "sys-health " + (defekt ? "bad" : "warn");
@@ -1524,8 +1524,10 @@ function renderSystemHealth() {
     html += `<b>🛑 Sende-Weg gestört – Nachrichten pausiert.</b><br>${esc(h.grund || "Der Selbst-Check hat ein Problem gefunden.")}<br>` +
             `<span style="color:var(--ink-dim);font-size:12px">Vernetzen läuft weiter. Meist hilft: App neu starten. Bleibt es, hat LinkedIn die Oberfläche geändert.</span>`;
   } else {
-    html += `<b>⚠️ ${f.blockiertGesamt} Nachricht${f.blockiertGesamt === 1 ? "" : "en"} sind nicht rausgegangen.</b> ` +
-            `<span style="color:var(--ink-dim);font-size:12.5px">Ich hol sie dir als <b>Entwürfe zur Prüfung</b> zurück (nicht automatisch senden – eine alte Nachricht passt oft nicht mehr). Sinnlose (schon angeschrieben / hat geantwortet) sortier ich aus.</span>` +
+    if (f.unklarGesamt) html += `<b>⚠️ ${f.unklarGesamt} Versand${f.unklarGesamt === 1 ? "status ist" : "status sind"} unklar.</b> Bitte zuerst den LinkedIn-Verlauf prüfen; diese Nachrichten werden absichtlich nicht automatisch erneut gesendet.<br>`;
+    if (f.blockiertGesamt) html += `<b>⚠️ ${f.blockiertGesamt} Nachricht${f.blockiertGesamt === 1 ? "" : "en"} sind nicht rausgegangen.</b> ` +
+            `<span style="color:var(--ink-dim);font-size:12.5px">Ich hol sie dir als <b>Entwürfe zur Prüfung</b> zurück (nicht automatisch senden – eine alte Nachricht passt oft nicht mehr). Sinnlose (schon angeschrieben / hat geantwortet) sortier ich aus.</span><br>`;
+    if (f.blockiertGesamt || f.unklarGesamt) html +=
             `<div style="margin-top:10px"><button id="retry-blocked-btn" class="content-btn" style="max-width:320px;display:inline-block;width:auto">📝 Als Entwürfe zur Prüfung holen</button> <span id="retry-blocked-msg" style="font-size:12px;color:var(--ink-dim)"></span></div>`;
   }
   if (fehler.length) {

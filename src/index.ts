@@ -26,25 +26,27 @@ import { saveLiveShot } from "./core/session.js";
  */
 
 /**
- * Verhindert, dass sich derselbe Job überlappt. WICHTIG für die Sicherheit: Der Governor
- * hält seinen 20-75s-Abstand nur INNERHALB eines Durchlaufs. Laufen zwei Durchläufe parallel
- * (z.B. Start-Tick trifft auf Cron-Tick, oder ein Tick dauert länger als sein Intervall),
- * feuern beide gleichzeitig und die Taktung bricht. Real gemessen: zwei Vernetzungen 8s
- * auseinander, obwohl das Minimum 20s ist. Genau das verhindert diese Sperre.
+ * GLOBALER ENGINE-LOCK. Sämtliche Jobs teilen sich exakt einen Playwright-Tab
+ * (session.newPage() liefert den bestehenden Tab). Deshalb reicht eine Sperre pro Jobname
+ * NICHT: Ein Inbox-Scan, Agent und Versand könnten sich sonst gegenseitig mitten im Ablauf
+ * weg-navigieren. Das verursachte fehlgeschlagene bzw. doppelte Nachrichten.
+ *
+ * Ein wartender Cron-Tick wird bewusst übersprungen statt parallel ausgeführt. Der nächste Tick
+ * holt ihn nach; Sicherheit und korrekte Empfängerzuordnung sind wichtiger als Durchsatz.
  */
-const laeuft = new Set<string>();
+let laufenderJob: string | null = null;
 async function einzeln(name: string, fn: () => Promise<unknown>) {
-  if (laeuft.has(name)) {
-    console.info(`[${name}] läuft noch – Durchlauf übersprungen (kein Doppel-Feuern).`);
+  if (laufenderJob) {
+    console.info(`[${name}] übersprungen – [${laufenderJob}] nutzt gerade den Browser (kein Parallelzugriff).`);
     return;
   }
-  laeuft.add(name);
+  laufenderJob = name;
   try {
     await fn();
   } catch (e) {
     console.error(`[${name}] Fehler:`, e);
   } finally {
-    laeuft.delete(name);
+    laufenderJob = null;
   }
 }
 
@@ -105,7 +107,8 @@ setState("engine_started", new Date().toISOString());
 setState("engine_pid", String(process.pid)); // fürs saubere Stoppen vom Dashboard
 cron.schedule("* * * * *", async () => {
   setState("engine_heartbeat", new Date().toISOString());
-  await saveLiveShot();
+  // Ein Screenshot auf derselben Seite darf keine Navigation/Interaktion unterbrechen.
+  if (!laufenderJob) await saveLiveShot();
 });
 
 // Beim Start EINMAL sofort loslegen, statt bis zu 12 Min auf den ersten Cron-Tick zu warten.

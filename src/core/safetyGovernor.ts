@@ -43,12 +43,26 @@ class SafetyGovernor {
     return row.n;
   }
 
+  /**
+   * Kalendwoche nach lokaler Zeit (Mo 00:00 bis So 23:59), NICHT „letzte 7 Tage“.
+   *
+   * Das alte rollierende Fenster ließ die Einladungen vom vorherigen Dienstag bis Sonntag
+   * noch am neuen Montag zählen. Dadurch blieb der Zähler fälschlich bei 100/100. Die DB
+   * speichert UTC-Zeitstempel; der lokal berechnete Wochenanfang wird deshalb als UTC-String
+   * übergeben, damit Sommerzeit und Zeitzone korrekt bleiben.
+   */
   private countThisWeek(type: ActionType): number {
+    const now = new Date();
+    const daysSinceMonday = (now.getDay() + 6) % 7; // Mo=0, So=6
+    const mondayLocal = new Date(now);
+    mondayLocal.setHours(0, 0, 0, 0);
+    mondayLocal.setDate(mondayLocal.getDate() - daysSinceMonday);
+    const weekStartUtc = mondayLocal.toISOString().slice(0, 19).replace("T", " ");
     const row = db
       .prepare(
-        "SELECT COUNT(*) AS n FROM actions WHERE type = ? AND created_at >= datetime('now','-7 days')",
+        "SELECT COUNT(*) AS n FROM actions WHERE type = ? AND created_at >= ?",
       )
-      .get(type) as { n: number };
+      .get(type, weekStartUtc) as { n: number };
     return row.n;
   }
 

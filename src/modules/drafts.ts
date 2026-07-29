@@ -3,7 +3,7 @@ import { generateText } from "../core/textLlm.js";
 import { fetchThreads, type ThreadContext } from "./inbox.js";
 import { sendThreadReply, sendMessage, sendComment } from "./outreach.js";
 import { firstMessage, followupMessage , converseStep, pitchIdeen, messageAusIdee } from "./personalize.js";
-import { GovernorBlocked } from "../core/safetyGovernor.js";
+import { GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { markRepliedByName, markDeclinedByName, messagedAwaitingFollowup, type Contact } from "./crm.js";
 import { promptKontext, saubern } from "../context.js";
@@ -281,7 +281,10 @@ export function setDraftStatus(id: number, status: string) {
  * So geht nie eine veraltete Nachricht ungeprüft raus.
  */
 export function retryBlockierte(): { entwuerfe: number; verworfen: number } {
-  const rows = db.prepare("SELECT id, kind, thread_url FROM drafts WHERE status='blockiert'").all() as { id: number; kind: string; thread_url: string }[];
+  // 'unknown' ist absichtlich ebenfalls NUR auf manuellen Knopfdruck wieder sichtbar: Bei
+  // einem technischen Abbruch darf der Bot nicht selbst erneut senden, der Mensch kann nach
+  // Blick in den LinkedIn-Verlauf aber bewusst entscheiden.
+  const rows = db.prepare("SELECT id, kind, thread_url FROM drafts WHERE status IN ('blockiert','unknown')").all() as { id: number; kind: string; thread_url: string }[];
   let entwuerfe = 0,
     verworfen = 0;
   for (const r of rows) {
@@ -407,13 +410,22 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
   // daraus einen echten 'message'-Entwurf. Schutz, falls so einer je 'approved' würde.
   if (d.kind === "pitchidee") return { ok: false, reason: "Pitch-Idee ist keine sendbare Nachricht" };
   if (d.status === "sent") return { ok: false, reason: "Bereits gesendet" };
+  if (d.status !== "pending" && d.status !== "approved") return { ok: false, reason: `Entwurf ist bereits ${d.status}` };
   if (!d.thread_url) return { ok: false, reason: "Kein Ziel (Thread/Profil)" };
+
+  // ATOMARER CLAIM: Nur genau ein Prozess darf diesen Entwurf versenden. Das schützt gegen
+  // Dashboard, Telegram und Engine-Cron, die vorher alle denselben 'approved'-Entwurf lesen
+  // und parallel lossenden konnten.
+  const vorherigerStatus = d.status;
+  const claim = db.prepare("UPDATE drafts SET status='sending' WHERE id=? AND status=?").run(id, vorherigerStatus);
+  if (claim.changes === 0) return { ok: false, reason: "Entwurf wird bereits verarbeitet" };
+  const zurueckstellen = () => db.prepare("UPDATE drafts SET status=? WHERE id=? AND status='sending'").run(vorherigerStatus, id);
   // DUPLIKAT-SPERRE für Erstnachrichten: wenn der Kontakt schon angeschrieben wurde, NICHT
   // erneut senden (auch wenn der Entwurf freigegeben ist). Entwurf aus der Warteschlange nehmen.
   if (d.kind === "first") {
     const st = db.prepare("SELECT messaged_at FROM contacts WHERE profile_url=?").get(d.thread_url) as { messaged_at?: string } | undefined;
     if (st?.messaged_at) {
-      db.prepare("UPDATE drafts SET status='blockiert' WHERE id=?").run(id);
+      db.prepare("UPDATE drafts SET status='blockiert' WHERE id=? AND status='sending'").run(id);
       console.info(`[sicherheit] Entwurf #${id} nicht gesendet – ${d.participant ?? "Kontakt"} wurde schon angeschrieben (kein Duplikat).`);
       return { ok: false, reason: "Schon angeschrieben – kein Duplikat" };
     }
@@ -424,7 +436,7 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
   if (d.kind === "followup") {
     const st = db.prepare("SELECT status, replied_at FROM contacts WHERE profile_url=?").get(d.thread_url) as { status?: string; replied_at?: string } | undefined;
     if (st && (st.replied_at || ["replied", "closed"].includes(st.status ?? ""))) {
-      db.prepare("UPDATE drafts SET status='discarded' WHERE id=?").run(id);
+      db.prepare("UPDATE drafts SET status='discarded' WHERE id=? AND status='sending'").run(id);
       console.info(`[sicherheit] Follow-up #${id} verworfen – ${d.participant ?? "Kontakt"} hat inzwischen geantwortet (kein Reminder an Antwortende).`);
       return { ok: false, reason: "Person hat geantwortet – Follow-up hinfällig" };
     }
@@ -436,22 +448,35 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
     else if (d.kind === "first" || d.kind === "followup" || d.kind === "reaktivierung")
       await sendMessage(d.thread_url, d.draft);
     else await sendThreadReply(d.thread_url, d.draft, d.participant ?? "");
-    db.prepare("UPDATE drafts SET status='sent', sent_at=datetime('now') WHERE id=?").run(id);
+    db.prepare("UPDATE drafts SET status='sent', sent_at=datetime('now') WHERE id=? AND status='sending'").run(id);
     return { ok: true };
   } catch (e) {
-    if (e instanceof GovernorBlocked) return { ok: false, reason: e.message };
+    if (e instanceof DuplikatBlockiert) {
+      db.prepare("UPDATE drafts SET status='discarded' WHERE id=? AND status='sending'").run(id);
+      return { ok: false, reason: e.message };
+    }
+    if (e instanceof GovernorBlocked) {
+      zurueckstellen();
+      return { ok: false, reason: e.message };
+    }
     /**
      * UNSICHERE NACHRICHT (Kauderwelsch / Feld-Inhalt weicht ab): NICHT erneut versuchen –
      * sonst würde derselbe Mist wieder und wieder rausgehen. Entwurf 'blockiert' setzen (kommt
      * NICHT in die Sende-Warteschlange zurück) und den Nutzer informieren.
      */
     if (e instanceof UnsichereNachricht) {
-      db.prepare("UPDATE drafts SET status='blockiert' WHERE id=?").run(id);
+      db.prepare("UPDATE drafts SET status='blockiert' WHERE id=? AND status='sending'").run(id);
       console.error(`[sicherheit] Entwurf #${id} blockiert – ${e.grund}. Nicht gesendet.`);
       events.emit("draft:blockiert", { id, grund: e.grund, participant: d.participant });
       return { ok: false, reason: `Blockiert: ${e.grund}` };
     }
-    throw e;
+    // Nach einem technischen Fehler ist nicht beweisbar, ob LinkedIn den Klick doch noch
+    // angenommen hat (z.B. Browser/Netz stirbt direkt danach). Deshalb KEIN Auto-Retry: der
+    // Status bleibt sichtbar und der Mensch prüft den Verlauf, bevor etwas erneut rausgeht.
+    db.prepare("UPDATE drafts SET status='unknown' WHERE id=? AND status='sending'").run(id);
+    console.error(`[send] Entwurf #${id}: Versandstatus unklar – kein automatischer Retry: ${(e as Error)?.message?.slice(0, 120)}`);
+    events.emit("draft:blockiert", { id, grund: "Versandstatus unklar – LinkedIn-Verlauf prüfen", participant: d.participant });
+    return { ok: false, reason: "Versandstatus unklar – nicht automatisch erneut gesendet" };
   }
 }
 

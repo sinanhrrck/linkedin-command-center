@@ -191,7 +191,8 @@ export function getDashboardData() {
         }
       })();
       const blockiert = (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status='blockiert'").get() as { n: number }).n;
-      return { letzte: errs, blockiertGesamt: blockiert };
+      const unklar = (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status='unknown'").get() as { n: number }).n;
+      return { letzte: errs, blockiertGesamt: blockiert, unklarGesamt: unklar };
     })(),
     pipeline: PIPELINE.map((stage) => ({ stage, count: counts[stage] ?? 0 })), // AKTUELLER Status (für Chips/Tabellenfilter)
     funnel, // KUMULATIV (für den Conversion-Funnel) – echte Stufen-Zählung
