@@ -234,6 +234,25 @@
   .sys-health.warn { background: rgba(192,122,18,.08); border-color: var(--amber); color: var(--ink); }
   .sys-health b { font-family: var(--disp); }
   .sys-health .sh-list { margin: 8px 0 0; padding-left: 16px; font-size: 12px; color: var(--ink-dim); }
+  /* ---------- Klartext-Status (Ampel oben) ---------- */
+  .kstatus { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-radius: 16px; padding: 15px 20px; margin-bottom: 16px; border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+  .kstatus:empty { display: none; }
+  .kstatus .ks-main { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .kstatus .ks-dot { width: 13px; height: 13px; border-radius: 50%; flex: 0 0 13px; }
+  .kstatus.ok   { background: rgba(31,157,99,.06);  border-color: rgba(31,157,99,.28); }
+  .kstatus.ok   .ks-dot { background: var(--green); box-shadow: 0 0 0 4px rgba(31,157,99,.16); }
+  .kstatus.warn { background: rgba(192,122,18,.07); border-color: rgba(192,122,18,.32); }
+  .kstatus.warn .ks-dot { background: var(--amber); box-shadow: 0 0 0 4px rgba(192,122,18,.16); }
+  .kstatus.bad  { background: rgba(200,60,60,.07);  border-color: rgba(200,60,60,.32); }
+  .kstatus.bad  .ks-dot { background: var(--red);   box-shadow: 0 0 0 4px rgba(200,60,60,.16); }
+  .ks-title { font-family: var(--disp); font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; line-height: 1.3; }
+  .ks-sub { font-size: 12.5px; color: var(--ink-dim); margin-top: 3px; line-height: 1.4; }
+  .ks-heute { font-size: 12.5px; color: var(--ink); margin-top: 7px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ks-btn { flex: 0 0 auto; font-family: var(--disp); font-weight: 600; font-size: 13px; border: none; border-radius: 12px; padding: 11px 18px; color: #fff; background: var(--hero-grad); box-shadow: 0 8px 18px -8px rgba(20,80,50,.5); cursor: pointer; transition: transform .12s var(--ease); white-space: nowrap; }
+  .ks-btn:hover { transform: translateY(-1px); }
+  .ks-btn:disabled { opacity: .7; cursor: default; }
+  .pulse-hint { animation: pulseHint 1s ease 2; }
+  @keyframes pulseHint { 0%,100% { box-shadow: 0 0 0 0 rgba(200,60,60,0); } 50% { box-shadow: 0 0 0 6px rgba(200,60,60,.25); } }
   .notaus-btn { display: block; width: 100%; margin-top: 9px; font-family: var(--disp); font-weight: 700; font-size: 12.5px; border: 1.5px solid var(--red); border-radius: 12px; padding: 9px 16px; color: var(--red); background: rgba(200,60,60,.06); cursor: pointer; transition: all .14s var(--ease); }
   .notaus-btn:hover { background: rgba(200,60,60,.12); }
   .notaus-btn.armed { color: #fff; background: linear-gradient(155deg, #e05a60, #c23940); border-color: transparent; box-shadow: 0 8px 18px -8px rgba(180,50,60,.55); }
@@ -683,6 +702,9 @@
   <!-- SYSTEMSTATUS-BANNER: nur sichtbar, wenn etwas nicht stimmt (Sende-Weg defekt / Fehler). -->
   <div id="sys-health" class="sys-health" style="display:none"></div>
 
+  <!-- KLARTEXT-STATUS: eine einfache Ampel-Zeile, die JEDEM sofort sagt, wie's steht + heute + nächster Schritt. -->
+  <div id="klartext-status" class="kstatus"></div>
+
   <!-- Hero-Kommandozeile -->
   <section class="command">
     <div class="cmd-hero">
@@ -746,7 +768,7 @@
 
   <section class="hero">
     <div class="panel status-panel">
-      <p class="eyebrow">Safety Governor</p>
+      <p class="eyebrow">Sicherheit &amp; Tempo</p>
       <div class="status-big">
         <span class="status-dot" id="st-dot"></span>
         <span class="status-word" id="st-word">—</span>
@@ -754,7 +776,7 @@
       <div class="status-reason" id="st-reason"></div>
       <div class="status-meta">
         <div>Arbeitszeit<b id="st-hours">—</b></div>
-        <div id="st-warm-wrap">Warm-up<b id="st-warm">—</b></div>
+        <div id="st-warm-wrap">Sanfter Start<b id="st-warm">—</b></div>
         <div>7 Tage<b id="st-week">—</b></div>
       </div>
       <!-- Geschäftszeiten-Schalter: prominent im Safety Governor, wo der Nutzer ihn erwartet. -->
@@ -769,7 +791,7 @@
           <div class="cap" id="m-hard">Hard-Cap —</div>
         </div>
         <div class="track"><div class="fill" id="m-fill" style="width:0%"></div><div class="tick" id="m-tick" style="left:0%"></div></div>
-        <div class="meter-foot"><span>Vernetzungen heute</span><span id="m-warmlab">Warm-up —</span></div>
+        <div class="meter-foot"><span>Vernetzungen heute</span><span id="m-warmlab">Sanfter Start —</span></div>
       </div>
       <div class="meter-foot" style="font-size:11px;margin-top:12px" id="acts">—</div>
       <!-- SAFETY-TRANSPARENZ: die grösste Sorge der Nutzer ist eine LinkedIn-Sperre.
@@ -1157,12 +1179,12 @@ function render() {
   const word = document.getElementById("st-word");
   const c = paused ? "var(--red)" : (g.withinWorkingHours ? "var(--green)" : "var(--amber)");
   dot.style.background = c; dot.style.boxShadow = "none";
-  word.textContent = paused ? "PAUSIERT" : (g.withinWorkingHours ? "AKTIV" : "RUHE");
+  word.textContent = paused ? "Gestoppt" : (g.withinWorkingHours ? "Sendet" : "Pause");
   word.style.color = c;
   document.getElementById("st-reason").textContent = paused
-    ? (g.pauseReason || "Manuell pausiert.")
-    : (g.withinWorkingHours ? "Governor läuft. Sendeaktionen innerhalb der Limits erlaubt."
-       : `Außerhalb der Arbeitszeit (${g.workingHours.start}–${g.workingHours.end} Uhr). Sendet nicht.`);
+    ? (g.pauseReason || "Zur Sicherheit automatisch pausiert.")
+    : (g.withinWorkingHours ? "Läuft und sendet innerhalb der sicheren Limits."
+       : `Ruhezeit (außerhalb ${g.workingHours.start}–${g.workingHours.end} Uhr). Macht später weiter.`);
   document.getElementById("pulse").style.background = c;
   const hoursEl = document.getElementById("st-hours");
   hoursEl.textContent = g.withinWorkingHours ? "offen" : "geschlossen";
@@ -1235,13 +1257,13 @@ function render() {
   // Warm-up-Label ebenfalls nur während der Phase (siehe oben).
   const wl = document.getElementById("m-warmlab");
   wl.style.display = warmDone ? "none" : "";
-  if (!warmDone) wl.textContent = "Warm-up " + Math.round(g.warmup.factor * 100) + "%";
+  if (!warmDone) wl.textContent = "Sanfter Start " + Math.round(g.warmup.factor * 100) + "%";
 
   // Activity
   const acts = state.actionsToday;
   const keys = Object.keys(acts);
   document.getElementById("acts").innerHTML = keys.length
-    ? keys.map(k => `<span>${k}: <b style="color:var(--ink)">${acts[k]}</b></span>`).join("")
+    ? keys.map(k => `<span><b style="color:var(--ink)">${acts[k]}</b> ${aktWort(k, acts[k])}</span>`).join("")
     : `<span style="color:var(--ink-faint)">Noch keine Sendeaktionen heute.</span>`;
 
   // Funnel als horizontale Conversion-Balken. KUMULATIV (state.funnel): jede Stufe zählt, wer
@@ -1283,6 +1305,7 @@ function render() {
   renderChart();
   renderTrend();
   renderSystemHealth();
+  renderKlartextStatus();
   renderActionCenter();
   renderActivity();
   renderAutomatik();
@@ -1551,6 +1574,93 @@ function renderSystemHealth() {
         setTimeout(load, 1500);
       } else { if (msg) msg.textContent = "Fehler."; btn.disabled = false; btn.textContent = "📝 Als Entwürfe zur Prüfung holen"; }
     } catch { if (msg) msg.textContent = "Fehler."; btn.disabled = false; btn.textContent = "📝 Als Entwürfe zur Prüfung holen"; }
+  };
+}
+
+// Aktionstyp → verständliches deutsches Wort [Einzahl, Mehrzahl] (geteilt von Klartext-Status +
+// Aktivitäts-Zeile). "vernetzt"/"geschrieben" sind Partizipien und in beiden Fällen gleich.
+const AKTION_WORT = { connect: ["vernetzt", "vernetzt"], message: ["geschrieben", "geschrieben"], reply: ["Antwort", "Antworten"], comment: ["Kommentar", "Kommentare"], like: ["Like", "Likes"], profileView: ["Profil-Besuch", "Profil-Besuche"] };
+function aktWort(k, n) { const w = AKTION_WORT[k]; return w ? (n === 1 ? w[0] : w[1]) : k; }
+function heuteBilanzText() {
+  const a = state.actionsToday || {};
+  const reihenfolge = ["connect", "message", "reply", "comment", "like"];
+  const parts = reihenfolge.filter(k => a[k]).map(k => `${a[k]} ${aktWort(k, a[k])}`);
+  return parts.join(" · ");
+}
+
+// KLARTEXT-STATUS: eine Ampel-Zeile, die jedem Laien sofort sagt, wie's steht, was heute lief und
+// was JETZT sein nächster Schritt ist. Priorität: Bot aus > Not-Aus > selbst pausiert > du bist dran > alles gut.
+function renderKlartextStatus() {
+  const el = document.getElementById("klartext-status");
+  if (!el) return;
+  const eng = state.engine || {};
+  const g = state.governor || {};
+  const drafts = (state.drafts || []).length;
+  const hot = (state.hotLeads || []).length;
+  const posts = (state.postDrafts || []).length;
+  const heute = heuteBilanzText();
+  const heuteZeile = heute ? `Heute: ${heute}` : "Heute noch nichts — der Bot legt gleich los.";
+
+  let ton, titel, sub = "", btn = null;
+  if (!eng.alive) {
+    ton = "bad"; titel = "Der Bot ist gerade aus.";
+    sub = "Starte ihn, damit er vernetzt und Nachrichten für dich vorbereitet.";
+    btn = { label: "▶ Bot starten", act: "start" };
+  } else if (g.notAus) {
+    ton = "warn"; titel = "Not-Aus ist an — es geht gerade nichts raus.";
+    sub = "Der Bot läuft, sendet aber nichts. Zum Fortsetzen unten den Not-Aus ausschalten.";
+    btn = { label: "Zum Not-Aus", act: "notaus" };
+  } else if (g.paused) {
+    ton = "warn"; titel = "Der Bot hat sich zur Sicherheit selbst pausiert.";
+    sub = g.pauseReason || "Er macht automatisch weiter, sobald es wieder passt.";
+  } else if (drafts || hot || posts) {
+    ton = "warn";
+    const was = [];
+    if (drafts) was.push(`${drafts} ${drafts > 1 ? "Freigaben" : "Freigabe"}`);
+    if (hot) was.push(`${hot} Hot Lead${hot > 1 ? "s" : ""}`);
+    if (posts) was.push(`${posts} Post${posts > 1 ? "s" : ""}`);
+    titel = `Läuft — aber ${was.join(" · ")} warten auf dich.`;
+    sub = "Der Bot arbeitet im Hintergrund. Du entscheidest, was rausgeht.";
+    btn = drafts ? { label: "→ Entwürfe ansehen", act: "jump", view: "drafts" }
+        : hot ? { label: "→ Hot Leads ansehen", act: "jump", view: "hotleads" }
+        : { label: "→ Posts ansehen", act: "jump", view: "drafts" };
+  } else {
+    ton = "ok"; titel = "Alles läuft. Der Bot arbeitet im Hintergrund.";
+    sub = g.withinWorkingHours ? "Gerade nichts zu tun für dich."
+      : `Gerade Ruhezeit — er macht in den Geschäftszeiten weiter (${(g.workingHours && g.workingHours.start) ?? 9}–${(g.workingHours && g.workingHours.end) ?? 22} Uhr).`;
+  }
+
+  el.className = "kstatus " + ton;
+  el.innerHTML = `
+    <div class="ks-main">
+      <span class="ks-dot"></span>
+      <div class="ks-txt">
+        <div class="ks-title">${esc(titel)}</div>
+        ${sub ? `<div class="ks-sub">${esc(sub)}</div>` : ""}
+        ${eng.alive ? `<div class="ks-heute">${esc(heuteZeile)}</div>` : ""}
+      </div>
+    </div>
+    ${btn ? `<button class="ks-btn" id="ks-action">${esc(btn.label)}</button>` : ""}`;
+
+  const b = document.getElementById("ks-action");
+  if (b && btn) b.onclick = async () => {
+    if (btn.act === "jump") {
+      zeigeAnsicht(btn.view);
+    } else if (btn.act === "notaus") {
+      const n = document.getElementById("notaus-btn");
+      if (n) { n.scrollIntoView({ behavior: "smooth", block: "center" }); n.classList.add("pulse-hint"); setTimeout(() => n.classList.remove("pulse-hint"), 2100); }
+    } else if (btn.act === "start") {
+      if (!confirm("Bot starten? Er verschickt dann echte Vernetzungsanfragen an deine Leads (governor-gedrosselt).")) return;
+      b.disabled = true; b.textContent = "startet…";
+      await fetch("/api/engine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start" }) });
+      for (let i = 0; i < 14; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const s = await fetch("/api/state").then(r => r.json()).catch(() => null);
+        if (s && s.engine && s.engine.alive) { state = s; render(); return; }
+        b.textContent = "startet… (" + (i + 1) + ")";
+      }
+      load();
+    }
   };
 }
 
