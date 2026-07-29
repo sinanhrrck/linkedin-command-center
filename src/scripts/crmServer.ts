@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
 import { getAnalytics } from "../modules/analytics.js";
-import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, deleteDraft, retryBlockierte } from "../modules/drafts.js";
+import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, deleteDraft, retryBlockierte, pitchZuNachricht } from "../modules/drafts.js";
 import { getPost, approvePost, discardPost, generatePostDraft } from "../modules/content.js";
 import { addSource, deleteSource } from "../modules/leadFeed.js";
 import { deleteContact } from "../modules/crm.js";
@@ -573,20 +573,22 @@ const server = createServer((req, res) => {
     return;
   }
 
-  // PITCH Stufe 2: Sinan hat einen Pitch-Ansatz gewählt → Engine generiert daraus die Nachricht
-  // (als neuer 'message'-Entwurf zur zweiten Freigabe). Nur Flag setzen, Loop holt es ab.
+  // PITCH Stufe 2: Sinan hat einen Pitch-Ansatz gewählt → daraus SOFORT die Nachricht generieren
+  // (reiner KI-Aufruf, kein Browser nötig) und als neuen 'message'-Entwurf zur zweiten Freigabe
+  // ablegen. Direkt hier statt über einen Engine-Cron, damit die Nachricht in Sekunden erscheint
+  // (der 2-Min-Cron wirkte tot). Die Antwort kommt erst zurück, wenn der Entwurf steht.
   if (url.pathname === "/api/pitch" && req.method === "POST") {
     let body = "";
     req.on("data", (c) => (body += c));
-    req.on("end", () => {
+    req.on("end", async () => {
       try {
         const { id, idee } = JSON.parse(body || "{}");
         if (!id || !idee) {
           res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "id/idee fehlt" }));
           return;
         }
-        setState("pitch_now", JSON.stringify({ id: Number(id), idee: String(idee) }));
-        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, running: engineAlive() }));
+        const generated = await pitchZuNachricht(Number(id), String(idee));
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, generated }));
       } catch (e) {
         res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
       }

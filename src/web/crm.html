@@ -1869,11 +1869,13 @@ function zeichneEntwuerfe(list, grid) {
         let ideen = []; try { ideen = JSON.parse((list.find(x => x.id === id) || {}).draft || "[]"); } catch {}
         const idee = ideen[idx];
         if (!idee) return;
-        if (!(state.engine && state.engine.alive)) { const s = btn.querySelector("b"); if (s) s.textContent = "Bot muss laufen"; return; }
         picks.forEach(b => b.disabled = true); btn.classList.add("chosen");
-        const b0 = btn.querySelector("b"); if (b0) b0.textContent = "✓ Nachricht wird geschrieben …";
-        try { await fetch("/api/pitch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, idee }) }); } catch {}
-        setTimeout(load, 1500);
+        const b0 = btn.querySelector("b"); if (b0) b0.textContent = "schreibt Nachricht …";
+        try {
+          const r = await (await fetch("/api/pitch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, idee }) })).json();
+          if (r && r.generated) { if (b0) b0.textContent = "✓ Nachricht erstellt"; setTimeout(load, 500); }
+          else { if (b0) b0.textContent = "⚠ ging gerade nicht – nochmal versuchen"; picks.forEach(b => b.disabled = false); btn.classList.remove("chosen"); }
+        } catch { if (b0) b0.textContent = "⚠ Fehler – nochmal"; picks.forEach(b => b.disabled = false); btn.classList.remove("chosen"); }
       }));
       return;
     }
