@@ -181,6 +181,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1320, height: 880, minWidth: 980, minHeight: 640,
     title: "NextLead", backgroundColor: "#eef1f0", autoHideMenuBar: true,
+    icon: path.join(__dirname, "..", "build", "icon.png"), // Fenster-/Taskleisten-Icon (Win/Linux; macOS nutzt das Bundle-Icon)
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
   });
   mainWin = win;

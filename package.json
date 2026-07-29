@@ -1,6 +1,6 @@
 {
   "name": "linkedin-command-center",
-  "version": "0.1.45",
+  "version": "0.1.46",
   "private": true,
   "type": "module",
   "description": "Lokales All-in-One LinkedIn-Tool: Posting, Outreach, Inbox, CRM, Analytics",
@@ -45,16 +45,20 @@
     "files": [
       "desktop/**",
       "dist/**",
+      "build/icon.png",
       "package.json"
     ],
+    "icon": "build/icon.png",
     "mac": {
       "target": "dmg",
       "category": "public.app-category.business",
       "identity": null,
+      "icon": "build/icon.png",
       "artifactName": "NextLead-mac-${arch}.${ext}"
     },
     "win": {
       "target": "nsis",
+      "icon": "build/icon.png",
       "artifactName": "NextLead-Setup-win.${ext}"
     },
     "publish": [

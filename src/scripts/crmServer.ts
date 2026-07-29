@@ -664,6 +664,19 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // Statische Bild-Assets (Logo/Marke) aus web/assets/. Pfad gehärtet (nur Dateiname, kein ../).
+  if (url.pathname.startsWith("/assets/") && /\.(png|jpg|jpeg|svg)$/.test(url.pathname)) {
+    try {
+      const name = url.pathname.slice("/assets/".length).replace(/[^a-zA-Z0-9._-]/g, "");
+      const buf = readFileSync(join(__dirname, "..", "web", "assets", name));
+      const typ = name.endsWith(".svg") ? "image/svg+xml" : name.endsWith(".jpg") || name.endsWith(".jpeg") ? "image/jpeg" : "image/png";
+      res.writeHead(200, { "Content-Type": typ, "Cache-Control": "max-age=86400" }).end(buf);
+    } catch {
+      res.writeHead(404, { "Content-Type": "text/plain" }).end("nicht gefunden");
+    }
+    return;
+  }
+
   if (url.pathname === "/" || url.pathname === "/index.html") {
     // Weiche: noch nicht eingerichtet → Setup-Assistent, sonst das Dashboard.
     if (!setupStatus().configured) {

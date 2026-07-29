@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>NextLead · Dashboard</title>
+<link rel="icon" type="image/png" href="assets/mark.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Sora:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -73,10 +74,11 @@
   }
   .side-brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 20px; }
   .side-brand .logo {
-    width: 34px; height: 34px; border-radius: 10px; flex: 0 0 34px;
-    background: var(--hero-grad); display: grid; place-items: center; color: #fff;
-    box-shadow: 0 4px 10px -3px rgba(20,80,50,.5);
+    width: 34px; height: 34px; border-radius: 10px; flex: 0 0 34px; overflow: hidden;
+    background: #fff; display: grid; place-items: center;
+    box-shadow: 0 4px 10px -3px rgba(20,80,50,.28); border: 1px solid var(--line);
   }
+  .side-brand .logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .side-brand .logo svg { width: 19px; height: 19px; }
   .side-brand .bt { display: flex; flex-direction: column; line-height: 1.15; }
   .side-brand .bt b { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -.02em; color: var(--ink); }
@@ -620,7 +622,7 @@
 <div class="app">
   <aside class="sidebar">
     <div class="side-brand">
-      <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg></span>
+      <span class="logo"><img src="assets/mark.png" alt="NextLead" /></span>
       <span class="bt"><b>NextLead</b><span>LinkedIn Autopilot</span></span>
     </div>
     <div class="side-lab">Menü</div>
