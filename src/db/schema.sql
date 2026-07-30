@@ -8,6 +8,39 @@ CREATE TABLE IF NOT EXISTS actions (
 );
 CREATE INDEX IF NOT EXISTS idx_actions_type_time ON actions(type, created_at);
 
+-- Vertriebsinitiativen: Eine Kampagne bündelt Zielgruppe, Nutzenversprechen und Quellen.
+-- Dadurch lässt sich später messen, welche Ansprache nicht nur Leads, sondern Gespräche erzeugt.
+CREATE TABLE IF NOT EXISTS campaigns (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL,
+  audience      TEXT,
+  value_prop    TEXT,
+  goal          TEXT,
+  active        INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  archived_at   TEXT
+);
+
+-- A/B-Experimente vergleichen zwei Kampagnen/Varianten über echte Funnel-Ergebnisse.
+-- Die Kampagnen bleiben dabei vollständig unabhängig und damit sauber attributierbar.
+CREATE TABLE IF NOT EXISTS experiments (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  hypothesis   TEXT,
+  metric       TEXT NOT NULL DEFAULT 'reply', -- acceptance | reply | meeting
+  status       TEXT NOT NULL DEFAULT 'active', -- active | paused | finished
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at  TEXT
+);
+CREATE TABLE IF NOT EXISTS experiment_arms (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  experiment_id INTEGER NOT NULL,
+  campaign_id   INTEGER NOT NULL,
+  label         TEXT NOT NULL,
+  UNIQUE(experiment_id, campaign_id)
+);
+CREATE INDEX IF NOT EXISTS idx_experiment_arms_experiment ON experiment_arms(experiment_id);
+
 -- CRM: Kontakte / Leads
 CREATE TABLE IF NOT EXISTS contacts (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,6 +56,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   zielgruppe    TEXT,   -- azubi | student : steuert den Winkel der Erstnachricht (Sinan hat NICHT studiert)
   lead_score    INTEGER, -- 0-100: ICP-Passung aus Name+Headline (Priorisierung); NULL = noch nicht bewertet
   score_grund   TEXT,    -- kurze Begruendung des Scores (nachvollziehbar im Dashboard)
+  campaign_id   INTEGER, -- Kampagne, aus der der Lead kam (optional für Altbestand)
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -64,6 +98,7 @@ CREATE TABLE IF NOT EXISTS lead_sources (
   zielgruppe  TEXT,                            -- azubi | student : Fokus-Steuerung + Winkel der Erstnachricht
   last_run    TEXT,
   last_added  INTEGER NOT NULL DEFAULT 0,
+  campaign_id INTEGER,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -76,6 +111,32 @@ CREATE TABLE IF NOT EXISTS conversations (
   contact     TEXT,                                -- extrahierte Nummer/E-Mail bei Termin
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Das aktuelle vertriebliche Ergebnis eines Kontakts. Bewusst getrennt vom technischen
+-- LinkedIn-Status: „geschlossen“ kann eine Absage sein, ein Gespräch kann trotzdem qualifiziert
+-- oder ein Termin gebucht sein.
+CREATE TABLE IF NOT EXISTS sales_outcomes (
+  contact_id    INTEGER PRIMARY KEY,
+  campaign_id   INTEGER,
+  stage         TEXT NOT NULL, -- qualified | meeting | won | lost | not_fit
+  note          TEXT,
+  value_cents   INTEGER,
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sales_outcomes_campaign ON sales_outcomes(campaign_id, stage);
+
+-- Persönliche nächste Schritte: Der Bot erkennt Signale, aber die Entscheidung und Beziehung
+-- bleiben beim Menschen. Aufgaben machen diese Übergabe verbindlich und terminierbar.
+CREATE TABLE IF NOT EXISTS sales_tasks (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id   INTEGER NOT NULL,
+  title        TEXT NOT NULL,
+  due_at       TEXT,
+  status       TEXT NOT NULL DEFAULT 'open', -- open | done
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sales_tasks_open ON sales_tasks(status, due_at);
 
 -- Einfacher Key/Value-State (z.B. globaler Pause-Schalter, Startdatum)
 CREATE TABLE IF NOT EXISTS state (

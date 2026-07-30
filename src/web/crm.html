@@ -494,6 +494,30 @@
   .cu-revive { font-size: 12px; font-weight: 600; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 6px 11px; cursor: pointer; white-space: nowrap; box-shadow: var(--shadow-sm); }
   .cu-revive:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .cu-revive:disabled { opacity: .7; cursor: default; }
+  /* ---------- Gesprächs-Workspace ---------- */
+  .conv-workspace { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+  .conv-empty { padding: 26px 24px; color: var(--ink-faint); font-size: 13px; }
+  .conv-head { display: flex; gap: 16px; align-items: flex-start; padding: 20px 22px 16px; border-bottom: 1px solid var(--line); }
+  .conv-title { margin: 0; color: var(--ink); font-family: var(--disp); font-size: 18px; font-weight: 650; }
+  .conv-sub { margin: 4px 0 0; color: var(--ink-faint); font-size: 12px; }
+  .conv-status { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .conv-pill { font-size: 11px; font-weight: 650; padding: 5px 8px; border-radius: 7px; background: var(--panel-2); color: var(--ink-dim); }
+  .conv-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(220px, .8fr); }
+  .conv-stream { padding: 18px 22px 22px; min-height: 180px; border-right: 1px solid var(--line); }
+  .conv-kicker { color: var(--ink-faint); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; margin-bottom: 12px; }
+  .conv-item { max-width: 88%; margin: 0 0 10px; padding: 10px 12px; border-radius: 11px; font-size: 12.5px; line-height: 1.5; color: var(--ink-dim); background: var(--panel-2); border: 1px solid transparent; white-space: pre-wrap; }
+  .conv-item.outgoing { margin-left: auto; background: color-mix(in srgb, var(--accent) 12%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 20%, var(--line)); }
+  .conv-item.draft { border-style: dashed; background: color-mix(in srgb, var(--amber) 9%, var(--panel)); }
+  .conv-item small { display: block; margin-top: 5px; color: var(--ink-faint); font-size: 10px; }
+  .conv-side { padding: 18px; background: color-mix(in srgb, var(--panel-2) 38%, transparent); }
+  .conv-task { display: flex; gap: 8px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--ink-dim); font-size: 12px; line-height: 1.35; }
+  .conv-task:last-child { border-bottom: none; }
+  .conv-task-dot { color: var(--accent); font-weight: 800; }
+  .conv-desk { display: inline-block; margin-top: 14px; color: var(--accent); font-size: 12px; font-weight: 650; text-decoration: none; cursor: pointer; }
+  .conv-desk:hover { text-decoration: underline; }
+  .cu-open { font-size: 12px; font-weight: 650; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; cursor: pointer; white-space: nowrap; }
+  .cu-open:hover { color: var(--accent); border-color: var(--accent); }
+  @media (max-width: 720px) { .cu-row { align-items: flex-start; flex-direction: column; } .cu-meta { margin-left: 0; flex-wrap: wrap; } .conv-grid { grid-template-columns: 1fr; } .conv-stream { border-right: 0; border-bottom: 1px solid var(--line); } .conv-head { flex-wrap: wrap; } .conv-status { margin-left: 0; justify-content: flex-start; } }
   /* ---------- Analytics-Seite ---------- */
   .an-guide { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); margin: 4px 0 22px; overflow: hidden; }
   .an-guide > summary { list-style: none; cursor: pointer; padding: 16px 22px; font-family: var(--disp); font-weight: 600; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
@@ -606,6 +630,153 @@
 
   .foot { text-align: center; font-size: 11px; color: var(--ink-faint); margin-top: 26px; }
 
+  /* ---------- Kampagnen · Vertriebssteuerung ---------- */
+  .campaign-brief { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(270px,.75fr); gap: 14px; margin-bottom: 16px; }
+  .campaign-intro { background: var(--hero-grad); color: #fff; border-radius: var(--radius); padding: 24px; position: relative; overflow: hidden; }
+  .campaign-intro::after { content:""; position:absolute; width:220px; height:220px; right:-90px; top:-120px; border-radius:50%; background:radial-gradient(circle,rgba(117,187,255,.30),transparent 66%); }
+  .campaign-kicker { font-family:var(--mono); font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:#a8ccfa; }
+  .campaign-intro h2 { font-family:var(--display); font-size:25px; line-height:1.1; letter-spacing:-.04em; margin:9px 0 8px; max-width:480px; position:relative; }
+  .campaign-intro p { margin:0; color:rgba(255,255,255,.74); font-size:13px; line-height:1.5; max-width:520px; position:relative; }
+  .campaign-form { display:grid; gap:9px; align-content:start; }
+  .campaign-form input, .campaign-form textarea, .outcome-form select, .outcome-form input, .outcome-form textarea, .src-add select { width:100%; font:inherit; font-size:12.5px; color:var(--ink); border:1px solid var(--line-strong); background:var(--panel); border-radius:10px; padding:10px 11px; outline:none; resize:vertical; }
+  .campaign-form input:focus, .campaign-form textarea:focus, .outcome-form select:focus, .outcome-form input:focus, .outcome-form textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(10,102,194,.10); }
+  .campaign-form-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .campaign-submit { border:0; border-radius:10px; background:var(--accent); color:#fff; padding:10px 13px; font:600 12px var(--disp); justify-self:start; }
+  .campaign-submit:hover { background:#0759aa; }
+  .campaigns-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:12px; }
+  .campaign-card { background:var(--panel); border:1px solid var(--line); border-radius:15px; padding:17px; box-shadow:var(--shadow-sm); }
+  .campaign-card.paused { opacity:.63; box-shadow:none; }
+  .campaign-top { display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
+  .campaign-name { font:700 16px var(--display); letter-spacing:-.025em; }
+  .campaign-state { font:600 9px var(--mono); text-transform:uppercase; letter-spacing:.08em; padding:4px 7px; border-radius:20px; background:#e5f0fc; color:var(--accent); }
+  .campaign-card.paused .campaign-state { background:var(--panel-2); color:var(--ink-faint); }
+  .campaign-meta { color:var(--ink-dim); font-size:11.5px; line-height:1.45; margin:6px 0 12px; min-height:32px; }
+  .campaign-metrics { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:11px 0; }
+  .campaign-metric { display:flex; flex-direction:column; gap:2px; padding:0 7px; border-left:1px solid var(--line); }
+  .campaign-metric:first-child { border-left:0; padding-left:0; }
+  .campaign-metric b { font:700 18px var(--display); letter-spacing:-.035em; }
+  .campaign-metric span { font-size:9px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.045em; }
+  .campaign-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:11px; font-size:11px; color:var(--ink-dim); }
+  .campaign-pause { border:1px solid var(--line-strong); background:var(--panel); border-radius:8px; padding:6px 9px; font:600 11px var(--disp); color:var(--ink-dim); }
+  .campaign-pause:hover { color:var(--accent); border-color:var(--accent); }
+  .outcome-panel { margin-top:18px; display:grid; grid-template-columns:minmax(220px,.7fr) minmax(0,1.3fr); gap:18px; }
+  .outcome-panel h3 { font:700 17px var(--display); letter-spacing:-.025em; margin:0 0 6px; }
+  .outcome-panel p { margin:0; font-size:12px; color:var(--ink-dim); line-height:1.5; }
+  .outcome-form { display:grid; grid-template-columns:1fr 130px; gap:8px; }
+  .outcome-form textarea { grid-column:1/-1; min-height:62px; }
+  .outcome-form .campaign-submit { grid-column:1/-1; }
+  .campaign-tag, .outcome-tag { display:inline-flex; align-items:center; margin:4px 5px 0 0; padding:2px 6px; border-radius:6px; font:600 9px var(--mono); letter-spacing:.02em; }
+  .campaign-tag { background:#e5f0fc; color:var(--accent); }
+  .outcome-tag { background:#e8f7ef; color:#12855a; }
+  @media (max-width:760px) { .campaign-brief, .outcome-panel { grid-template-columns:1fr; } .outcome-form { grid-template-columns:1fr; } }
+
+  /* ---------- P2 · Revenue Intelligence ---------- */
+  .intel-ribbon { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(230px,.85fr); gap:1px; overflow:hidden; margin:8px 0 18px; border-radius:16px; background:var(--line); box-shadow:var(--shadow-sm); }
+  .intel-main { padding:20px 22px; background:#0a376f; color:#fff; }
+  .intel-kicker { display:block; font:600 9px var(--mono); letter-spacing:.13em; text-transform:uppercase; color:#a8ccfa; }
+  .intel-main h3 { margin:7px 0 9px; max-width:590px; font:700 20px/1.18 var(--display); letter-spacing:-.035em; }
+  .intel-actions { display:grid; gap:7px; }
+  .intel-action { position:relative; padding-left:14px; color:rgba(255,255,255,.76); font-size:12px; line-height:1.4; }
+  .intel-action::before { content:""; position:absolute; left:0; top:.47em; width:5px; height:5px; border-radius:50%; background:#71b4ff; }
+  .intel-brief { padding:20px 22px; background:var(--panel); }
+  .intel-brief h4 { margin:7px 0 8px; font:700 14px/1.25 var(--display); letter-spacing:-.02em; }
+  .intel-brief p { margin:0; color:var(--ink-dim); font-size:11.5px; line-height:1.5; }
+  .intel-signals { display:flex; flex-wrap:wrap; gap:5px; margin-top:12px; }
+  .intel-signal { padding:4px 7px; border-radius:7px; color:var(--accent); background:#e5f0fc; font:600 9px var(--mono); }
+  .intel-empty { color:var(--ink-faint); background:var(--panel-2); }
+  .an-learning-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .an-learning-row { display:grid; grid-template-columns:minmax(100px,1fr) 64px 88px; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--line); font-size:12px; }
+  .an-learning-row:first-child { border-top:0; padding-top:0; }
+  .an-learning-row b { font-family:var(--mono); font-size:11px; color:var(--ink); }
+  .an-learning-note { color:var(--ink-dim); font-size:11px; text-align:right; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  @media (max-width:760px) { .intel-ribbon, .an-learning-grid { grid-template-columns:1fr; } }
+
+  /* ---------- P3 · Sales Desk ---------- */
+  .desk-hero { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; padding:22px 24px; margin:8px 0 14px; border-radius:16px; background:linear-gradient(135deg,#082f63,#0a66c2); color:#fff; box-shadow:0 18px 32px -24px rgba(10,70,145,.7); }
+  .desk-kicker { display:block; color:#a8ccfa; font:600 9px var(--mono); letter-spacing:.13em; text-transform:uppercase; }
+  .desk-hero h2 { margin:7px 0 5px; font:700 23px/1.15 var(--display); letter-spacing:-.035em; }
+  .desk-hero p { margin:0; max-width:590px; color:rgba(255,255,255,.74); font-size:12.5px; line-height:1.45; }
+  .desk-count { flex:0 0 auto; text-align:right; }
+  .desk-count b { display:block; font:700 36px/1 var(--display); letter-spacing:-.055em; }
+  .desk-count span { display:block; margin-top:4px; color:#a8ccfa; font-size:10px; text-transform:uppercase; letter-spacing:.07em; }
+  .desk-layout { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr); gap:14px; align-items:start; }
+  .desk-list { display:grid; gap:9px; }
+  .desk-card { display:grid; grid-template-columns:5px minmax(0,1fr) auto; gap:13px; align-items:center; padding:13px 14px 13px 0; border:1px solid var(--line); border-radius:13px; background:var(--panel); box-shadow:var(--shadow-sm); overflow:hidden; }
+  .desk-bar { height:100%; background:var(--ink-faint); }
+  .desk-card.hot .desk-bar { background:#dd5d61; }
+  .desk-card.ready .desk-bar { background:var(--accent); }
+  .desk-name { font:700 14px var(--display); letter-spacing:-.02em; }
+  .desk-meta { margin-top:3px; color:var(--ink-dim); font-size:11.5px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .desk-next { margin-top:7px; color:var(--accent); font-size:11px; font-weight:600; }
+  .desk-actions { display:flex; gap:6px; align-items:center; }
+  .desk-btn { border:1px solid var(--line-strong); background:var(--panel); color:var(--ink-dim); border-radius:8px; padding:7px 9px; font:600 11px var(--disp); text-decoration:none; white-space:nowrap; }
+  .desk-btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .desk-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .desk-btn.primary:hover { color:#fff; background:#0759aa; }
+  .desk-side { display:grid; gap:14px; }
+  .task-form { display:grid; grid-template-columns:1fr 110px; gap:8px; }
+  .task-form select, .task-form input { width:100%; border:1px solid var(--line-strong); background:var(--panel); border-radius:9px; padding:9px 10px; color:var(--ink); font:12px var(--disp); outline:none; }
+  .task-form select { grid-column:1/-1; }
+  .task-form button { border:0; border-radius:9px; background:var(--accent); color:#fff; font:600 11px var(--disp); }
+  .task-list { display:grid; gap:2px; margin-top:12px; }
+  .task-row { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:9px; align-items:center; padding:10px 0; border-top:1px solid var(--line); }
+  .task-row:first-child { border-top:0; }
+  .task-done { width:19px; height:19px; border:1px solid var(--line-strong); background:var(--panel); border-radius:6px; color:var(--accent); font-weight:700; }
+  .task-title { font-size:12px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .task-contact { display:block; margin-top:2px; color:var(--ink-faint); font-size:10px; }
+  .task-due { font:10px var(--mono); color:var(--ink-faint); white-space:nowrap; }
+  .task-due.late { color:var(--red); }
+  .desk-empty { padding:24px 8px; color:var(--ink-dim); font-size:12px; line-height:1.45; }
+  @media (max-width:900px) { .desk-layout { grid-template-columns:1fr; } }
+  @media (max-width:560px) { .desk-hero { align-items:flex-start; flex-direction:column; } .desk-count { text-align:left; } .desk-card { grid-template-columns:5px minmax(0,1fr); } .desk-actions { grid-column:2; } }
+
+  /* ---------- P4 · Operations ---------- */
+  .ops-hero { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin:8px 0 14px; padding:22px 24px; border-radius:16px; background:#102a4d; color:#fff; }
+  .ops-hero h2 { margin:7px 0 5px; font:700 22px/1.12 var(--display); letter-spacing:-.035em; }
+  .ops-hero p { margin:0; max-width:630px; color:rgba(255,255,255,.73); font-size:12.5px; line-height:1.45; }
+  .ops-state { padding:7px 9px; border-radius:8px; background:rgba(255,255,255,.12); color:#bce0ff; font:600 10px var(--mono); letter-spacing:.07em; text-transform:uppercase; white-space:nowrap; }
+  .ops-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+  .ops-card { min-height:188px; display:flex; flex-direction:column; }
+  .ops-icon { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; background:#e5f0fc; color:var(--accent); font-size:15px; }
+  .ops-card h3 { margin:13px 0 5px; font:700 16px var(--display); letter-spacing:-.025em; }
+  .ops-card p { margin:0; color:var(--ink-dim); font-size:11.5px; line-height:1.45; }
+  .ops-value { margin-top:auto; padding-top:14px; font:700 18px var(--display); letter-spacing:-.03em; }
+  .ops-sub { margin-top:3px; color:var(--ink-faint); font-size:10.5px; }
+  .ops-backup { margin-top:12px; border:0; border-radius:9px; padding:9px 11px; align-self:flex-start; background:var(--accent); color:#fff; font:600 11px var(--disp); }
+  .ops-backup:disabled { opacity:.65; }
+  .ops-list { display:grid; gap:7px; margin-top:12px; }
+  .ops-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-top:1px solid var(--line); color:var(--ink-dim); font-size:11.5px; }
+  .ops-row:first-child { border-top:0; padding-top:0; }
+  .ops-row b { color:var(--ink); font:600 11px var(--mono); text-align:right; }
+  .ops-good { color:#12855a; } .ops-warn { color:var(--amber); } .ops-bad { color:var(--red); }
+  @media (max-width:900px) { .ops-grid { grid-template-columns:1fr; } }
+  @media (max-width:560px) { .ops-hero { flex-direction:column; align-items:flex-start; } }
+
+  /* ---------- Experimente · ehrliche A/B-Entscheidungen ---------- */
+  .exp-hero { margin:8px 0 14px; padding:22px 24px; border-radius:16px; color:#fff; background:linear-gradient(135deg,#23255c,#0a66c2); }
+  .exp-hero h2 { margin:7px 0 5px; font:700 22px/1.15 var(--display); letter-spacing:-.035em; }
+  .exp-hero p { max-width:680px; margin:0; color:rgba(255,255,255,.75); font-size:12.5px; line-height:1.48; }
+  .exp-form { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .exp-form input, .exp-form textarea, .exp-form select { width:100%; padding:10px 11px; border:1px solid var(--line-strong); border-radius:9px; background:var(--panel); color:var(--ink); font:12px var(--disp); outline:none; }
+  .exp-form textarea { grid-column:1/-1; resize:vertical; min-height:58px; }
+  .exp-form button { border:0; border-radius:9px; background:var(--accent); color:#fff; font:600 12px var(--disp); }
+  .exp-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:12px; }
+  .exp-card { padding:17px; border:1px solid var(--line); border-radius:14px; background:var(--panel); box-shadow:var(--shadow-sm); }
+  .exp-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+  .exp-name { font:700 16px var(--display); letter-spacing:-.025em; }
+  .exp-state { padding:4px 7px; border-radius:20px; background:#e5f0fc; color:var(--accent); font:600 9px var(--mono); text-transform:uppercase; letter-spacing:.07em; }
+  .exp-hyp { min-height:31px; margin:6px 0 13px; color:var(--ink-dim); font-size:11.5px; line-height:1.4; }
+  .exp-arms { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .exp-arm { padding:10px; border:1px solid var(--line); border-radius:10px; }
+  .exp-arm.leader { border-color:var(--accent); background:#f4f8fe; }
+  .exp-arm-lab { display:flex; justify-content:space-between; gap:8px; color:var(--ink-faint); font:600 9px var(--mono); letter-spacing:.05em; }
+  .exp-arm-name { margin-top:5px; min-height:28px; color:var(--ink); font-size:11.5px; font-weight:600; line-height:1.25; }
+  .exp-rate { margin-top:8px; font:700 23px var(--display); letter-spacing:-.04em; }
+  .exp-sample { color:var(--ink-faint); font-size:10px; }
+  .exp-foot { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:12px; padding-top:11px; border-top:1px solid var(--line); color:var(--ink-dim); font-size:11px; }
+  .exp-control { border:1px solid var(--line-strong); border-radius:8px; padding:6px 8px; background:var(--panel); color:var(--ink-dim); font:600 10px var(--disp); }
+  @media (max-width:560px) { .exp-form, .exp-arms { grid-template-columns:1fr; } }
+
   /* ---------- Responsive ---------- */
   @media (max-width: 1080px) {
     .command { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
@@ -684,8 +855,13 @@
   .decision-rail .ac-ic { width: 31px; height: 31px; flex-basis: 31px; border-radius: 9px; }
   .decision-rail .ac-txt { font-size: 12px; line-height: 1.4; }
   .decision-rail .ac-cta { display: none; }
-  .command { grid-template-columns: 1.4fr repeat(4, minmax(115px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  /* Die Kommandozeile bleibt auf Laptop-Breite lesbar: ein Fokus-Signal links,
+     vier Kennzahlen als ruhiges 2×2-Feld. Dadurch gibt es keine gequetschten
+     Label- und Zahlenumbrüche neben der Entscheidungsleiste. */
+  .command { grid-template-columns: minmax(205px, .88fr) minmax(0, 1.72fr); gap: 10px; margin-bottom: 10px; }
+  .cmd-stats { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
   .cmd-hero, .cmd-stat { min-height: 123px; padding: 17px 18px; border-radius: 14px; box-shadow: var(--shadow-sm); }
+  .cmd-hero { min-height: 256px; }
   .cmd-hero { background: #0a4b96; }
   .cmd-hero-num { font-size: 43px; }
   .cs-val { font-size: 27px; }
@@ -698,8 +874,8 @@
   .activity-panel { margin-top: 18px; border-radius: 16px; box-shadow: var(--shadow-sm); }
   .kstatus { border-radius: 13px; }
   @media (max-width: 1200px) { .dashboard-layout { grid-template-columns: 1fr; } .decision-rail { position: static; } .decision-rail .ac-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); } }
-  @media (max-width: 900px) { .signal-intro { width: 165px; flex-basis: 165px; } .signal-stage { padding: 15px 12px; } .signal-stage-value { font-size: 23px; } .command { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 640px) { .wrap { padding: 20px 15px 60px; } .signal-ribbon { display: block; padding: 0; } .signal-intro { width: auto; padding: 17px; border-right: none; border-bottom: 1px solid rgba(255,255,255,.14); } .signal-stages { grid-template-columns: repeat(3, 1fr); } .signal-stage { padding: 14px; } .signal-stage:nth-child(3)::after, .signal-stage:nth-child(3)::before { display:none; } .signal-stage-value { font-size: 22px; } .command { grid-template-columns: repeat(2, 1fr); } .cmd-hero { grid-column: span 2; } .chart-split { grid-template-columns: 1fr; } .chart-week { padding: 22px 0 0; border-left: 0; border-top: 1px solid var(--line); } }
+  @media (max-width: 900px) { .signal-intro { width: 165px; flex-basis: 165px; } .signal-stage { padding: 15px 12px; } .signal-stage-value { font-size: 23px; } .command { grid-template-columns: minmax(190px,.85fr) minmax(0,1.65fr); } }
+  @media (max-width: 640px) { .wrap { padding: 20px 15px 60px; } .signal-ribbon { display: block; padding: 0; } .signal-intro { width: auto; padding: 17px; border-right: none; border-bottom: 1px solid rgba(255,255,255,.14); } .signal-stages { grid-template-columns: repeat(3, 1fr); } .signal-stage { padding: 14px; } .signal-stage:nth-child(3)::after, .signal-stage:nth-child(3)::before { display:none; } .signal-stage-value { font-size: 22px; } .command { grid-template-columns: 1fr; } .cmd-hero { min-height: 142px; } .cmd-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .chart-split { grid-template-columns: 1fr; } .chart-week { padding: 22px 0 0; border-left: 0; border-top: 1px solid var(--line); } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 </style>
 </head>
@@ -728,6 +904,8 @@
         </button>
         <div class="nav-sub">
           <a class="nav-item sub" data-view="leadsuche">Leadsuche</a>
+          <a class="nav-item sub" data-view="campaigns">Kampagnen</a>
+          <a class="nav-item sub" data-view="experiments">Experimente</a>
           <a class="nav-item sub" data-view="vernetzen">Vernetzen</a>
           <a class="nav-item sub" data-view="contacts">CRM</a>
         </div>
@@ -739,6 +917,7 @@
           <span>Sales Agent</span><span class="chev">›</span><span class="n-badge" id="nav-drafts">0</span>
         </button>
         <div class="nav-sub">
+          <a class="nav-item sub" data-view="salesdesk">Sales Desk</a>
           <a class="nav-item sub" data-view="erstnachricht">Erstnachricht<span class="n-badge" id="nav-first">0</span></a>
           <a class="nav-item sub" data-view="gespraech">Gespräch<span class="n-badge" id="nav-hot">0</span></a>
           <a class="nav-item sub" data-view="followups">Follow-Ups<span class="n-badge" id="nav-fup">0</span></a>
@@ -762,6 +941,9 @@
       <a class="nav-item" data-view="live">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
         Live-Ansicht</a>
+      <a class="nav-item" data-view="operations">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/><path d="m18.4 5.6-2.1 2.1M7.7 16.3l-2.1 2.1M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1"/></svg>
+        Betrieb</a>
     </nav>
     <div class="side-foot">
       <div class="sf-lab">Bot-Status</div>
@@ -809,17 +991,17 @@
   <!-- Hero-Kommandozeile -->
   <section class="command">
     <div class="cmd-hero">
-      <div class="cmd-hero-label">🔥 Hot Leads</div>
+      <div class="cmd-hero-label">🔥 Aktive Antworten</div>
       <div class="cmd-hero-num" id="cmd-hot">0</div>
-      <div class="cmd-hero-sub" id="cmd-hot-sub">haben auf deine Nachricht geantwortet<span id="kpi-hot-delta"></span></div>
+      <div class="cmd-hero-sub" id="cmd-hot-sub">brauchen deinen nächsten Schritt<span id="kpi-hot-delta"></span></div>
     </div>
     <div class="cmd-stats">
       <div class="cmd-stat">
-        <div class="cs-top"><span class="cs-lab">Antwortrate</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg></span></div>
+        <div class="cs-top"><span class="cs-lab">Antwortrate · gesamt</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg></span></div>
         <span class="cs-val accent" id="cmd-reply">–</span>
       </div>
       <div class="cmd-stat">
-        <div class="cs-top"><span class="cs-lab">Angenommen</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></div>
+        <div class="cs-top"><span class="cs-lab">Offene Annahmen</span><span class="cs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></div>
         <span class="cs-val" id="cmd-acc">0</span>
         <span id="kpi-acc-delta"></span>
       </div>
@@ -843,7 +1025,7 @@
         <div class="chart-head">
           <div>
             <p class="eyebrow" style="margin:0 0 6px">Verlauf · 4 Wochen</p>
-            <div class="chart-big"><span id="tr-total">—</span><span class="chart-big-lab">Vernetzungen gesamt</span></div>
+            <div class="chart-big"><span id="tr-total">—</span><span class="chart-big-lab">Connect-Aktionen · 4 Wochen</span></div>
           </div>
           <div class="chart-legend">
             <span><i style="background:var(--accent)"></i>Vernetzt</span>
@@ -856,7 +1038,7 @@
         <div class="chart-head" style="margin-bottom:14px">
           <div>
             <p class="eyebrow" style="margin:0 0 6px">Letzte 7 Tage</p>
-            <div class="chart-big" style="font-size:22px"><span id="wk-total">—</span><span class="chart-big-lab">Aktionen</span></div>
+            <div class="chart-big" style="font-size:22px"><span id="wk-total">—</span><span class="chart-big-lab">alle Aktionsereignisse</span></div>
           </div>
         </div>
         <div class="bars" id="wk-bars"></div>
@@ -989,6 +1171,17 @@
   <div class="view-empty" id="live-empty2">Die Live-Ansicht erscheint, sobald der Bot läuft. Starte ihn auf der Übersicht.</div>
   </div><!-- /#view-live -->
 
+  <!-- OPERATIONS: Vertrauensschicht für Engine, Sendeweg und lokale Datensicherung. -->
+  <div id="view-operations" class="view" style="display:none">
+    <section class="ops-hero"><div><span class="desk-kicker">Betrieb &amp; Sicherheit</span><h2>Deine Vertriebsdaten bleiben lokal, nachvollziehbar und wiederherstellbar.</h2><p>Hier siehst du, ob die Engine arbeitet, der Sendeweg geprüft ist und wann die letzte konsistente Datenbank-Sicherung entstanden ist.</p></div><span class="ops-state" id="ops-overall">prüfe Status</span></section>
+    <div class="ops-grid">
+      <section class="panel ops-card"><span class="ops-icon">◌</span><h3>Engine</h3><p>Der lokale Prozess führt die geplanten Aufgaben seriell aus und schützt die Browser-Session.</p><div class="ops-value" id="ops-engine-value">—</div><div class="ops-sub" id="ops-engine-sub">—</div></section>
+      <section class="panel ops-card"><span class="ops-icon">✓</span><h3>Sendeweg</h3><p>Der Selbst-Check prüft Login und Eingabefeld. Bei einem Fehler stoppt der Governor die Nachrichten.</p><div class="ops-value" id="ops-send-value">—</div><div class="ops-sub" id="ops-send-sub">—</div></section>
+      <section class="panel ops-card"><span class="ops-icon">▣</span><h3>Lokale Sicherungen</h3><p>SQLite-Snapshots bleiben auf diesem Rechner. Automatisch täglich, maximal 21 Sicherungen.</p><div class="ops-value" id="ops-backup-value">—</div><div class="ops-sub" id="ops-backup-sub">—</div><button class="ops-backup" id="ops-backup-btn">Jetzt sichern</button></section>
+    </div>
+    <section class="panel" style="margin-top:14px"><p class="eyebrow" style="margin:0 0 8px">Systemdetails</p><div class="ops-list" id="ops-list"></div></section>
+  </div><!-- /#view-operations -->
+
   <!-- HOT LEADS -->
   <div id="view-hotleads" class="view" style="display:none">
   <!-- Termine (Autopilot-Handoff) -->
@@ -1052,6 +1245,7 @@
         <option value="azubi">Azubis</option>
         <option value="student">Studenten</option>
       </select>
+      <select id="src-campaign" title="Kampagne zuordnen"><option value="">Ohne Kampagne</option></select>
       <button class="btn-add" id="src-add-btn">Hinzufügen</button>
     </div>
     <p class="src-help">So kommst du an eine Such-Adresse: Auf LinkedIn oben nach Personen suchen (z.B. „Auszubildende Bankkaufmann"), Filter setzen, dann die <b>Adresse aus der Browserzeile kopieren</b> und hier einfügen. Der Bot füllt daraus automatisch Nachschub, solange er läuft.</p>
@@ -1066,6 +1260,71 @@
   <div class="panel funnel" id="funnel"></div>
 
   </div><!-- /#view-pipeline -->
+
+  <!-- KAMPAGNEN: Die strategische Schicht über Quellen, Leads und Ergebnissen. -->
+  <div id="view-campaigns" class="view" style="display:none">
+    <section class="campaign-brief">
+      <div class="campaign-intro">
+        <span class="campaign-kicker">Vertriebssteuerung</span>
+        <h2>Jede Ansprache bekommt eine klare Hypothese – und ein Ergebnis.</h2>
+        <p>Verbinde Quellen mit einer Zielgruppe und einem Nutzenversprechen. NextLead zeigt dir dann, welche Initiative wirklich Gespräche und Termine erzeugt.</p>
+      </div>
+      <div class="panel campaign-form" id="campaign-form">
+        <p class="eyebrow" id="campaign-form-title" style="margin:0">Neue Kampagne</p>
+        <input id="campaign-name" maxlength="90" placeholder="Name · z. B. Bank-Azubis Rhein-Neckar" />
+        <input id="campaign-audience" maxlength="180" placeholder="Zielgruppe · wer genau?" />
+        <textarea id="campaign-value" maxlength="280" rows="2" placeholder="Nutzenversprechen · warum sollten sie antworten?"></textarea>
+        <div class="campaign-form-row">
+          <input id="campaign-goal" maxlength="120" placeholder="Ziel · z. B. 8 Gespräche" />
+          <button class="campaign-submit" id="campaign-save">Kampagne anlegen</button>
+        </div>
+      </div>
+    </section>
+    <div class="section-head" style="margin:2px 0 11px"><p class="sec-title">Deine Initiativen</p><span class="sec-hint">Lead → Antwort → Ergebnis</span></div>
+    <div class="campaigns-grid" id="campaigns-grid"></div>
+    <section class="panel outcome-panel">
+      <div>
+        <p class="eyebrow" style="margin:0 0 7px">Nach dem Gespräch</p>
+        <h3>Ergebnis festhalten</h3>
+        <p>Ein Klick hält die echte Vertriebsentscheidung fest. So werden aus Hot Leads belastbare Termine, Wins und Learnings pro Kampagne.</p>
+      </div>
+      <div class="outcome-form">
+        <select id="outcome-contact"><option value="">Kontakt auswählen</option></select>
+        <select id="outcome-stage">
+          <option value="qualified">Qualifiziert</option>
+          <option value="meeting">Termin gebucht</option>
+          <option value="won">Gewonnen</option>
+          <option value="lost">Verloren</option>
+          <option value="not_fit">Kein Fit</option>
+        </select>
+        <textarea id="outcome-note" maxlength="600" placeholder="Kurze Notiz: Anlass, nächster Schritt oder Learning"></textarea>
+        <input id="outcome-value" inputmode="decimal" placeholder="Wert in € (optional)" />
+        <button class="campaign-submit" id="outcome-save">Ergebnis speichern</button>
+      </div>
+    </section>
+  </div><!-- /#view-campaigns -->
+
+  <!-- EXPERIMENTE: zwei sauber getrennte Kampagnen gegen dieselbe Funnel-Metrik vergleichen. -->
+  <div id="view-experiments" class="view" style="display:none">
+    <section class="exp-hero"><span class="desk-kicker">Lernschleife · A/B</span><h2>Teste eine Hypothese mit echten Kampagnen statt Bauchgefühl.</h2><p>Lege zwei Varianten an – zum Beispiel Zielgruppe, Nutzenversprechen oder Nachrichtenwinkel als getrennte Kampagnen. NextLead vergleicht sie erst bei ausreichender Stichprobe.</p></section>
+    <section class="panel"><p class="eyebrow" style="margin:0 0 10px">Neues Experiment</p><div class="exp-form"><input id="exp-name" maxlength="100" placeholder="Name · z. B. Nutzenversprechen testen"/><select id="exp-metric"><option value="reply">Antwortquote</option><option value="acceptance">Annahmequote</option><option value="meeting">Terminquote</option></select><textarea id="exp-hypothesis" maxlength="320" placeholder="Hypothese · z. B. Der Karriere-Winkel erzeugt mehr Antworten als der Geld-Winkel."></textarea><select id="exp-campaign-a"><option value="">Variante A: Kampagne</option></select><select id="exp-campaign-b"><option value="">Variante B: Kampagne</option></select><button id="exp-save">Experiment starten</button></div></section>
+    <div class="section-head" style="margin-top:18px"><p class="sec-title">Laufende Vergleiche</p><span class="sec-hint">ab 8 Beobachtungen je Variante wird ein Vorsprung gezeigt</span></div><div class="exp-grid" id="exp-grid"></div>
+  </div><!-- /#view-experiments -->
+
+  <!-- SALES DESK: Persönliche Tagesansicht für echte Gespräche und nächste Schritte. -->
+  <div id="view-salesdesk" class="view" style="display:none">
+    <section class="desk-hero">
+      <div><span class="desk-kicker">Deine Arbeitsliste</span><h2>Konzentriere dich auf die Gespräche, die gerade Bewegung erzeugen.</h2><p>Antworten, Entwürfe und Termine stehen vor allgemeinem Nachschub. Plane persönliche nächste Schritte direkt dort, wo du sie brauchst.</p></div>
+      <div class="desk-count"><b id="desk-priority-count">0</b><span>Kontakte im Fokus</span></div>
+    </section>
+    <div class="desk-layout">
+      <section><div class="section-head" style="margin:2px 0 10px"><p class="sec-title">Jetzt fokussieren</p><span class="sec-hint">sortiert nach Vertriebsrelevanz</span></div><div class="desk-list" id="desk-list"></div></section>
+      <aside class="desk-side">
+        <section class="panel"><p class="eyebrow" style="margin:0 0 8px">Persönlicher nächster Schritt</p><div class="task-form"><select id="task-contact"><option value="">Kontakt auswählen</option></select><input id="task-title" maxlength="220" placeholder="z. B. Termin bestätigen" /><input id="task-due" type="date" /><button id="task-save">Aufgabe anlegen</button></div></section>
+        <section class="panel"><div class="section-head" style="margin:0 0 2px"><p class="sec-title">Offene Aufgaben</p><span class="sec-hint" id="task-open-count"></span></div><div class="task-list" id="task-list"></div></section>
+      </aside>
+    </div>
+  </div><!-- /#view-salesdesk -->
 
   <!-- KONTAKTE -->
   <div id="view-contacts" class="view" style="display:none">
@@ -1116,6 +1375,8 @@
       </div>
     </details>
 
+    <section class="intel-ribbon" id="an-intelligence" aria-label="Nächste Vertriebsentscheidungen"></section>
+
     <div class="section-head" style="margin-top:8px"><p class="sec-title">Kernquoten</p><span class="sec-hint">kumulativ über alle Kontakte · mit Einordnung</span></div>
     <div class="an-quoten" id="an-quoten"></div>
 
@@ -1138,6 +1399,18 @@
 
     <div class="section-head"><p class="sec-title">Lead-Quellen im Vergleich</p><span class="sec-hint" id="an-quellen-hint"></span></div>
     <div class="panel" id="an-quellen"></div>
+
+    <div class="section-head"><p class="sec-title">Kampagnen &amp; Ergebnisse</p><span class="sec-hint">Attribution bis zum echten Vertriebsergebnis</span></div>
+    <div class="panel" id="an-kampagnen"></div>
+
+    <div class="section-head"><p class="sec-title">Experimente</p><span class="sec-hint">A/B-Vergleiche erst ab belastbarer Stichprobe</span></div>
+    <div class="panel" id="an-experiments"></div>
+
+    <div class="section-head"><p class="sec-title">Was das System lernt</p><span class="sec-hint">deine Änderungen verbessern die nächste Nachricht</span></div>
+    <div class="an-learning-grid">
+      <div class="panel" id="an-textqualitaet"></div>
+      <div class="panel" id="an-ergebnisse"></div>
+    </div>
 
     <div class="section-head"><p class="sec-title">Skalierungs-Rechner</p><span class="sec-hint">erwartete Hot Leads je Vernetzungs-Volumen</span></div>
     <div class="panel" id="an-projektion"></div>
@@ -1195,6 +1468,10 @@
       <div class="chips" id="cu-chips"></div>
     </div>
     <div id="cu-list"></div>
+
+    <section class="conv-workspace" id="conv-workspace" aria-live="polite">
+      <div class="conv-empty">Wähle einen Chat aus. Hier bündeln sich der lokal protokollierte Verlauf, Entwürfe, Vertriebsaufgaben und das festgehaltene Ergebnis.</div>
+    </section>
 
     <div class="section-head"><p class="sec-title">Vorbereitete Antworten</p><span class="sec-hint">warten auf deine Freigabe</span></div>
     <div class="drafts-grid" id="mod-chat"></div>
@@ -1396,10 +1673,11 @@ function render() {
 
   // Hero-Kommandozeile
   const pc = Object.fromEntries(state.pipeline.map(p => [p.stage, p.count]));
+  const metric = state.metrics || {}, historical = metric.historical || {}, active = metric.active || {};
   document.getElementById("cmd-hot").textContent = (state.hotLeads || []).length;
-  const msgd = pc.messaged || 0, rpld = pc.replied || 0;
-  document.getElementById("cmd-reply").textContent = (msgd + rpld) > 0 ? Math.round(rpld / (msgd + rpld) * 100) + "%" : "–";
-  document.getElementById("cmd-acc").textContent = pc.accepted || 0;
+  const messagedTotal = historical.messaged || 0, repliedTotal = historical.replied || 0;
+  document.getElementById("cmd-reply").textContent = messagedTotal > 0 ? Math.round(repliedTotal / messagedTotal * 100) + "%" : "–";
+  document.getElementById("cmd-acc").textContent = active.accepted ?? pc.accepted ?? 0;
   document.getElementById("cmd-week").textContent = g.connect.week + "/" + g.connect.weeklyCap;
   document.getElementById("cmd-drafts").textContent = (state.drafts || []).length;
   // Trend-Badges (Woche vs. Vorwoche)
@@ -1426,6 +1704,10 @@ function render() {
   renderDrafts();
   renderPosts();
   renderSources();
+  renderCampaigns();
+  renderSalesDesk();
+  renderOperations();
+  renderExperiments();
 
   // Chips
   const counts = Object.fromEntries(state.pipeline.map(p => [p.stage, p.count]));
@@ -1457,7 +1739,7 @@ function renderSignalRibbon() {
     { label: "Neue Leads", value: counts.new || 0, note: "bereit für Kontakt" },
     { label: "Vernetzt", value: funnel.eingeladen || 0, note: "Anfragen gesamt" },
     { label: "Angenommen", value: funnel.angenommen || 0, note: "bereit für Nachricht" },
-    { label: "Antworten", value: funnel.geantwortet || 0, note: hot ? `${hot} brauchen dich jetzt` : "Gespräche im Fluss", attention: hot > 0 },
+    { label: "Antworten", value: funnel.geantwortet || 0, note: hot ? `${hot} aktiv${active.closedReplies ? ` · ${active.closedReplies} abgeschlossen` : ""}` : "Gespräche im Fluss", attention: hot > 0 },
     { label: "Termine", value: booked, note: booked ? "Übergabe bereit" : "noch offen", attention: booked > 0 },
   ];
   el.innerHTML = stages.map(s => `<div class="signal-stage${s.attention ? " is-attention" : ""}">
@@ -1611,7 +1893,7 @@ function renderChart() {
            ${d.connect ? `<div class="bar-seg con" style="height:${conH}%"></div>` : ""}
          </div>`
       : `<div class="bar-stack"><div class="bar-empty"></div></div>`;
-    return `<div class="bar-col ${d.today ? "is-today" : ""}" title="${d.label}: ${d.connect} vernetzt, ${d.message} Nachrichten/Interaktionen">
+    return `<div class="bar-col ${d.today ? "is-today" : ""}" title="${d.label}: ${d.connect} vernetzt, ${d.message} Nachrichten, Antworten & Interaktionen">
       ${stack}<span class="bar-lab">${d.label}</span>
     </div>`;
   }).join("");
@@ -2288,10 +2570,35 @@ async function postSource(p) {
   try { const r = await fetch("/api/source", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }); return await r.json(); }
   catch { return { ok: false }; }
 }
+async function postCampaign(p) {
+  try { const r = await fetch("/api/campaign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }); return await r.json(); }
+  catch { return { ok: false }; }
+}
+async function postOutcome(p) {
+  try { const r = await fetch("/api/outcome", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }); return await r.json(); }
+  catch { return { ok: false }; }
+}
+async function postTask(p) {
+  try { const r = await fetch("/api/task", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }); return await r.json(); }
+  catch { return { ok: false }; }
+}
+async function postExperiment(p) {
+  try { const r = await fetch("/api/experiment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }); return await r.json(); }
+  catch { return { ok: false }; }
+}
+let campaignEditing = null;
 function renderSources() {
   const el = document.getElementById("src-list");
   if (!el) return;
   const list = state.leadSources || [];
+  const campaignSelect = document.getElementById("src-campaign");
+  if (campaignSelect && document.activeElement !== campaignSelect) {
+    const current = campaignSelect.value;
+    campaignSelect.innerHTML = `<option value="">Ohne Kampagne</option>` + (state.campaigns || [])
+      .filter(c => c.active)
+      .map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    campaignSelect.value = current;
+  }
   if (!list.length) {
     el.innerHTML = `<div class="src-empty">Noch keine Quelle. Füg oben eine LinkedIn-Suche ein, dann füllt der Bot automatisch Leads nach (solange er läuft).</div>`;
   } else if (!el.contains(document.activeElement)) {
@@ -2320,7 +2627,7 @@ function renderSources() {
       const url = u.value.trim();
       if (!/linkedin\.com/i.test(url)) { alert("Bitte eine LinkedIn-Such-Adresse einfügen (sie beginnt mit linkedin.com)."); return; }
       addBtn.disabled = true; addBtn.textContent = "…";
-      const r = await postSource({ action: "add", url, label: document.getElementById("src-label").value, zielgruppe: document.getElementById("src-zg").value });
+      const r = await postSource({ action: "add", url, label: document.getElementById("src-label").value, zielgruppe: document.getElementById("src-zg").value, campaignId: document.getElementById("src-campaign").value });
       addBtn.disabled = false; addBtn.textContent = "Hinzufügen";
       if (r && r.ok) {
         u.value = ""; document.getElementById("src-label").value = "";
@@ -2336,6 +2643,240 @@ function renderSources() {
       const r = await postSource({ action: "feednow" });
       if (r && r.ok) alert(r.running ? "Alles klar. Der Bot holt gleich frischen Nachschub (kann 1-2 Min dauern)." : "Der Bot ist gestoppt. Starte ihn oben, dann holt er Nachschub.");
       else if ((state.leadSources || []).length === 0) alert("Füg zuerst eine Lead-Quelle hinzu.");
+    };
+  }
+}
+
+function renderCampaigns() {
+  const list = state.campaigns || [];
+  const grid = document.getElementById("campaigns-grid");
+  if (!grid) return;
+  if (!list.length) {
+    grid.innerHTML = `<div class="panel" style="grid-column:1/-1;text-align:center;padding:34px"><b style="font-family:var(--display)">Noch keine Kampagne.</b><div style="color:var(--ink-dim);font-size:12px;margin-top:6px">Lege zuerst Zielgruppe und Nutzenversprechen an. Danach ordnest du beim Hinzufügen einer Quelle die Kampagne zu.</div></div>`;
+  } else if (!grid.contains(document.activeElement)) {
+    const rate = (a, b) => b ? Math.round(a / b * 100) + "%" : "—";
+    grid.innerHTML = list.map(c => `<article class="campaign-card${c.active ? "" : " paused"}" data-id="${c.id}">
+      <div class="campaign-top"><div class="campaign-name">${esc(c.name)}</div><span class="campaign-state">${c.active ? "aktiv" : "pausiert"}</span></div>
+      <div class="campaign-meta">${esc(c.audience || "Zielgruppe noch nicht beschrieben")}${c.value_prop ? `<br>${esc(c.value_prop)}` : ""}</div>
+      <div class="campaign-metrics">
+        <div class="campaign-metric"><b>${c.leads}</b><span>Leads</span></div>
+        <div class="campaign-metric"><b>${rate(c.accepted, c.invited)}</b><span>Angenommen</span></div>
+        <div class="campaign-metric"><b>${rate(c.replied, c.messaged)}</b><span>Antworten</span></div>
+        <div class="campaign-metric"><b>${c.meetings}</b><span>Termine</span></div>
+      </div>
+      <div class="campaign-foot"><span>${c.sources} Quelle${c.sources === 1 ? "" : "n"}${c.goal ? ` · Ziel: ${esc(c.goal)}` : ""}</span><span><button class="campaign-pause campaign-edit">Bearbeiten</button> <button class="campaign-pause campaign-toggle">${c.active ? "Pausieren" : "Fortsetzen"}</button></span></div>
+    </article>`).join("");
+    grid.querySelectorAll(".campaign-toggle").forEach(btn => btn.onclick = async () => {
+      const card = btn.closest(".campaign-card"), id = Number(card.dataset.id), active = !card.classList.contains("paused");
+      btn.disabled = true;
+      await postCampaign({ action: active ? "pause" : "resume", id });
+      load();
+    });
+    grid.querySelectorAll(".campaign-edit").forEach(btn => btn.onclick = () => {
+      const id = Number(btn.closest(".campaign-card").dataset.id);
+      const c = list.find(x => x.id === id); if (!c) return;
+      campaignEditing = c;
+      document.getElementById("campaign-form-title").textContent = "Kampagne bearbeiten";
+      document.getElementById("campaign-name").value = c.name || "";
+      document.getElementById("campaign-audience").value = c.audience || "";
+      document.getElementById("campaign-value").value = c.value_prop || "";
+      document.getElementById("campaign-goal").value = c.goal || "";
+      document.getElementById("campaign-save").textContent = "Änderungen speichern";
+      document.getElementById("campaign-name").focus();
+    });
+  }
+
+  const contacts = (state.contacts || []).filter(c => ["accepted", "messaged", "replied", "closed"].includes(c.status) || c.outcome_stage);
+  const outcomeContact = document.getElementById("outcome-contact");
+  if (outcomeContact && document.activeElement !== outcomeContact) {
+    const current = outcomeContact.value;
+    outcomeContact.innerHTML = `<option value="">Kontakt auswählen</option>` + contacts.map(c =>
+      `<option value="${c.id}">${esc(c.full_name || "Unbekannt")}${c.campaign_name ? ` · ${esc(c.campaign_name)}` : ""}</option>`).join("");
+    outcomeContact.value = current;
+  }
+
+  const save = document.getElementById("campaign-save");
+  if (save && !save._wired) {
+    save._wired = true;
+    save.onclick = async () => {
+      const name = document.getElementById("campaign-name").value.trim();
+      if (!name) { document.getElementById("campaign-name").focus(); return; }
+      save.disabled = true;
+      const payload = { name, audience: document.getElementById("campaign-audience").value, valueProp: document.getElementById("campaign-value").value, goal: document.getElementById("campaign-goal").value };
+      const result = await postCampaign(campaignEditing ? { action: "update", id: campaignEditing.id, ...payload } : { action: "create", ...payload });
+      save.disabled = false;
+      if (!result.ok) { alert(result.error || "Kampagne konnte nicht gespeichert werden."); return; }
+      campaignEditing = null;
+      document.getElementById("campaign-form-title").textContent = "Neue Kampagne";
+      document.getElementById("campaign-name").value = ""; document.getElementById("campaign-audience").value = "";
+      document.getElementById("campaign-value").value = ""; document.getElementById("campaign-goal").value = "";
+      save.textContent = "Kampagne anlegen";
+      load();
+    };
+  }
+  const outcomeSave = document.getElementById("outcome-save");
+  if (outcomeSave && !outcomeSave._wired) {
+    outcomeSave._wired = true;
+    outcomeSave.onclick = async () => {
+      const contactId = Number(document.getElementById("outcome-contact").value);
+      if (!contactId) { document.getElementById("outcome-contact").focus(); return; }
+      outcomeSave.disabled = true;
+      const result = await postOutcome({ contactId, stage: document.getElementById("outcome-stage").value, note: document.getElementById("outcome-note").value, valueEur: document.getElementById("outcome-value").value });
+      outcomeSave.disabled = false;
+      if (!result.ok) { alert(result.error || "Ergebnis konnte nicht gespeichert werden."); return; }
+      document.getElementById("outcome-note").value = ""; document.getElementById("outcome-value").value = "";
+      load();
+    };
+  }
+}
+
+function renderSalesDesk() {
+  const priorities = state.salesDesk || [];
+  const tasks = state.salesTasks || [];
+  const list = document.getElementById("desk-list");
+  if (!list) return;
+  document.getElementById("desk-priority-count").textContent = priorities.length;
+  if (!priorities.length) {
+    list.innerHTML = `<div class="panel desk-empty">Gerade keine offenen Gespräche im Fokus. Sobald jemand antwortet oder ein Entwurf bereitliegt, erscheint der Kontakt hier.</div>`;
+  } else if (!list.contains(document.activeElement)) {
+    list.innerHTML = priorities.map(c => {
+      const detail = [c.campaign_name, c.headline].filter(Boolean).join(" · ") || "ohne Kampagne";
+      const mainAction = c.status === "replied" || c.outcome_stage === "meeting"
+        ? { label: "Ergebnis", view: "campaigns" }
+        : c.draft_status === "pending" ? { label: "Entwurf", view: "drafts" }
+        : { label: "Aufgabe", view: "task" };
+      return `<article class="desk-card ${c.urgency}" data-contact="${c.id}">
+        <div class="desk-bar"></div><div><div class="desk-name">${esc(c.full_name || "Unbekannt")}${c.lead_score != null ? ` ${scorePill(c.lead_score)}` : ""}</div><div class="desk-meta">${esc(detail)}</div><div class="desk-next">${esc(c.nextAction)}${c.task_count ? ` · ${c.task_count} Aufgabe${c.task_count === 1 ? "" : "n"} offen` : ""}</div></div>
+        <div class="desk-actions"><a class="desk-btn" href="${esc(c.profile_url)}" target="_blank" rel="noopener">Profil ↗</a><button class="desk-btn primary desk-main" data-view="${mainAction.view}">${mainAction.label}</button></div>
+      </article>`;
+    }).join("");
+    list.querySelectorAll(".desk-main").forEach(btn => btn.onclick = () => {
+      const view = btn.dataset.view;
+      const contactId = btn.closest(".desk-card").dataset.contact;
+      if (view === "task") {
+        zeigeAnsicht("salesdesk");
+        const select = document.getElementById("task-contact"); select.value = contactId; document.getElementById("task-title").focus();
+      } else zeigeAnsicht(view);
+    });
+  }
+
+  const contactSelect = document.getElementById("task-contact");
+  if (contactSelect && document.activeElement !== contactSelect) {
+    const current = contactSelect.value;
+    contactSelect.innerHTML = `<option value="">Kontakt auswählen</option>` + priorities.map(c => `<option value="${c.id}">${esc(c.full_name || "Unbekannt")}${c.campaign_name ? ` · ${esc(c.campaign_name)}` : ""}</option>`).join("");
+    contactSelect.value = current;
+  }
+  const taskList = document.getElementById("task-list");
+  document.getElementById("task-open-count").textContent = tasks.length ? `${tasks.length} offen` : "";
+  const today = new Date().toISOString().slice(0, 10);
+  taskList.innerHTML = tasks.length ? tasks.map(t => `<div class="task-row"><button class="task-done" data-id="${t.id}" title="Als erledigt markieren">✓</button><div class="task-title">${esc(t.title)}<span class="task-contact">${esc(t.full_name || "Unbekannt")}</span></div><span class="task-due${t.due_at && t.due_at < today ? " late" : ""}">${t.due_at ? esc(t.due_at.split("-").reverse().join(".")) : "ohne Datum"}</span></div>`).join("") : `<div class="desk-empty">Keine offenen Aufgaben. Ein persönlicher Schritt nach einem guten Gespräch landet hier.</div>`;
+  taskList.querySelectorAll(".task-done").forEach(btn => btn.onclick = async () => { btn.disabled = true; await postTask({ action: "complete", id: Number(btn.dataset.id) }); load(); });
+  const save = document.getElementById("task-save");
+  if (save && !save._wired) {
+    save._wired = true;
+    save.onclick = async () => {
+      const contactId = Number(document.getElementById("task-contact").value), title = document.getElementById("task-title").value.trim();
+      if (!contactId) { document.getElementById("task-contact").focus(); return; }
+      if (!title) { document.getElementById("task-title").focus(); return; }
+      save.disabled = true;
+      const result = await postTask({ action: "create", contactId, title, dueAt: document.getElementById("task-due").value });
+      save.disabled = false;
+      if (!result.ok) { alert(result.error || "Aufgabe konnte nicht gespeichert werden."); return; }
+      document.getElementById("task-title").value = ""; document.getElementById("task-due").value = ""; load();
+    };
+  }
+}
+
+function renderExperiments() {
+  const campaigns = (state.campaigns || []).filter(c => c.active);
+  const experiments = state.experiments || [];
+  for (const id of ["exp-campaign-a", "exp-campaign-b"]) {
+    const select = document.getElementById(id);
+    if (!select || document.activeElement === select) continue;
+    const current = select.value;
+    select.innerHTML = `<option value="">${id.endsWith("-a") ? "Variante A" : "Variante B"}: Kampagne</option>` + campaigns.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    select.value = current;
+  }
+  const grid = document.getElementById("exp-grid");
+  if (!grid) return;
+  const metricName = { acceptance:"Annahmequote", reply:"Antwortquote", meeting:"Terminquote" };
+  if (!experiments.length) {
+    grid.innerHTML = `<div class="panel desk-empty" style="grid-column:1/-1">Noch kein Experiment. Lege zuerst zwei getrennte Kampagnen an, damit Quelle, Zielgruppe und Ansprache sauber vergleichbar bleiben.</div>`;
+  } else if (!grid.contains(document.activeElement)) {
+    grid.innerHTML = experiments.map(e => `<article class="exp-card" data-id="${e.id}">
+      <div class="exp-head"><div class="exp-name">${esc(e.name)}</div><span class="exp-state">${e.status === "active" ? "läuft" : e.status === "paused" ? "pausiert" : "beendet"}</span></div>
+      <div class="exp-hyp">${esc(e.hypothesis || "Keine Hypothese notiert.")}</div>
+      <div class="exp-arms">${(e.variants || []).map(v => `<div class="exp-arm${e.leader === v.label ? " leader" : ""}"><div class="exp-arm-lab"><span>VARIANTE ${esc(v.label)}</span><span>${metricName[e.metric] || "Quote"}</span></div><div class="exp-arm-name">${esc(v.campaignName)}</div><div class="exp-rate">${v.rate == null ? "—" : v.rate + "%"}</div><div class="exp-sample">${v.converted}/${v.sample} · ${v.label === e.leader ? "führt aktuell" : "Daten sammeln"}</div></div>`).join("")}</div>
+      <div class="exp-foot"><span>${e.ready ? (e.leader ? `Variante ${e.leader} liegt aktuell vorn.` : "Gleichstand – weiter messen.") : "Noch keine belastbare Aussage."}</span>${e.status !== "finished" ? `<button class="exp-control" data-next="${e.status === "active" ? "paused" : "active"}">${e.status === "active" ? "Pausieren" : "Fortsetzen"}</button>` : ""}</div>
+    </article>`).join("");
+    grid.querySelectorAll(".exp-control").forEach(button => button.onclick = async () => { button.disabled = true; await postExperiment({ action:"status", id:Number(button.closest(".exp-card").dataset.id), status:button.dataset.next }); load(); });
+  }
+  const save = document.getElementById("exp-save");
+  if (save && !save._wired) {
+    save._wired = true;
+    save.onclick = async () => {
+      const name = document.getElementById("exp-name").value.trim();
+      const campaignA = document.getElementById("exp-campaign-a").value, campaignB = document.getElementById("exp-campaign-b").value;
+      if (!name) { document.getElementById("exp-name").focus(); return; }
+      if (!campaignA || !campaignB || campaignA === campaignB) { alert("Wähle zwei unterschiedliche Kampagnen als Varianten."); return; }
+      save.disabled = true;
+      const r = await postExperiment({ action:"create", name, hypothesis:document.getElementById("exp-hypothesis").value, metric:document.getElementById("exp-metric").value, campaignA, campaignB });
+      save.disabled = false;
+      if (!r.ok) { alert(r.error || "Experiment konnte nicht gestartet werden."); return; }
+      document.getElementById("exp-name").value = ""; document.getElementById("exp-hypothesis").value = ""; document.getElementById("exp-campaign-a").value = ""; document.getElementById("exp-campaign-b").value = "";
+      load();
+    };
+  }
+}
+
+function renderOperations() {
+  const root = document.getElementById("ops-overall");
+  if (!root) return;
+  const engine = state.engine || {};
+  const health = state.systemHealth || {};
+  const ops = state.operations || {}, backup = ops.backup || {};
+  const fmtSize = bytes => {
+    if (!bytes) return "—";
+    return bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + " MB" : Math.round(bytes / 1024) + " KB";
+  };
+  const sendOk = health.sendeWeg === "ok";
+  const backupOk = !!backup.latestAt && !backup.lastError;
+  const allGood = engine.alive && sendOk && backupOk;
+  root.textContent = allGood ? "betriebsbereit" : engine.alive ? "Aufmerksamkeit nötig" : "Engine offline";
+  root.className = "ops-state " + (allGood ? "ops-good" : (health.sendeWeg === "broken" || backup.lastError ? "ops-bad" : "ops-warn"));
+
+  const engineValue = document.getElementById("ops-engine-value");
+  engineValue.textContent = engine.alive ? "Läuft" : "Offline";
+  engineValue.className = "ops-value " + (engine.alive ? "ops-good" : "ops-warn");
+  document.getElementById("ops-engine-sub").textContent = engine.alive
+    ? (engine.activeJob ? `Gerade: ${engine.activeJob}${engine.queuedJobs ? ` · ${engine.queuedJobs} warten` : ""}` : "Bereit für die nächste Aufgabe")
+    : (engine.heartbeat ? `Zuletzt ${relDate(engine.heartbeat).t}` : "Noch nicht gestartet");
+
+  const sendValue = document.getElementById("ops-send-value");
+  sendValue.textContent = health.sendeWeg === "ok" ? "Geprüft" : health.sendeWeg === "broken" ? "Blockiert" : "Noch offen";
+  sendValue.className = "ops-value " + (sendOk ? "ops-good" : health.sendeWeg === "broken" ? "ops-bad" : "ops-warn");
+  document.getElementById("ops-send-sub").textContent = health.geprueft ? `Letzter Check ${relDate(health.geprueft).t}${health.grund ? ` · ${health.grund}` : ""}` : "Der nächste Selbst-Check bestätigt den Sendeweg.";
+
+  const backupValue = document.getElementById("ops-backup-value");
+  backupValue.textContent = backup.latestAt ? `${backup.count || 1} Sicherung${backup.count === 1 ? "" : "en"}` : "Noch keine Sicherung";
+  backupValue.className = "ops-value " + (backupOk ? "ops-good" : backup.lastError ? "ops-bad" : "ops-warn");
+  document.getElementById("ops-backup-sub").textContent = backup.lastError ? `Fehler: ${backup.lastError}` : backup.latestAt ? `Zuletzt ${relDate(backup.latestAt).t} · ${fmtSize(backup.latestSize)}` : "Beim nächsten Engine-Start automatisch.";
+
+  document.getElementById("ops-list").innerHTML = [
+    ["Code-Version", ops.codeVersion || "—"],
+    ["Engine-Prozess", ops.processId ? `PID ${ops.processId}` : "nicht aktiv"],
+    ["Warteschlange", engine.activeJob ? `${engine.activeJob}${engine.queuedJobs ? ` + ${engine.queuedJobs} wartend` : ""}` : "leer"],
+    ["Backup-Aufbewahrung", `${backup.count || 0} von maximal 21 lokalen Snapshots`],
+  ].map(([label, value]) => `<div class="ops-row"><span>${esc(label)}</span><b>${esc(value)}</b></div>`).join("");
+
+  const button = document.getElementById("ops-backup-btn");
+  if (button && !button._wired) {
+    button._wired = true;
+    button.onclick = async () => {
+      button.disabled = true; button.textContent = "sichert …";
+      const r = await fetch("/api/backup", { method: "POST" }).then(x => x.json()).catch(() => ({ ok: false }));
+      button.textContent = r.ok ? "Gesichert ✓" : "Sicherung fehlgeschlagen";
+      setTimeout(() => { button.textContent = "Jetzt sichern"; button.disabled = false; load(); }, 1100);
     };
   }
 }
@@ -2408,7 +2949,7 @@ function renderRows() {
     const inv = relDate(c.invited_at), acc = relDate(c.accepted_at);
     const slug = (c.profile_url || "").split("/in/")[1]?.replace(/\/$/, "") || "Profil";
     return `<tr>
-      <td><div class="name">${esc(c.full_name || "—")}${scorePill(c.lead_score)}</div>${c.headline ? `<div class="headline">${esc(c.headline)}</div>` : ""}</td>
+      <td><div class="name">${esc(c.full_name || "—")}${scorePill(c.lead_score)}</div>${c.headline ? `<div class="headline">${esc(c.headline)}</div>` : ""}${c.campaign_name ? `<span class="campaign-tag">${esc(c.campaign_name)}</span>` : ""}${c.outcome_stage ? `<span class="outcome-tag">${({ qualified:"qualifiziert", meeting:"Termin", won:"gewonnen", lost:"verloren", not_fit:"kein Fit" })[c.outcome_stage] || esc(c.outcome_stage)}</span>` : ""}</td>
       <td class="col-head"><span class="badge b-${c.status}">${STATUS_LABEL[c.status] || c.status}</span></td>
       <td class="col-head"><span class="date ${inv.none ? "none" : ""}">${inv.t}</span></td>
       <td class="col-head"><span class="date ${acc.none ? "none" : ""}">${acc.t}</span></td>
@@ -2516,6 +3057,37 @@ function renderModulViews(v) {
 
 // CHAT-ÜBERBLICK: alle Gespräche an einem Ort (Buckets, Suche, direkt öffnen, wiederbeleben).
 let cuFilter = "alle";
+let activeConversationId = null;
+const conversationTime = (value) => {
+  if (!value) return "";
+  const date = new Date(String(value).replace(" ", "T") + (String(value).includes("Z") ? "" : "Z"));
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+};
+function renderConversationWorkspace(data) {
+  const el = document.getElementById("conv-workspace");
+  if (!el) return;
+  if (!data || data.error) { el.innerHTML = `<div class="conv-empty">Der Gesprächskontext konnte nicht geladen werden.</div>`; return; }
+  const c = data.contact || {}, timeline = data.timeline || [], tasks = data.tasks || [];
+  const outcome = { qualified: "qualifiziert", meeting: "Termin", won: "gewonnen", lost: "verloren", not_fit: "kein Fit" }[c.outcome_stage] || c.outcome_stage;
+  const stream = timeline.length ? timeline.map(item => {
+    const label = item.source === "protokoll" ? "Protokolliert" : item.kind === "draft" ? "Entwurf · noch nicht gesendet" : item.kind === "outgoing" ? "Gesendet" : "Eingehender Kontext";
+    return `<div class="conv-item ${item.kind}">${esc(item.text)}<small>${label}${conversationTime(item.ts) ? ` · ${conversationTime(item.ts)}` : ""}</small></div>`;
+  }).join("") : `<div class="mod-empty">Noch kein lokaler Verlauf vorhanden. Sobald ein Entwurf, eine protokollierte Nachricht oder ein Vertriebsstatus vorliegt, erscheint er hier.</div>`;
+  const taskList = tasks.length ? tasks.map(t => `<div class="conv-task"><span class="conv-task-dot">${t.status === "done" ? "✓" : "•"}</span><span>${esc(t.title)}${t.due_at ? `<br><small>Fällig ${esc(t.due_at.split("-").reverse().join("."))}</small>` : ""}</span></div>`).join("") : `<div class="mod-empty">Keine Aufgaben offen.</div>`;
+  el.innerHTML = `<div class="conv-head"><div><h3 class="conv-title">${esc(c.full_name || "Kontakt")}</h3><p class="conv-sub">${esc(c.headline || "Gesprächs-Workspace")}</p></div><div class="conv-status">${c.campaign_name ? `<span class="conv-pill">${esc(c.campaign_name)}</span>` : ""}${outcome ? `<span class="conv-pill">${esc(outcome)}</span>` : ""}<span class="conv-pill">${timeline.length} Kontext${timeline.length === 1 ? "" : "e"}</span></div></div><div class="conv-grid"><div class="conv-stream"><div class="conv-kicker">Lokaler Gesprächskontext</div>${stream}</div><aside class="conv-side"><div class="conv-kicker">Nächste Schritte</div>${taskList}<a class="conv-desk" data-conv-desk href="#">Zum Sales Desk →</a></aside></div>`;
+}
+async function openConversationWorkspace(contactId) {
+  activeConversationId = Number(contactId);
+  const el = document.getElementById("conv-workspace");
+  if (el) el.innerHTML = `<div class="conv-empty">Lade Gesprächskontext …</div>`;
+  try {
+    const response = await fetch(`/api/conversation?contactId=${encodeURIComponent(activeConversationId)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Laden fehlgeschlagen");
+    renderConversationWorkspace(data);
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch { if (el) el.innerHTML = `<div class="conv-empty">Der Gesprächskontext konnte nicht geladen werden.</div>`; }
+}
 function renderChatUebersicht() {
   const list = state.chatUebersicht || [];
   const bucketOf = (c) => {
@@ -2550,7 +3122,7 @@ function renderChatUebersicht() {
     const link = c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener" class="cu-link">Chat öffnen ↗</a>` : "";
     return `<div class="cu-row">
       <div class="cu-main"><span class="cu-name">${esc(c.name||"—")}</span><span class="cu-head">${esc(c.headline||"")}</span></div>
-      <div class="cu-meta"><span class="cu-badge ${m.cls}">${m.label}</span><span class="cu-age">${alter(c.tage)}</span>${link}${revive}</div>
+      <div class="cu-meta"><span class="cu-badge ${m.cls}">${m.label}</span><span class="cu-age">${alter(c.tage)}</span><button class="cu-open" data-id="${c.id}">Arbeitsansicht</button>${link}${revive}</div>
     </div>`;
   }).join("") : `<div class="mod-empty">Keine Chats in dieser Ansicht.</div>`;
 }
@@ -2558,11 +3130,15 @@ function renderChatUebersicht() {
 const VIEWS = {
   dashboard: { title: "Übersicht",       sub: "Das Wichtigste auf einen Blick" },
   live:      { title: "Live-Ansicht",    sub: "Der Browser des Bots in Echtzeit" },
+  operations:{ title: "Betrieb",         sub: "Engine, Sendeweg und lokale Datensicherung" },
   // ---- Modul: Lead Engine ----
   leadsuche: { title: "Leadsuche",       sub: "Zielgruppen finden & Profile sammeln", grp: "lead" },
+  campaigns: { title: "Kampagnen",      sub: "Initiativen messen und Vertriebsergebnisse führen", grp: "lead" },
+  experiments:{ title: "Experimente",  sub: "Kampagnen fair vergleichen und aus Daten lernen", grp: "lead" },
   vernetzen: { title: "Vernetzen",       sub: "Anfragen, Annahmen & Tageslimit",     grp: "lead" },
   contacts:  { title: "CRM",             sub: "Alle Leads in deinem CRM",            grp: "lead" },
   // ---- Modul: Sales Agent ----
+  salesdesk:     { title: "Sales Desk",       sub: "Deine wichtigsten Gespräche und nächsten Schritte", grp: "sales" },
   erstnachricht: { title: "Erstnachricht", sub: "Der erste Kontakt nach der Annahme", grp: "sales" },
   gespraech:     { title: "Gespräch",      sub: "Laufende Chats mit deinen Leads",    grp: "sales" },
   followups:     { title: "Follow-Ups",    sub: "Freundlich nachfassen",              grp: "sales" },
@@ -2673,6 +3249,8 @@ document.querySelectorAll(".nav-grp").forEach(btn => {
   });
   const cuList = document.getElementById("cu-list");
   if (cuList) cuList.addEventListener("click", async (e) => {
+    const open = e.target.closest(".cu-open");
+    if (open) { openConversationWorkspace(open.getAttribute("data-id")); return; }
     const b = e.target.closest(".cu-revive"); if (!b) return;
     if (!(state.engine && state.engine.alive)) { b.textContent = "Bot muss laufen"; return; }
     const url = b.getAttribute("data-url"); b.disabled = true; b.textContent = "wird angestoßen …";
@@ -2680,6 +3258,11 @@ document.querySelectorAll(".nav-grp").forEach(btn => {
       await fetch("/api/wiederbeleben", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
       b.textContent = "✓ Entwurf kommt";
     } catch { b.textContent = "Fehler"; b.disabled = false; }
+  });
+  const workspace = document.getElementById("conv-workspace");
+  if (workspace) workspace.addEventListener("click", (e) => {
+    const desk = e.target.closest("[data-conv-desk]"); if (!desk) return;
+    e.preventDefault(); zeigeAnsicht("salesdesk");
   });
 
   // --- Brand Engine: Beitrag schreiben lassen ---
@@ -2759,6 +3342,24 @@ async function ladeAnalytics() {
 }
 
 function renderAnalytics(a) {
+  // --- P2: Ein einziger Entscheidungsstreifen statt einer weiteren KPI-Wand. ---
+  const intelligence = document.getElementById("an-intelligence");
+  const recommendations = a.empfehlungen || [];
+  const signals = a.signale || [];
+  const brief = a.brief || {};
+  intelligence.innerHTML = `
+    <div class="intel-main">
+      <span class="intel-kicker">Nächste beste Entscheidung</span>
+      <h3>Die Pipeline zeigt dir, worauf du diese Woche Aufmerksamkeit setzen solltest.</h3>
+      <div class="intel-actions">${recommendations.map(x => `<div class="intel-action">${esc(x)}</div>`).join("")}</div>
+    </div>
+    <div class="intel-brief">
+      <span class="intel-kicker" style="color:var(--accent)">${esc(brief.source || "Content-Brief")}</span>
+      <h4>${esc(brief.headline || "Noch keine Signale")}</h4>
+      <p>${esc(brief.instruction || "Sobald Antworten und Ergebnisse vorliegen, entsteht hier ein konkreter Content-Impuls.")}</p>
+      <div class="intel-signals">${signals.length ? signals.map(s => `<span class="intel-signal">${esc(s.label)} · ${s.mentions}×</span>`).join("") : `<span class="intel-signal intel-empty">wartet auf erste Gesprächssignale</span>`}</div>
+    </div>`;
+
   // --- Kernquoten-Karten: ehrlich über REIFE Kohorten (≥ reifeTage), mit Stichprobengröße ---
   const q = a.quoten;
   const einord = (Q) => Q.pct == null ? "" : Q.pct >= Q.gut ? "über Ziel" : Q.pct >= Q.mittel ? "im Mittelfeld" : "unter Ziel";
@@ -2825,30 +3426,75 @@ function renderAnalytics(a) {
 
   // --- Lead-Quellen-Tabelle ---
   const hint = document.getElementById("an-quellen-hint");
-  hint.textContent = a.kontakteOhneQuelle ? `${a.kontakteOhneQuelle} Alt-Kontakte ohne Quelle (füllt sich ab jetzt)` : "";
+  const basis = a.datenbasis || {};
+  hint.textContent = [
+    a.kontakteOhneQuelle ? `${a.kontakteOhneQuelle} Alt-Kontakte ohne Quelle` : "",
+    basis.duplicateConnectEvents ? `${basis.duplicateConnectEvents} doppelte Connect-Ereignisse separat gezählt` : "",
+  ].filter(Boolean).join(" · ");
   const qs = a.quellen.filter(x => x.kontakte > 0);
   document.getElementById("an-quellen").innerHTML = qs.length ? `
     <table class="an-qtable">
-      <thead><tr><th>Quelle</th><th>Kontakte</th><th>Eingeladen</th><th>Annahme</th><th>Antwort</th></tr></thead>
+      <thead><tr><th>Quelle</th><th>Kontakte</th><th>Eingeladen</th><th>Nachrichten</th><th>Annahme</th><th>Antwort</th></tr></thead>
       <tbody>${qs.map(x => `<tr>
         <td class="an-qname">${esc(x.label)}</td>
         <td>${x.kontakte}</td>
         <td>${x.eingeladen}</td>
+        <td>${x.angeschrieben}</td>
         <td>${x.annahmePct != null ? `<b>${x.annahmePct}%</b>` : "–"}</td>
         <td>${x.antwortPct != null ? `<b>${x.antwortPct}%</b>` : "–"}</td>
       </tr>`).join("")}</tbody>
     </table>` : `<div class="src-empty">Sobald der Bot neue Leads aus deinen Quellen holt, siehst du hier, welche Suche am besten konvertiert.</div>`;
 
+  // --- Kampagnen-Attribution: Quelle ist der Anfang, Termin/Won sind die eigentliche Wirkung. ---
+  const campaigns = a.kampagnen || [];
+  document.getElementById("an-kampagnen").innerHTML = campaigns.length ? `
+    <table class="an-qtable">
+      <thead><tr><th>Kampagne</th><th>Leads</th><th>Antworten</th><th>Termine</th><th>Gewonnen</th></tr></thead>
+      <tbody>${campaigns.map(c => `<tr>
+        <td class="an-qname">${esc(c.name)}${c.active ? "" : " <span style=\"color:var(--ink-faint);font-weight:500\">· pausiert</span>"}</td>
+        <td>${c.leads}</td><td>${c.replied}</td><td><b>${c.meetings}</b></td><td><b style="color:var(--accent)">${c.won}</b></td>
+      </tr>`).join("")}</tbody>
+    </table>` : `<div class="src-empty">Lege unter „Kampagnen“ eine Initiative an und ordne ihr eine Quelle zu. Dann wird hier die Wirkung bis zum Termin sichtbar.</div>`;
+
+  const experiments = a.experiments || [];
+  document.getElementById("an-experiments").innerHTML = experiments.length ? `
+    <table class="an-qtable"><thead><tr><th>Experiment</th><th>Variante A</th><th>Variante B</th><th>Status</th></tr></thead><tbody>${experiments.map(e => {
+      const va = e.variants?.[0], vb = e.variants?.[1];
+      const cell = v => v ? `${esc(v.campaignName)}<br><span style="color:var(--ink-faint);font-size:10px">${v.rate == null ? "—" : v.rate + "%"} · n=${v.sample}</span>` : "—";
+      const state = e.ready ? (e.leader ? `Variante ${e.leader} führt` : "Gleichstand") : "Daten sammeln";
+      return `<tr><td class="an-qname">${esc(e.name)}</td><td>${cell(va)}</td><td>${cell(vb)}</td><td><b>${state}</b></td></tr>`;
+    }).join("")}</tbody></table>` : `<div class="src-empty">Noch keine laufenden A/B-Vergleiche. Unter „Experimente“ vergleichst du zwei Kampagnen gegen dieselbe Erfolgsmetrik.</div>`;
+
+  // --- Human-in-the-loop Feedback: Änderungen sind Trainingsdaten, nie ein stilles Urteil. ---
+  const qual = a.textQualitaet || [];
+  const intentName = { first:"Erstnachricht", message:"Gespräch", followup:"Follow-up", chance:"Chance", einwand:"Einwand", positive:"Interesse", neutral:"Neutral", absage:"Absage" };
+  document.getElementById("an-textqualitaet").innerHTML = qual.length ? `
+    <p class="eyebrow" style="margin:0 0 12px">Nachrichtenqualität</p>
+    ${qual.map(q => `<div class="an-learning-row"><span>${esc(intentName[q.intent] || q.intent)}</span><b>${q.quote}%</b><span class="an-learning-note">${q.unveraendert} unverändert · ${q.editiert} angepasst</span></div>`).join("")}
+    <p class="an-note">Die Quote zeigt, wie oft du einen KI-Entwurf unverändert gesendet hast. Deine Anpassungen bleiben das Lernsignal.</p>`
+    : `<p class="eyebrow" style="margin:0 0 8px">Nachrichtenqualität</p><div class="src-empty">Sobald du Entwürfe sendest, bearbeitest oder verwirfst, wird sichtbar, wo Ton und Argumentation besser werden müssen.</div>`;
+  const outcomes = a.ergebnisse || {};
+  const outcomeRows = [
+    ["qualified", "Qualifiziert"], ["meeting", "Termine"], ["won", "Gewonnen"], ["lost", "Verloren"], ["not_fit", "Kein Fit"],
+  ].filter(([key]) => outcomes[key]?.count);
+  const eur = cents => new Intl.NumberFormat("de-DE", { style:"currency", currency:"EUR", maximumFractionDigits:0 }).format((cents || 0) / 100);
+  document.getElementById("an-ergebnisse").innerHTML = outcomeRows.length ? `
+    <p class="eyebrow" style="margin:0 0 12px">Echte Ergebnisse</p>
+    ${outcomeRows.map(([key, label]) => `<div class="an-learning-row"><span>${label}</span><b>${outcomes[key].count}</b><span class="an-learning-note">${outcomes[key].valueCents ? eur(outcomes[key].valueCents) : "ohne Wert"}</span></div>`).join("")}
+    <p class="an-note">Erfasse das Ergebnis nach dem Gespräch direkt in der Kampagnenansicht – nur so wird der Funnel ein Vertriebsreport.</p>`
+    : `<p class="eyebrow" style="margin:0 0 8px">Echte Ergebnisse</p><div class="src-empty">Noch keine Ergebnisse erfasst. Nach einem Gespräch Termin, Gewinn oder kein Fit festhalten.</div>`;
+
   // --- Skalierungs-Rechner ---
   const p = a.projektion;
   document.getElementById("an-projektion").innerHTML = `
-    <p class="an-note" style="margin-top:0">Basis: Annahmequote <b>${p.annahmeRate}%</b> × Antwortquote <b>${p.antwortRate}%</b>.
+    <p class="an-note" style="margin-top:0">Basis: Annahmequote <b>${p.annahmeRate}%</b> × angeschrieben nach Annahme <b>${p.anschreibRate}%</b> × Antwortquote <b>${p.antwortRate}%</b>.
     ${p.vernetzungenProHotLead ? `Grob <b>${p.vernetzungenProHotLead} Vernetzungen</b> pro Hot Lead.` : ""}</p>
     <table class="an-qtable">
-      <thead><tr><th>Vernetzungen/Woche</th><th>→ Annahmen</th><th>→ Hot Leads/Woche</th><th>→ pro Monat</th></tr></thead>
+      <thead><tr><th>Vernetzungen/Woche</th><th>→ Annahmen</th><th>→ Nachrichten</th><th>→ Hot Leads/Woche</th><th>→ pro Monat</th></tr></thead>
       <tbody>${p.szenarien.map(s => `<tr>
         <td class="an-qname">${s.vernetzungen}${s.vernetzungen === p.weeklyCap ? " (Max)" : ""}</td>
         <td>${s.angenommen}</td>
+        <td>${s.nachrichten}</td>
         <td><b>${s.hotLeads}</b></td>
         <td><b style="color:var(--accent)">${Math.round(s.hotLeads * 4.3 * 10) / 10}</b></td>
       </tr>`).join("")}</tbody>

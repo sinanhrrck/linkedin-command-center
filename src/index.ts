@@ -20,6 +20,7 @@ import { startTelegram } from "./modules/telegram.js";
 import { countByStatus, resetHaengendeInvites } from "./modules/crm.js";
 import { saveLiveShot } from "./core/session.js";
 import { SerialJobQueue } from "./core/jobQueue.js";
+import { ensureDailyBackup } from "./core/backups.js";
 
 /**
  * Zentraler Loop. Läuft lokal dauerhaft.
@@ -157,6 +158,9 @@ cron.schedule("* * * * *", async () => {
 // Beim Start EINMAL sofort loslegen, statt bis zu 12 Min auf den ersten Cron-Tick zu warten.
 // (Governor drosselt weiterhin – Delay/Caps/Arbeitszeit gelten.)
 setTimeout(async () => {
+  // Lokale Wiederherstellbarkeit: Datenbank einmal täglich konsistent sichern. Dieser Job nutzt
+  // kein LinkedIn/Browser und bleibt bewusst sehr niedrig priorisiert.
+  await einzeln("backup", () => ensureDailyBackup(), 5);
   // ZUERST der Selbst-Check: Funktioniert der Sende-Weg überhaupt? Ist er defekt, blockiert der
   // Governor Nachrichten von vornherein (statt still zu scheitern) und meldet es dir.
   await einzeln("healthcheck", () => selbstCheck(), 75);
@@ -179,6 +183,9 @@ setTimeout(async () => {
     if (offen === 0) await generatePostIdeas(2);
   }, 10);
 }, 4000);
+
+// Falls die App über Nacht läuft, entsteht auch ohne Neustart täglich ein frischer Snapshot.
+cron.schedule("10 3 * * *", () => einzeln("backup", () => ensureDailyBackup(), 5));
 
 /**
  * POSTEN läuft jetzt für JEDEN – auch OHNE LinkedIn-API-Schlüssel: dann über die Browser-Session

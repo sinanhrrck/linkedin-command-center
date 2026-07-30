@@ -37,7 +37,7 @@ class SafetyGovernor {
   private countToday(type: ActionType): number {
     const row = db
       .prepare(
-        "SELECT COUNT(*) AS n FROM actions WHERE type = ? AND date(created_at) = date('now','localtime')",
+        "SELECT COUNT(*) AS n FROM actions WHERE type = ? AND date(created_at,'localtime') = date('now','localtime')",
       )
       .get(type) as { n: number };
     return row.n;

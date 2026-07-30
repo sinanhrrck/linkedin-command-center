@@ -80,6 +80,27 @@ try {
   /* Spalte existiert bereits */
 }
 
+try {
+  db.exec("ALTER TABLE lead_sources ADD COLUMN campaign_id INTEGER");
+} catch {
+  /* Spalte existiert bereits */
+}
+try {
+  db.exec("ALTER TABLE contacts ADD COLUMN campaign_id INTEGER");
+} catch {
+  /* Spalte existiert bereits */
+}
+
+// Bestehende Leads lassen sich automatisch ihrer Quelle und damit einer später zugeordneten
+// Kampagne zuordnen. Unverknüpfte Alt-Leads bleiben bewusst unangetastet.
+db.exec(
+  `UPDATE contacts
+      SET campaign_id = (SELECT campaign_id FROM lead_sources s WHERE s.id = contacts.source_id)
+    WHERE campaign_id IS NULL
+      AND source_id IS NOT NULL
+      AND (SELECT campaign_id FROM lead_sources s WHERE s.id = contacts.source_id) IS NOT NULL`,
+);
+
 /** Key/Value-State */
 export const getState = (key: string): string | undefined =>
   (db.prepare("SELECT value FROM state WHERE key = ?").get(key) as { value: string } | undefined)

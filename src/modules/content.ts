@@ -2,6 +2,7 @@ import { db } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { promptKontext, saubern } from "../context.js";
 import { events } from "../core/events.js";
+import { contentBrief } from "./insights.js";
 
 /**
  * CONTENT / SICHTBARKEIT – der stärkste Inbound-Hebel (Sinans Second Brain: "kein Kaltakquise,
@@ -27,7 +28,8 @@ const WINKEL: string[] = [
 
 /** Erzeugt EINEN Post-Entwurf zu einem Winkel und legt ihn als 'draft' ab. */
 export async function generatePostDraft(winkel?: string): Promise<number | null> {
-  const w = winkel ?? WINKEL[Math.floor(Math.random() * WINKEL.length)];
+  const brief = contentBrief();
+  const w = winkel ?? `${WINKEL[Math.floor(Math.random() * WINKEL.length)]}\nAktueller Nachfrage-Impuls: ${brief.instruction}`;
   const prompt = `Schreibe einen LinkedIn-Post für Sinan.
 ${promptKontext()}
 Thema/Winkel: ${w}

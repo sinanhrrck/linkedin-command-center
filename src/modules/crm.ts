@@ -20,17 +20,21 @@ export function upsertContact(c: { profileUrl: string; fullName?: string; headli
   const { score, grund } = scoreLead(c.fullName, c.headline);
   // source_id nur beim ANLEGEN setzen (COALESCE): der erste Fund bestimmt die Quelle des
   // Kontakts – für den Quellen-Vergleich in der Analytics. Spätere Duplikate ändern sie nicht.
+  const campaignId = c.sourceId
+    ? (db.prepare("SELECT campaign_id FROM lead_sources WHERE id=?").get(c.sourceId) as { campaign_id: number | null } | undefined)?.campaign_id ?? null
+    : null;
   db.prepare(
-    `INSERT INTO contacts(profile_url, full_name, headline, zielgruppe, lead_score, score_grund, source_id)
-     VALUES(?,?,?,?,?,?,?)
+    `INSERT INTO contacts(profile_url, full_name, headline, zielgruppe, lead_score, score_grund, source_id, campaign_id)
+     VALUES(?,?,?,?,?,?,?,?)
      ON CONFLICT(profile_url) DO UPDATE SET
        full_name   = COALESCE(excluded.full_name, contacts.full_name),
        headline    = COALESCE(excluded.headline,  contacts.headline),
        zielgruppe  = COALESCE(excluded.zielgruppe, contacts.zielgruppe),
        lead_score  = excluded.lead_score,
        score_grund = excluded.score_grund,
-       source_id   = COALESCE(contacts.source_id, excluded.source_id)`,
-  ).run(c.profileUrl, c.fullName ?? null, c.headline ?? null, zg, score, grund, c.sourceId ?? null);
+       source_id   = COALESCE(contacts.source_id, excluded.source_id),
+       campaign_id = COALESCE(contacts.campaign_id, excluded.campaign_id)`,
+  ).run(c.profileUrl, c.fullName ?? null, c.headline ?? null, zg, score, grund, c.sourceId ?? null, campaignId);
 }
 
 /** Nächste noch nicht kontaktierte Leads. */

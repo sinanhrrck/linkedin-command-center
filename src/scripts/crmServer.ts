@@ -9,6 +9,11 @@ import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, deleteD
 import { getPost, approvePost, discardPost, generatePostDraft } from "../modules/content.js";
 import { addSource, deleteSource } from "../modules/leadFeed.js";
 import { deleteContact } from "../modules/crm.js";
+import { createCampaign, updateCampaign, setCampaignActive, recordOutcome, OUTCOME_STAGES, type OutcomeStage } from "../modules/campaigns.js";
+import { addSalesTask, completeSalesTask, deleteSalesTask } from "../modules/salesDesk.js";
+import { createDatabaseBackup } from "../core/backups.js";
+import { createExperiment, setExperimentStatus, EXPERIMENT_METRICS, type ExperimentMetric } from "../modules/experiments.js";
+import { getConversationWorkspace } from "../modules/conversationWorkspace.js";
 import { db, getState, setState, setMode, setFocus, getFocus, setAgentMode, type Mode, type Focus, type AgentMode } from "../db/index.js";
 import { LIVE_SHOT_PATH } from "../core/session.js";
 
@@ -487,14 +492,15 @@ const server = createServer((req, res) => {
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       try {
-        const { action, url: srcUrl, label, zielgruppe, id } = JSON.parse(body || "{}");
+        const { action, url: srcUrl, label, zielgruppe, campaignId, id } = JSON.parse(body || "{}");
         if (action === "add") {
           if (typeof srcUrl !== "string" || !/linkedin\.com/i.test(srcUrl)) {
             res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "Bitte eine LinkedIn-Such-Adresse einfügen (beginnt mit linkedin.com)." }));
             return;
           }
           const zg = ["azubi", "student"].includes(zielgruppe) ? zielgruppe : undefined;
-          addSource(srcUrl.trim(), (typeof label === "string" && label.trim()) || undefined, undefined, zg);
+          const campaign = Number.isInteger(Number(campaignId)) && Number(campaignId) > 0 ? Number(campaignId) : undefined;
+          addSource(srcUrl.trim(), (typeof label === "string" && label.trim()) || undefined, undefined, zg, campaign);
           setState("feed_now", "1"); // Bot holt beim nächsten Tick Nachschub aus der neuen Quelle
           res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, running: engineAlive() }));
         } else if (action === "delete") {
@@ -510,6 +516,116 @@ const server = createServer((req, res) => {
         res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
       }
     });
+    return;
+  }
+
+  // KAMPAGNEN: strategischer Rahmen für Quellen und spätere Ergebnisse. Diese Endpunkte ändern
+  // keine Automatik – sie organisieren und messen ausschließlich die vorhandene Vertriebsarbeit.
+  if (url.pathname === "/api/campaign" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { action, id, name, audience, valueProp, goal } = JSON.parse(body || "{}");
+        if (action === "create") {
+          const campaignId = createCampaign({ name, audience, valueProp, goal });
+          res.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, id: campaignId }));
+        } else if (action === "update") {
+          const ok = updateCampaign(Number(id), { name, audience, valueProp, goal });
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else if (action === "pause" || action === "resume") {
+          const ok = setCampaignActive(Number(id), action === "resume");
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
+        }
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // ERGEBNIS ERFASSEN: menschliche Entscheidung nach einem echten Gespräch. So wird aus dem
+  // Bot-Funnel eine vertriebliche Kennzahl – ohne den LinkedIn-Versand oder Agenten zu verändern.
+  if (url.pathname === "/api/outcome" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { contactId, stage, note, valueEur } = JSON.parse(body || "{}");
+        if (!OUTCOME_STAGES.includes(stage)) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "bad stage" }));
+          return;
+        }
+        const eur = typeof valueEur === "number" ? valueEur : Number(String(valueEur).replace(",", "."));
+        recordOutcome(Number(contactId), stage as OutcomeStage, note, Number.isFinite(eur) ? eur * 100 : undefined);
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // NÄCHSTER SCHRITT: persönliche Vertriebsaufgabe zu einem Lead. Komplett unabhängig vom Bot-
+  // Versand, damit Verantwortung, Fälligkeit und Beziehung beim Menschen bleiben.
+  if (url.pathname === "/api/task" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { action, id, contactId, title, dueAt } = JSON.parse(body || "{}");
+        if (action === "create") {
+          const taskId = addSalesTask(Number(contactId), title, dueAt);
+          res.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, id: taskId }));
+        } else if (action === "complete") {
+          const ok = completeSalesTask(Number(id));
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else if (action === "delete") {
+          const ok = deleteSalesTask(Number(id));
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "bad action" }));
+        }
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // EXPERIMENTE: A/B-Vergleich zweier Kampagnen. Es wird nichts am Versand automatisiert;
+  // das System misst nur echte Funnel-Daten und zeigt ab ausreichender Stichprobe einen Vorsprung.
+  if (url.pathname === "/api/experiment" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { action, id, name, hypothesis, metric, campaignA, campaignB, status } = JSON.parse(body || "{}");
+        if (action === "create") {
+          if (!EXPERIMENT_METRICS.includes(metric)) throw new Error("Ungültige Erfolgsmetrik.");
+          const experimentId = createExperiment({ name, hypothesis, metric: metric as ExperimentMetric, campaignA: Number(campaignA), campaignB: Number(campaignB) });
+          res.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, id: experimentId }));
+        } else if (action === "status" && ["active", "paused", "finished"].includes(status)) {
+          const ok = setExperimentStatus(Number(id), status);
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "bad action" }));
+        }
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // MANUELLES BACKUP: erzeugt einen lokalen, konsistenten SQLite-Snapshot. Kein Export nach
+  // außen und kein Zugriff auf LinkedIn – die Daten bleiben vollständig auf diesem Rechner.
+  if (url.pathname === "/api/backup" && req.method === "POST") {
+    createDatabaseBackup("manual")
+      .then((result) => res.writeHead(result.ok ? 200 : 500, { "Content-Type": "application/json" }).end(JSON.stringify(result)))
+      .catch((e) => res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String(e) })));
     return;
   }
 
@@ -642,6 +758,16 @@ const server = createServer((req, res) => {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify(getAnalytics()));
     } catch (e) {
       res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/conversation") {
+    try {
+      const contactId = Number(url.searchParams.get("contactId"));
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify(getConversationWorkspace(contactId)));
+    } catch (e) {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify({ error: String(e) }));
     }
     return;
   }

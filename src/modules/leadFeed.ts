@@ -17,19 +17,21 @@ export type LeadSource = {
   zielgruppe: string | null;
   last_run: string | null;
   last_added: number;
+  campaign_id: number | null;
 };
 
 /** Quelle anlegen oder reaktivieren (dedupliziert per URL). keepFilter = Regex (i).
  *  zielgruppe (azubi|student) steuert, bei welchem Fokus die Quelle mitläuft. */
-export function addSource(searchUrl: string, label?: string, keepFilter?: string, zielgruppe?: string) {
+export function addSource(searchUrl: string, label?: string, keepFilter?: string, zielgruppe?: string, campaignId?: number) {
   db.prepare(
-    `INSERT INTO lead_sources(label, search_url, keep_filter, zielgruppe) VALUES(?, ?, ?, ?)
+    `INSERT INTO lead_sources(label, search_url, keep_filter, zielgruppe, campaign_id) VALUES(?, ?, ?, ?, ?)
      ON CONFLICT(search_url) DO UPDATE SET
        label = COALESCE(excluded.label, lead_sources.label),
        keep_filter = COALESCE(excluded.keep_filter, lead_sources.keep_filter),
        zielgruppe = COALESCE(excluded.zielgruppe, lead_sources.zielgruppe),
+       campaign_id = COALESCE(excluded.campaign_id, lead_sources.campaign_id),
        active = 1`,
-  ).run(label ?? null, searchUrl, keepFilter ?? null, zielgruppe ?? null);
+  ).run(label ?? null, searchUrl, keepFilter ?? null, zielgruppe ?? null, campaignId ?? null);
 }
 
 /** Quelle löschen. */

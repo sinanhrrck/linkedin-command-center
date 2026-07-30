@@ -5,6 +5,10 @@ import { governor } from "../core/safetyGovernor.js";
 import { pendingDrafts, approvedCount } from "./drafts.js";
 import { pendingPosts } from "./content.js";
 import { hotLeads } from "./crm.js";
+import { listCampaigns } from "./campaigns.js";
+import { openSalesTasks, salesDesk } from "./salesDesk.js";
+import { getBackupStatus } from "../core/backups.js";
+import { listExperiments } from "./experiments.js";
 
 // Pfad zur gebündelten app.asar-DATEI (nur in der gepackten App). Deren Änderungsdatum verrät ein
 // frisch installiertes Update; liegt es NACH dem Engine-Start, läuft die Engine noch mit altem Code.
@@ -44,16 +48,26 @@ type ContactRow = {
   accepted_at: string | null;
   created_at: string;
   lead_score: number | null;
+  campaign_id: number | null;
+  campaign_name: string | null;
+  outcome_stage: string | null;
+  outcome_note: string | null;
+  outcome_value_cents: number | null;
 };
 
 export function getDashboardData() {
   const contacts = db
     .prepare(
-      `SELECT id, full_name, headline, profile_url, status, invited_at, accepted_at, created_at, lead_score
-       FROM contacts ORDER BY
-         CASE status WHEN 'replied' THEN 0 WHEN 'messaged' THEN 1 WHEN 'accepted' THEN 2
+      `SELECT c.id, c.full_name, c.headline, c.profile_url, c.status, c.invited_at, c.accepted_at,
+              c.created_at, c.lead_score, c.campaign_id, ca.name AS campaign_name,
+              o.stage AS outcome_stage, o.note AS outcome_note, o.value_cents AS outcome_value_cents
+       FROM contacts c
+       LEFT JOIN campaigns ca ON ca.id=c.campaign_id
+       LEFT JOIN sales_outcomes o ON o.contact_id=c.id
+       ORDER BY
+         CASE c.status WHEN 'replied' THEN 0 WHEN 'messaged' THEN 1 WHEN 'accepted' THEN 2
                      WHEN 'invited' THEN 3 WHEN 'new' THEN 4 ELSE 5 END,
-         COALESCE(accepted_at, invited_at, created_at) DESC`,
+         COALESCE(c.accepted_at, c.invited_at, c.created_at) DESC`,
     )
     .all() as ContactRow[];
 
@@ -83,11 +97,28 @@ export function getDashboardData() {
     { stage: "angeschrieben", label: "Angeschrieben", count: f.angeschrieben ?? 0 },
     { stage: "geantwortet", label: "Geantwortet", count: f.geantwortet ?? 0 },
   ];
+  // Dashboard braucht beide Wahrheiten: den historischen Funnel für Performance und die
+  // aktuellen Status für die Arbeitspriorität. Sie werden bewusst getrennt ausgeliefert,
+  // damit eine offene Annahme nicht wie alle jemals angenommenen Kontakte aussieht.
+  const activeReplies = counts.replied ?? 0;
+  const closedReplies = (db.prepare("SELECT COUNT(*) n FROM contacts WHERE status='closed' AND replied_at IS NOT NULL").get() as { n: number }).n;
+  const connectEvents = (db.prepare("SELECT COUNT(*) n FROM actions WHERE type='connect'").get() as { n: number }).n;
+  const uniqueConnectTargets = (db.prepare("SELECT COUNT(DISTINCT target) n FROM actions WHERE type='connect' AND target IS NOT NULL").get() as { n: number }).n;
+  const metrics = {
+    historical: {
+      invited: f.eingeladen ?? 0,
+      accepted: f.angenommen ?? 0,
+      messaged: f.angeschrieben ?? 0,
+      replied: f.geantwortet ?? 0,
+    },
+    active: { accepted: counts.accepted ?? 0, replies: activeReplies, closedReplies },
+    connectEvents: { total: connectEvents, uniqueTargets: uniqueConnectTargets, duplicates: Math.max(0, connectEvents - uniqueConnectTargets) },
+  };
 
   // Aktionen heute (lokale Zeit) pro Typ – Aktivitätspuls.
   const actionsToday = db
     .prepare(
-      "SELECT type, COUNT(*) n FROM actions WHERE date(created_at)=date('now','localtime') GROUP BY type",
+      "SELECT type, COUNT(*) n FROM actions WHERE date(created_at,'localtime')=date('now','localtime') GROUP BY type",
     )
     .all() as { type: string; n: number }[];
 
@@ -111,25 +142,30 @@ export function getDashboardData() {
   // Heute erledigt: Entwürfe heute + Posts heute (Aktionen kommen aus actionsToday).
   const draftsToday = (
     db
-      .prepare("SELECT COUNT(*) n FROM drafts WHERE date(created_at)=date('now','localtime')")
+      .prepare("SELECT COUNT(*) n FROM drafts WHERE date(created_at,'localtime')=date('now','localtime')")
       .get() as { n: number }
   ).n;
   const postsToday = (
     db
       .prepare(
-        "SELECT COUNT(*) n FROM posts WHERE status='posted' AND date(created_at)=date('now','localtime')",
+        "SELECT COUNT(*) n FROM posts WHERE status='posted' AND date(created_at,'localtime')=date('now','localtime')",
       )
       .get() as { n: number }
   ).n;
   const leadsToday = (
     db
-      .prepare("SELECT COUNT(*) n FROM contacts WHERE date(created_at)=date('now','localtime')")
+      .prepare("SELECT COUNT(*) n FROM contacts WHERE date(created_at,'localtime')=date('now','localtime')")
       .get() as { n: number }
   ).n;
 
   const leadSources = db
-    .prepare("SELECT id, label, search_url, cursor_page, active, last_added, last_run, zielgruppe FROM lead_sources ORDER BY created_at")
-    .all() as { id: number; label: string | null; active: number; last_added: number; cursor_page: number; zielgruppe: string | null }[];
+    .prepare(
+      `SELECT s.id, s.label, s.search_url, s.cursor_page, s.active, s.last_added, s.last_run, s.zielgruppe,
+              s.campaign_id, c.name AS campaign_name
+         FROM lead_sources s LEFT JOIN campaigns c ON c.id=s.campaign_id
+        ORDER BY s.created_at`,
+    )
+    .all() as { id: number; label: string | null; active: number; last_added: number; cursor_page: number; zielgruppe: string | null; campaign_id: number | null; campaign_name: string | null }[];
 
   // 7-Tage-Aktivität fürs Balkendiagramm: pro Tag connect + message (+ Rest) zählen.
   // Flache Query, im JS zu einem lückenlosen 7-Tage-Fenster (heute rechts) aufgefüllt.
@@ -137,7 +173,7 @@ export function getDashboardData() {
     .prepare(
       `SELECT date(created_at,'localtime') d, type, COUNT(*) n
          FROM actions
-        WHERE created_at >= datetime('now','localtime','-6 days','start of day')
+        WHERE created_at >= datetime('now','localtime','-6 days','start of day','utc')
         GROUP BY d, type`,
     )
     .all() as { d: string; type: string; n: number }[];
@@ -149,7 +185,7 @@ export function getDashboardData() {
     const rows = rawWeek.filter((r) => r.d === key);
     const get = (t: string) => rows.find((r) => r.type === t)?.n ?? 0;
     const connect = get("connect");
-    const message = get("message") + get("comment") + get("like");
+    const message = get("message") + get("reply") + get("comment") + get("like");
     return { label: WD[dt.getDay()], connect, message, total: connect + message, today: i === 6 };
   });
 
@@ -162,13 +198,13 @@ export function getDashboardData() {
   const connMap = Object.fromEntries(
     (db.prepare(
       `SELECT date(created_at,'localtime') d, COUNT(*) n FROM actions
-        WHERE type='connect' AND created_at >= datetime('now','localtime','-27 days','start of day') GROUP BY d`,
+        WHERE type='connect' AND created_at >= datetime('now','localtime','-27 days','start of day','utc') GROUP BY d`,
     ).all() as { d: string; n: number }[]).map((r) => [r.d, r.n]),
   );
   const accMap = Object.fromEntries(
     (db.prepare(
       `SELECT date(accepted_at,'localtime') d, COUNT(*) n FROM contacts
-        WHERE accepted_at >= datetime('now','localtime','-27 days','start of day') GROUP BY d`,
+        WHERE accepted_at >= datetime('now','localtime','-27 days','start of day','utc') GROUP BY d`,
     ).all() as { d: string; n: number }[]).map((r) => [r.d, r.n]),
   );
   const trend = Array.from({ length: 28 }, (_, i) => {
@@ -202,6 +238,10 @@ export function getDashboardData() {
     },
     recentActions,
     leadSources,
+    campaigns: listCampaigns(),
+    experiments: listExperiments(),
+    salesDesk: salesDesk(),
+    salesTasks: openSalesTasks(),
     todayDone: { drafts: draftsToday, posts: postsToday, leads: leadsToday },
     governor: governor.snapshot(),
     // SYSTEMSTATUS + FEHLER SICHTBAR: der Selbst-Check-Zustand und was zuletzt schiefging.
@@ -209,6 +249,11 @@ export function getDashboardData() {
       sendeWeg: getState("send_health") || "unbekannt", // "ok" | "broken" | "unbekannt"
       grund: getState("send_health_grund") || null,
       geprueft: getState("send_health_ts") || null,
+    },
+    operations: {
+      backup: getBackupStatus(),
+      codeVersion: getState("engine_code_version") || null,
+      processId: getState("engine_pid") || null,
     },
     sendeFehler: (() => {
       const errs = (() => {
@@ -226,6 +271,7 @@ export function getDashboardData() {
     })(),
     pipeline: PIPELINE.map((stage) => ({ stage, count: counts[stage] ?? 0 })), // AKTUELLER Status (für Chips/Tabellenfilter)
     funnel, // KUMULATIV (für den Conversion-Funnel) – echte Stufen-Zählung
+    metrics,
     totals: { contacts: contacts.length },
     actionsToday: Object.fromEntries(actionsToday.map((a) => [a.type, a.n])),
     posts: Object.fromEntries(posts.map((p) => [p.status, p.n])),
@@ -249,20 +295,20 @@ export function getDashboardData() {
       return (
         db
           .prepare(
-            `SELECT full_name, profile_url, headline, status, messaged_at, replied_at
+            `SELECT id, full_name, profile_url, headline, status, messaged_at, replied_at
                FROM contacts
               WHERE messaged_at IS NOT NULL OR replied_at IS NOT NULL OR status IN ('messaged','replied','closed')
               ORDER BY COALESCE(replied_at, messaged_at) DESC
               LIMIT 400`,
           )
           .all() as {
-          full_name: string; profile_url: string; headline: string;
+          id: number; full_name: string; profile_url: string; headline: string;
           status: string; messaged_at: string | null; replied_at: string | null;
         }[]
       ).map((c) => {
         const letzte = c.replied_at || c.messaged_at || null;
         const tage = letzte ? Math.floor((Date.now() - new Date(letzte.replace(" ", "T") + "Z").getTime()) / 86_400_000) : null;
-        return { name: c.full_name, url: c.profile_url, headline: c.headline, status: c.status, letzte, tage, hatEntwurf: offen.has(c.profile_url) };
+        return { id: c.id, name: c.full_name, url: c.profile_url, headline: c.headline, status: c.status, letzte, tage, hatEntwurf: offen.has(c.profile_url) };
       });
     })(),
     mode: getMode(),

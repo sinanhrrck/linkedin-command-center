@@ -1,6 +1,10 @@
 import { db } from "../db/index.js";
 import { config } from "../config.js";
 import { governor } from "../core/safetyGovernor.js";
+import { listCampaigns } from "./campaigns.js";
+import { computeBilanz } from "./bilanz.js";
+import { contentBrief, getDemandSignals } from "./insights.js";
+import { listExperiments } from "./experiments.js";
 
 /**
  * ANALYTICS – fundierte Kennzahlen für strategische Planung & Skalierung.
@@ -64,10 +68,10 @@ export function getAnalytics() {
   const r = db
     .prepare(
       `SELECT
-         SUM(CASE WHEN invited_at  <= datetime('now','localtime',?) THEN 1 ELSE 0 END) AS einReif,
-         SUM(CASE WHEN invited_at  <= datetime('now','localtime',?) AND accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS annReif,
-         SUM(CASE WHEN messaged_at <= datetime('now','localtime',?) THEN 1 ELSE 0 END) AS angReif,
-         SUM(CASE WHEN messaged_at <= datetime('now','localtime',?) AND replied_at IS NOT NULL THEN 1 ELSE 0 END) AS antReif
+         SUM(CASE WHEN invited_at  <= datetime('now',?) THEN 1 ELSE 0 END) AS einReif,
+         SUM(CASE WHEN invited_at  <= datetime('now',?) AND accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS annReif,
+         SUM(CASE WHEN messaged_at <= datetime('now',?) THEN 1 ELSE 0 END) AS angReif,
+         SUM(CASE WHEN messaged_at <= datetime('now',?) AND replied_at IS NOT NULL THEN 1 ELSE 0 END) AS antReif
        FROM contacts`,
     )
     .get(grenze, grenze, grenze, grenze) as Record<string, number>;
@@ -119,7 +123,7 @@ export function getAnalytics() {
       `SELECT strftime('%w', invited_at, 'localtime') AS wd, COUNT(*) AS n,
               SUM(CASE WHEN accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS acc
          FROM contacts
-        WHERE invited_at IS NOT NULL AND invited_at <= datetime('now','localtime',?)
+        WHERE invited_at IS NOT NULL AND invited_at <= datetime('now',?)
         GROUP BY wd`,
     )
     .all(grenze) as { wd: string; n: number; acc: number }[];
@@ -136,7 +140,7 @@ export function getAnalytics() {
       (db
         .prepare(
           `SELECT date(${spalte},'localtime') d, COUNT(*) n FROM contacts
-            WHERE ${spalte} >= datetime('now','localtime','-${tageZurueck - 1} days','start of day') GROUP BY d`,
+            WHERE ${spalte} >= datetime('now','localtime','-${tageZurueck - 1} days','start of day','utc') GROUP BY d`,
         )
         .all() as { d: string; n: number }[]).map((r) => [r.d, r.n]),
     );
@@ -155,37 +159,80 @@ export function getAnalytics() {
               COUNT(c.id) AS kontakte,
               SUM(CASE WHEN c.invited_at  IS NOT NULL THEN 1 ELSE 0 END) AS eingeladen,
               SUM(CASE WHEN c.accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS angenommen,
+              SUM(CASE WHEN c.messaged_at IS NOT NULL THEN 1 ELSE 0 END) AS angeschrieben,
               SUM(CASE WHEN c.replied_at  IS NOT NULL THEN 1 ELSE 0 END) AS geantwortet
          FROM lead_sources s LEFT JOIN contacts c ON c.source_id = s.id
         GROUP BY s.id ORDER BY kontakte DESC`,
     )
-    .all() as { id: number; label: string | null; kontakte: number; eingeladen: number; angenommen: number; geantwortet: number }[];
+    .all() as { id: number; label: string | null; kontakte: number; eingeladen: number; angenommen: number; angeschrieben: number; geantwortet: number }[];
   const quellenAufbereitet = quellen.map((q) => ({
     ...q,
     label: q.label || "Quelle",
     annahmePct: q.eingeladen > 0 ? Math.round((q.angenommen / q.eingeladen) * 100) : null,
-    antwortPct: q.angenommen > 0 ? Math.round((q.geantwortet / q.angenommen) * 100) : null,
+    antwortPct: q.angeschrieben > 0 ? Math.round((q.geantwortet / q.angeschrieben) * 100) : null,
   }));
   const kontakteOhneQuelle = (db.prepare("SELECT COUNT(*) n FROM contacts WHERE source_id IS NULL").get() as { n: number }).n;
 
-  // --- Skalierungs-Projektion: was bringt mehr Vernetzungs-Volumen? ---
-  // Rechnung: Vernetzungen/Woche × Annahmequote × Antwortquote = erwartete Hot Leads/Woche.
-  // Basis: die belastbaren Gesamt-Quoten. Zeigt den Hebel (Volumen vs. Quote) transparent.
+  // --- Skalierungs-Projektion: jeder echte Funnel-Schritt zählt. ---
+  // Eine Antwortquote bezieht sich auf angeschriebene Kontakte; deshalb darf sie nicht direkt
+  // mit der Annahmequote multipliziert werden. Der Übergang angenommen → angeschrieben wird
+  // explizit einbezogen, sonst wäre die Forecast-Zahl zu optimistisch.
   const aRate = gesamt.eingeladen > 0 ? gesamt.angenommen / gesamt.eingeladen : 0;
+  const mRate = gesamt.angenommen > 0 ? gesamt.angeschrieben / gesamt.angenommen : 0;
   const rRate = gesamt.angeschrieben > 0 ? gesamt.geantwortet / gesamt.angeschrieben : 0;
   const proWoche = (vernetzungen: number) => {
     const ang = vernetzungen * aRate;
-    const hot = ang * rRate;
-    return { vernetzungen, angenommen: Math.round(ang * 10) / 10, hotLeads: Math.round(hot * 10) / 10 };
+    const nachrichten = ang * mRate;
+    const hot = nachrichten * rRate;
+    return {
+      vernetzungen,
+      angenommen: Math.round(ang * 10) / 10,
+      nachrichten: Math.round(nachrichten * 10) / 10,
+      hotLeads: Math.round(hot * 10) / 10,
+    };
   };
+  const connectEvents = db.prepare("SELECT COUNT(*) n FROM actions WHERE type='connect'").get() as { n: number };
+  const uniqueConnectTargets = db.prepare("SELECT COUNT(DISTINCT target) n FROM actions WHERE type='connect' AND target IS NOT NULL").get() as { n: number };
   const projektion = {
     annahmeRate: Math.round(aRate * 100),
+    anschreibRate: Math.round(mRate * 100),
     antwortRate: Math.round(rRate * 100),
     weeklyCap: config.safety.weeklyConnectCap,
     szenarien: [25, 50, config.safety.weeklyConnectCap].map(proWoche),
     // pro Hot Lead nötige Vernetzungen (Effizienz-Kennzahl)
-    vernetzungenProHotLead: aRate * rRate > 0 ? Math.round(1 / (aRate * rRate)) : null,
+    vernetzungenProHotLead: aRate * mRate * rRate > 0 ? Math.round(1 / (aRate * mRate * rRate)) : null,
+  };
+  const datenbasis = {
+    connectEvents: connectEvents.n,
+    uniqueConnectTargets: uniqueConnectTargets.n,
+    duplicateConnectEvents: Math.max(0, connectEvents.n - uniqueConnectTargets.n),
   };
 
-  return { gesamt, funnel, quoten, tempo, wochentage, verlauf, quellen: quellenAufbereitet, kontakteOhneQuelle, projektion, generatedAt: new Date().toISOString() };
+  // --- Vertriebs-Attribution: nicht nur Quelle, sondern bis zum echten Ergebnis. ---
+  const kampagnen = listCampaigns();
+  const outcomes = db.prepare(
+    `SELECT stage, COUNT(*) AS n, COALESCE(SUM(value_cents),0) AS value_cents
+       FROM sales_outcomes GROUP BY stage`,
+  ).all() as { stage: string; n: number; value_cents: number }[];
+  const ergebnisse = Object.fromEntries(outcomes.map((o) => [o.stage, { count: o.n, valueCents: o.value_cents }]));
+
+  // --- Lernschleife: Welche KI-Entwürfe bleiben stehen, welche bearbeitet der Mensch? ---
+  const textQualitaet = computeBilanz()
+    .filter((b) => b.entschieden > 0)
+    .sort((a, b) => b.entschieden - a.entschieden);
+  const signale = getDemandSignals();
+  const brief = contentBrief();
+  const empfehlungen: string[] = [];
+  const beste = kampagnen.filter((k) => k.leads > 0).sort((a, b) => (b.meetings * 100 + b.replied) - (a.meetings * 100 + a.replied))[0];
+  if (beste) empfehlungen.push(`Fokus halten: „${beste.name}" liefert ${beste.replied} Antwort${beste.replied === 1 ? "" : "en"} und ${beste.meetings} Termin${beste.meetings === 1 ? "" : "e"}.`);
+  if (signale[0]) empfehlungen.push(`Nächsten Content an „${signale[0].label}" ausrichten – das Thema taucht in ${signale[0].mentions} Gesprächssignal${signale[0].mentions === 1 ? "" : "en"} auf.`);
+  const lernfeld = textQualitaet.find((b) => b.editiert > 0 || b.verworfen > 0);
+  if (lernfeld) empfehlungen.push(`Nachrichten nachschärfen: Kategorie „${lernfeld.intent}" wird noch häufig angepasst (${lernfeld.editiert}×) oder verworfen (${lernfeld.verworfen}×).`);
+  if (!empfehlungen.length) empfehlungen.push("Noch zu wenig Ergebnisdaten. Erst Gespräche und Outcomes erfassen, dann entstehen belastbare Prioritäten.");
+
+  return {
+    gesamt, funnel, quoten, tempo, wochentage, verlauf, quellen: quellenAufbereitet,
+    kontakteOhneQuelle, projektion, datenbasis, kampagnen, experiments: listExperiments(), ergebnisse, textQualitaet, signale, brief, empfehlungen,
+    generatedAt: new Date().toISOString(),
+  };
 }
