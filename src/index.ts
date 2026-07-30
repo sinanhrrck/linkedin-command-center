@@ -19,6 +19,7 @@ import { config } from "./config.js";
 import { startTelegram } from "./modules/telegram.js";
 import { countByStatus, resetHaengendeInvites } from "./modules/crm.js";
 import { saveLiveShot } from "./core/session.js";
+import { SerialJobQueue } from "./core/jobQueue.js";
 
 /**
  * Zentraler Loop. Läuft lokal dauerhaft.
@@ -32,22 +33,27 @@ import { saveLiveShot } from "./core/session.js";
  * NICHT: Ein Inbox-Scan, Agent und Versand könnten sich sonst gegenseitig mitten im Ablauf
  * weg-navigieren. Das verursachte fehlgeschlagene bzw. doppelte Nachrichten.
  *
- * Ein wartender Cron-Tick wird bewusst übersprungen statt parallel ausgeführt. Der nächste Tick
- * holt ihn nach; Sicherheit und korrekte Empfängerzuordnung sind wichtiger als Durchsatz.
+ * Jobs werden seriell ausgeführt. Ein wartender Tick bleibt dabei erhalten und wird nach
+ * Priorität abgearbeitet – freigegebene Nachrichten werden nicht von langem Outreach verdrängt.
  */
-let laufenderJob: string | null = null;
-async function einzeln(name: string, fn: () => Promise<unknown>) {
-  if (laufenderJob) {
-    console.info(`[${name}] übersprungen – [${laufenderJob}] nutzt gerade den Browser (kein Parallelzugriff).`);
-    return;
+const jobQueue = new SerialJobQueue((snapshot) => {
+  setState("engine_active_job", snapshot.activeJob ?? "");
+  setState("engine_queue_length", String(snapshot.queuedJobs));
+  setState("engine_queue_next", snapshot.nextJob ?? "");
+});
+
+async function einzeln(name: string, fn: () => Promise<unknown>, priority = 50) {
+  const { queued, done } = jobQueue.enqueue(name, fn, priority);
+  if (!queued) {
+    console.info(`[${name}] bereits aktiv oder vorgemerkt.`);
+    return false;
   }
-  laufenderJob = name;
   try {
-    await fn();
+    await done;
+    return true;
   } catch (e) {
     console.error(`[${name}] Fehler:`, e);
-  } finally {
-    laufenderJob = null;
+    return false;
   }
 }
 
@@ -139,10 +145,13 @@ setState("engine_heartbeat", new Date().toISOString());
 setState("engine_started", new Date().toISOString());
 setState("engine_pid", String(process.pid)); // fürs saubere Stoppen vom Dashboard
 setState("engine_code_version", ENGINE_CODE_VERSION);
+setState("engine_active_job", "");
+setState("engine_queue_length", "0");
+setState("engine_queue_next", "");
 cron.schedule("* * * * *", async () => {
   setState("engine_heartbeat", new Date().toISOString());
   // Ein Screenshot auf derselben Seite darf keine Navigation/Interaktion unterbrechen.
-  if (!laufenderJob) await saveLiveShot();
+  if (!jobQueue.snapshot().activeJob) await saveLiveShot();
 });
 
 // Beim Start EINMAL sofort loslegen, statt bis zu 12 Min auf den ersten Cron-Tick zu warten.
@@ -150,25 +159,25 @@ cron.schedule("* * * * *", async () => {
 setTimeout(async () => {
   // ZUERST der Selbst-Check: Funktioniert der Sende-Weg überhaupt? Ist er defekt, blockiert der
   // Governor Nachrichten von vornherein (statt still zu scheitern) und meldet es dir.
-  await einzeln("healthcheck", () => selbstCheck());
-  await einzeln("acceptance", () => checkAcceptances());
-  await einzeln("outreach", () => outreachTick());
+  await einzeln("healthcheck", () => selbstCheck(), 75);
+  await einzeln("acceptance", () => checkAcceptances(), 60);
+  await einzeln("outreach", () => outreachTick(), 30);
   // Auch das Postfach sofort prüfen: wer den Bot mittags startet, soll nicht bis zur
   // nächsten Viertelstunde warten, um zu sehen, dass er arbeitet.
   await einzeln("drafts", async () => {
     if (getAgentMode() === "off") await generateInboxDrafts(8);
-  });
+  }, 80);
   // Freigegebene Entwürfe, die noch offen sind, gleich beim Start abarbeiten.
-  await einzeln("sendApproved", () => sendApprovedDrafts(15));
+  await einzeln("sendApproved", () => sendApprovedDrafts(15), 100);
   // Beim Start einmal Nachschub holen: wer Quellen angelegt + den Bot gestartet hat, bekommt
   // gleich Leads, statt bis zum nächsten festen Fütter-Termin zu warten.
-  await einzeln("feed", () => feedTick());
+  await einzeln("feed", () => feedTick(), 20);
   // Post-Ideen: nur nachlegen, wenn KEINE offen sind (schont das Gemini-Limit). So sieht der
   // Nutzer gleich beim ersten Start Beitrags-Entwürfe zum Freigeben, statt bis Montag zu warten.
   await einzeln("content", async () => {
     const offen = (db.prepare("SELECT COUNT(*) AS n FROM posts WHERE status='draft'").get() as { n: number }).n;
     if (offen === 0) await generatePostIdeas(2);
-  });
+  }, 10);
 }, 4000);
 
 /**
@@ -204,26 +213,26 @@ cron.schedule("* * * * *", () =>
       db.prepare("UPDATE posts SET status='failed' WHERE id=?").run(due.id);
       console.error(`[post] fehlgeschlagen (#${due.id}):`, (e as Error)?.message?.slice(0, 120));
     }
-  }),
+  }, 90),
 );
 
 // SELBST-CHECK alle 3 Stunden (rein lesend): prüft, ob der Sende-Weg (Login/Postfach/Eingabefeld/
 // Senden-Knopf) technisch funktioniert. Bricht ein Selektor, wird der Sende-Weg als defekt markiert
 // → Governor pausiert Nachrichten + Telegram-/Dashboard-Alarm, statt still Fehler zu produzieren.
-cron.schedule("15 9-21/3 * * *", () => einzeln("healthcheck", () => selbstCheck()));
+cron.schedule("15 9-21/3 * * *", () => einzeln("healthcheck", () => selbstCheck(), 75));
 
 // Outreach-Tick alle 12 Minuten. Der Governor drosselt intern (Caps/Warm-up/Zeitfenster/Delays).
-cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick()));
+cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick(), 30));
 
 // Acceptance-Tracking STÜNDLICH in der Arbeitszeit (vorher nur 3x täglich).
 // Rein lesend, kein Senden, kein Governor → kostet KEINE Sicherheit, spart aber Wartezeit:
 // Jede erkannte Annahme erzeugt sofort den Erstnachricht-Entwurf. Vorher lag zwischen
 // "hat angenommen" und "Entwurf liegt bereit" bis zu 8 Stunden, jetzt maximal 1.
-cron.schedule("5 9-22 * * *", () => einzeln("acceptance", () => checkAcceptances()));
+cron.schedule("5 9-22 * * *", () => einzeln("acceptance", () => checkAcceptances(), 60));
 
 // Lead-Fütterung 2x täglich: gespeicherte Such-Quellen abgrasen (rein lesend).
 // Hält die Pipeline gefüllt, damit der Outreach nicht trockenläuft.
-cron.schedule("0 10,16 * * *", () => einzeln("feed", () => feedTick()));
+cron.schedule("0 10,16 * * *", () => einzeln("feed", () => feedTick(), 20));
 
 // SOFORT-NACHSCHUB auf Knopfdruck: das Dashboard setzt "feed_now"=1 (neue Quelle oder
 // "Jetzt Nachschub holen"). Der Loop prüft alle 2 Min und füttert dann gleich – so wirkt der
@@ -234,7 +243,7 @@ cron.schedule("*/2 * * * *", () =>
     if (getState("feed_now") !== "1") return;
     setState("feed_now", "");
     await feedTick();
-  }),
+  }, 40),
 );
 
 /**
@@ -252,9 +261,9 @@ cron.schedule("*/2 * * * *", () =>
     if (getState("netzwerk_now") !== "1") return;
     setState("netzwerk_now", "");
     await netzwerkLauf(5);
-  }),
+  }, 45),
 );
-cron.schedule("30 9 * * 2", () => einzeln("netzwerk", () => netzwerkLauf(3)));
+cron.schedule("30 9 * * 2", () => einzeln("netzwerk", () => netzwerkLauf(3), 35));
 
 /**
  * OFFENE-ANTWORTEN-SCAN (Sinans Vorgabe 2026-07-27): geht ALLE Chats durch – auch alte, längst
@@ -274,9 +283,9 @@ cron.schedule("*/2 * * * *", () =>
     if (getState("offene_now") !== "1") return;
     setState("offene_now", "");
     await offeneAntwortenScan(40);
-  }),
+  }, 85),
 );
-cron.schedule("5 9 * * *", () => einzeln("offene", () => offeneAntwortenScan(40)));
+cron.schedule("5 9 * * *", () => einzeln("offene", () => offeneAntwortenScan(40), 80));
 
 // PITCH Stufe 2 auf Knopfdruck: Dashboard setzt "pitch_now"={id,idee} → der Loop generiert aus dem
 // gewählten Ansatz die Nachricht (neuer 'message'-Entwurf zur zweiten Freigabe). Nur LLM, kein Browser.
@@ -291,7 +300,7 @@ cron.schedule("*/2 * * * *", () =>
     } catch (e) {
       console.error(`[pitch] ${(e as Error)?.message?.slice(0, 90)}`);
     }
-  }),
+  }, 90),
 );
 
 // CHAT WIEDERBELEBEN auf Knopfdruck: Dashboard setzt "wiederbeleben_now"=<profil-url> → der Loop
@@ -302,7 +311,7 @@ cron.schedule("*/2 * * * *", () =>
     if (!ziel) return;
     setState("wiederbeleben_now", "");
     await reviveChat(ziel).catch((e: Error) => console.error(`[wiederbeleben] ${e?.message?.slice(0, 90)}`));
-  }),
+  }, 90),
 );
 
 // REICHWEITE JETZT auf Knopfdruck: Dashboard setzt "comment_now"=1 → der Loop liked + erzeugt
@@ -312,7 +321,7 @@ cron.schedule("*/2 * * * *", () =>
     if (getState("comment_now") !== "1") return;
     setState("comment_now", "");
     await commentTick(3);
-  }),
+  }, 40),
 );
 
 // DM-Entwürfe 2x täglich generieren (rein lesend + Gemini, SENDET NICHT).
@@ -331,7 +340,7 @@ cron.schedule("*/15 9-22 * * *", () =>
   einzeln("drafts", async () => {
     // Sobald der Sales-Agent aktiv ist (Test/Live), macht ER die Antworten – dann keine Alt-Entwürfe.
     if (getAgentMode() === "off") await generateInboxDrafts(8);
-  }),
+  }, 80),
 );
 
 // MORGEN-ROUTINE (9:00, Sinans Vorgabe): erst alle offenen Chats beantworten (Entwürfe
@@ -341,31 +350,31 @@ cron.schedule("0 9 * * *", () =>
   einzeln("morgen", async () => {
     if (getAgentMode() === "off") await generateInboxDrafts(10);
     await sendApprovedDrafts(20);
-  }),
+  }, 95),
 );
 
 // Freigegebene Entwürfe regelmäßig senden (alle 10 Min in der Arbeitszeit). Governor-gedrosselt;
 // Nachrichten sind werktags-gated, am Wochenende wartet also alles bis Montag.
 // Läuft rund um die Uhr; ob wirklich gesendet wird, entscheidet der Governor (Zeitfenster-Schalter).
-cron.schedule("*/10 * * * *", () => einzeln("sendApproved", () => sendApprovedDrafts(10)));
+cron.schedule("*/10 * * * *", () => einzeln("sendApproved", () => sendApprovedDrafts(10), 100));
 
 // Follow-ups 1x täglich: für Kontakte, die seit >=4 Tagen nicht geantwortet haben.
-cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4, 5)));
+cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4, 5), 55));
 
 // SALES-AGENT = die EINZIGE Gesprächs-Engine (der alte Autopilot `runAutopilot` ist bewusst
 // stillgelegt – es gibt nur noch EINEN Bot, das war vorher verwirrend). Der Cron läuft immer,
 // `agentTick` prüft selbst die Automatik-Stufe (off/shadow/live) → per Klick umschaltbar ohne Neustart.
-cron.schedule(`*/${config.agent.intervalMinutes} * * * *`, () => einzeln("agent", () => agentTick()));
+cron.schedule(`*/${config.agent.intervalMinutes} * * * *`, () => einzeln("agent", () => agentTick(), 90));
 
 // KOMMENTARE: 1x täglich (12:30) Nischen-Posts finden und Kommentar-ENTWÜRFE erzeugen.
 // Öffentlich → immer erst Freigabe (Telegram), nie autonom. Moderate Frequenz: Sichtbarkeit
 // entsteht durch stetige, gute Kommentare, nicht durch Masse. Governor-gated erst beim Senden.
-cron.schedule("30 12 * * 1-5", () => einzeln("comment", () => commentTick(3)));
+cron.schedule("30 12 * * 1-5", () => einzeln("comment", () => commentTick(3), 30));
 
 // CONTENT: 1x pro Woche (Montag 8 Uhr) Post-Ideen erzeugen. Sie landen als Entwürfe und werden
 // erst nach Freigabe veröffentlicht (öffentlich = nie autonom). Läuft für JEDEN – das Posten
 // selbst geht per API oder Browser (siehe oben), deshalb nicht mehr an `hatPosting` gebunden.
-cron.schedule("0 8 * * 1", () => einzeln("content", () => generatePostIdeas(3)));
+cron.schedule("0 8 * * 1", () => einzeln("content", () => generatePostIdeas(3), 10));
 
 // WOCHEN-BILANZ automatisch: Montag 9:05 Uhr per Telegram, ohne dass Sinan etwas tippt.
 // "sowas muss automatisch passieren" – der Report kommt von allein, reife Kategorien

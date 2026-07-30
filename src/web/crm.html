@@ -1486,6 +1486,25 @@ function slugOf(url) { return (url || "").split("/in/")[1]?.replace(/\/$/, "") |
 
 function renderActivity() {
   const e = state.engine || { alive: false, heartbeat: null };
+  const JOB_LABELS = {
+    sendApproved: "Freigegebene Nachrichten werden zugestellt",
+    agent: "Antworten werden geprüft",
+    drafts: "Antwort-Entwürfe werden vorbereitet",
+    acceptance: "Neue Annahmen werden erkannt",
+    outreach: "Passende Leads werden vernetzt",
+    healthcheck: "Sendeweg wird geprüft",
+    post: "Freigegebener Beitrag wird veröffentlicht",
+    feed: "Lead-Quellen werden aktualisiert",
+    offene: "Offene Antworten werden geprüft",
+    followup: "Follow-ups werden vorbereitet",
+    netzwerk: "Netzwerk wird reaktiviert",
+    content: "Content-Ideen werden vorbereitet",
+    comment: "Reichweite wird vorbereitet",
+    pitch: "Pitch-Entwurf wird erstellt",
+    wiederbeleben: "Nachfass-Entwurf wird erstellt",
+    morgen: "Morgenroutine läuft",
+  };
+  const jobLabel = (name) => JOB_LABELS[name] || name;
   const dot = document.getElementById("bot-dot");
   const word = document.getElementById("bot-word");
   const c = e.alive ? "var(--green)" : "var(--red)";
@@ -1498,7 +1517,9 @@ function renderActivity() {
     sfWord.textContent = e.alive ? "Arbeitet" : "Offline";
     sfDot.style.background = e.alive ? "#7de0ac" : "#f5a3a7";
     sfDot.style.boxShadow = "0 0 0 3px " + (e.alive ? "rgba(125,224,172,.25)" : "rgba(245,163,167,.22)");
-    sfSub.textContent = e.alive ? "Läuft und füttert die Pipeline." : "Gestoppt. Oben wieder starten.";
+    sfSub.textContent = e.alive
+      ? (e.activeJob ? jobLabel(e.activeJob) : "Bereit für die nächste Vertriebsaktion.")
+      : "Gestoppt. Oben wieder starten.";
   }
   // Sidebar-Badges: pro Modul-Unterpunkt, damit man ohne Klick sieht, wo etwas liegt.
   const badge = (id, n) => { const el = document.getElementById(id); if (el) { el.textContent = n; el.style.display = n ? "" : "none"; } };
@@ -1515,7 +1536,15 @@ function renderActivity() {
     ? `<br><span style="color:var(--ink-faint)">${activeSrc} Lead-Quelle${activeSrc > 1 ? "n" : ""} aktiv – füttert automatisch.</span>`
     : `<br><span style="color:var(--ink-faint)">Noch keine Lead-Quellen. Unten bei „Lead-Quellen" eine LinkedIn-Suche hinzufügen.</span>`;
   const hb = document.getElementById("bot-hb");
-  if (e.alive) hb.innerHTML = `Loop läuft. Vernetzt, trackt Annahmen und schreibt Entwürfe automatisch.${srcLine}`;
+  if (e.alive) {
+    const work = e.activeJob
+      ? `<br><span style="color:var(--accent)">Jetzt: ${jobLabel(e.activeJob)}.</span>`
+      : `<br><span style="color:var(--ink-faint)">Bereit für die nächste Vertriebsaktion.</span>`;
+    const queue = e.queuedJobs
+      ? ` <span style="color:var(--ink-faint)">${e.queuedJobs} weitere Aktion${e.queuedJobs === 1 ? "" : "en"} warten priorisiert${e.nextJob ? ` · als Nächstes: ${jobLabel(e.nextJob)}` : ""}.</span>`
+      : "";
+    hb.innerHTML = `Loop läuft. Vernetzt, trackt Annahmen und schreibt Entwürfe automatisch.${work}${queue}${srcLine}`;
+  }
   else if (e.heartbeat) hb.innerHTML = `Zuletzt aktiv ${relDate(e.heartbeat).t}. Starten über den Knopf „Bot starten".${srcLine}`;
   else hb.innerHTML = `Noch nie gestartet. Klick oben auf „Bot starten".${srcLine}`;
 

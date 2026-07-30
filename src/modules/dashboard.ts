@@ -191,7 +191,15 @@ export function getDashboardData() {
 
   return {
     generatedAt: new Date().toISOString(),
-    engine: { heartbeat, alive: engineAlive, startedAt: getState("engine_started") || null, veraltet: engineVeraltet() },
+    engine: {
+      heartbeat,
+      alive: engineAlive,
+      startedAt: getState("engine_started") || null,
+      veraltet: engineVeraltet(),
+      activeJob: getState("engine_active_job") || null,
+      queuedJobs: Number(getState("engine_queue_length") || 0) || 0,
+      nextJob: getState("engine_queue_next") || null,
+    },
     recentActions,
     leadSources,
     todayDone: { drafts: draftsToday, posts: postsToday, leads: leadsToday },
