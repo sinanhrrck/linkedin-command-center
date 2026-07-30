@@ -616,6 +616,88 @@
     .sidebar { display: none; }
     .wrap { padding: 20px 18px 60px; }
   }
+
+  /* ---------- NextLead · Signal Board (Premium cockpit refresh) ---------- */
+  :root {
+    --bg: #f3f5f4;
+    --bg-2: #eaeeec;
+    --panel: #ffffff;
+    --panel-2: #f7f9f8;
+    --line: #e2e8e5;
+    --line-strong: #d3ddd8;
+    --ink: #11291f;
+    --ink-dim: #607169;
+    --ink-faint: #8b9992;
+    --accent: #167b57;
+    --green: #159763;
+    --amber: #b7791f;
+    --red: #cf4d58;
+    --radius: 16px;
+    --shadow: 0 1px 2px rgba(17,41,31,.03), 0 16px 38px -24px rgba(17,41,31,.20);
+    --shadow-sm: 0 1px 2px rgba(17,41,31,.04), 0 8px 18px -15px rgba(17,41,31,.16);
+  }
+  body { background: radial-gradient(circle at 76% -20%, #e4f0e9 0, transparent 31rem), var(--bg); }
+  .sidebar { width: 252px; flex-basis: 252px; padding: 24px 17px 18px; background: rgba(255,255,255,.86); backdrop-filter: blur(18px); }
+  .side-brand { padding: 5px 9px 26px; }
+  .side-brand .bt span { letter-spacing: .11em; }
+  .side-lab { padding-top: 10px; }
+  .nav-item, .nav-grp { border-radius: 9px; }
+  .nav-item.active { background: #e5f2eb; }
+  .side-foot { border-radius: 12px; background: #163d2d; }
+  .wrap { max-width: 1450px; padding: 30px 36px 80px; }
+  .topbar { align-items: center; margin-bottom: 22px; }
+  .tb-title h1 { font-size: 30px; letter-spacing: -.035em; }
+  .tb-title p { font-size: 13.5px; }
+  .clock { border: none; box-shadow: none; background: rgba(255,255,255,.65); }
+
+  .signal-ribbon { display: flex; align-items: stretch; gap: 0; margin: 0 0 18px; padding: 0 10px; min-height: 100px; background: #173d2e; border-radius: 17px; color: white; box-shadow: 0 20px 45px -28px rgba(12,57,38,.64); overflow: hidden; }
+  .signal-intro { width: 210px; flex: 0 0 210px; display: flex; flex-direction: column; justify-content: center; padding: 20px 14px; border-right: 1px solid rgba(255,255,255,.14); }
+  .signal-kicker { font-family: var(--mono); font-size: 9px; letter-spacing: .13em; text-transform: uppercase; color: #92c9ad; }
+  .signal-title { margin-top: 5px; font-family: var(--display); font-size: 18px; font-weight: 700; letter-spacing: -.025em; }
+  .signal-sub { margin-top: 4px; color: rgba(255,255,255,.62); font-size: 11px; line-height: 1.35; }
+  .signal-stages { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); align-items: center; }
+  .signal-stage { position: relative; min-width: 0; padding: 16px 20px; }
+  .signal-stage:not(:last-child)::after { content: ""; position: absolute; width: 23px; height: 1px; right: -11px; top: 52%; background: rgba(165,226,194,.38); z-index: 1; }
+  .signal-stage:not(:last-child)::before { content: "›"; position: absolute; right: -15px; top: calc(52% - 10px); color: #99d1b3; z-index: 2; font-size: 18px; }
+  .signal-stage-label { display: block; color: rgba(255,255,255,.6); font-size: 10px; font-weight: 600; letter-spacing: .055em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .signal-stage-value { display: block; margin-top: 5px; font-family: var(--display); font-size: 27px; line-height: 1; font-weight: 700; letter-spacing: -.04em; }
+  .signal-stage-note { display: block; min-height: 13px; margin-top: 6px; color: #a9d8bd; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .signal-stage.is-attention .signal-stage-value { color: #ffd084; }
+  .signal-stage.is-attention .signal-stage-note { color: #ffe2af; }
+
+  .dashboard-layout { display: grid; grid-template-columns: minmax(0, 1fr) 292px; gap: 18px; align-items: start; }
+  .dashboard-primary { min-width: 0; }
+  .decision-rail { position: sticky; top: 24px; }
+  .decision-rail::before { content: "Jetzt entscheiden"; display: block; margin: 3px 2px 10px; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--ink-faint); }
+  .decision-rail .action-center { margin: 0; padding: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .decision-rail .action-center.clear { display: block; padding: 20px; background: #edf7f1; border-color: #d6ebdd; }
+  .decision-rail .action-center.clear .ac-check { margin-bottom: 10px; }
+  .decision-rail .ac-head { margin: 2px 2px 13px; }
+  .decision-rail .ac-title { font-size: 15px; }
+  .decision-rail .ac-items { display: flex; flex-direction: column; gap: 8px; }
+  .decision-rail .ac-item { min-height: 78px; padding: 11px; gap: 9px; border-left-width: 1px; border-radius: 11px; box-shadow: none; }
+  .decision-rail .ac-item.hot { border-left: 3px solid var(--red); }
+  .decision-rail .ac-item.amber { border-left: 3px solid var(--amber); }
+  .decision-rail .ac-ic { width: 31px; height: 31px; flex-basis: 31px; border-radius: 9px; }
+  .decision-rail .ac-txt { font-size: 12px; line-height: 1.4; }
+  .decision-rail .ac-cta { display: none; }
+  .command { grid-template-columns: 1.4fr repeat(4, minmax(115px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .cmd-hero, .cmd-stat { min-height: 123px; padding: 17px 18px; border-radius: 14px; box-shadow: var(--shadow-sm); }
+  .cmd-hero { background: #1d4c38; }
+  .cmd-hero-num { font-size: 43px; }
+  .cs-val { font-size: 27px; }
+  .cs-ic { width: 27px; height: 27px; flex-basis: 27px; }
+  .analytics-big { padding: 22px; margin-bottom: 10px; border-radius: 16px; }
+  .chart-split { gap: 24px; }
+  .chart-week { padding-left: 24px; }
+  .hero { gap: 10px; margin-bottom: 0; }
+  .panel { border-radius: 16px; box-shadow: var(--shadow-sm); }
+  .activity-panel { margin-top: 18px; border-radius: 16px; box-shadow: var(--shadow-sm); }
+  .kstatus { border-radius: 13px; }
+  @media (max-width: 1200px) { .dashboard-layout { grid-template-columns: 1fr; } .decision-rail { position: static; } .decision-rail .ac-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); } }
+  @media (max-width: 900px) { .signal-intro { width: 165px; flex-basis: 165px; } .signal-stage { padding: 15px 12px; } .signal-stage-value { font-size: 23px; } .command { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 640px) { .wrap { padding: 20px 15px 60px; } .signal-ribbon { display: block; padding: 0; } .signal-intro { width: auto; padding: 17px; border-right: none; border-bottom: 1px solid rgba(255,255,255,.14); } .signal-stages { grid-template-columns: repeat(3, 1fr); } .signal-stage { padding: 14px; } .signal-stage:nth-child(3)::after, .signal-stage:nth-child(3)::before { display:none; } .signal-stage-value { font-size: 22px; } .command { grid-template-columns: repeat(2, 1fr); } .cmd-hero { grid-column: span 2; } .chart-split { grid-template-columns: 1fr; } .chart-week { padding: 22px 0 0; border-left: 0; border-top: 1px solid var(--line); } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 </style>
 </head>
 <body>
@@ -707,6 +789,20 @@
   <!-- KLARTEXT-STATUS: eine einfache Ampel-Zeile, die JEDEM sofort sagt, wie's steht + heute + nächster Schritt. -->
   <div id="klartext-status" class="kstatus"></div>
 
+  <!-- SIGNAL-RIBBON: Die gesamte Pipeline in einer Blicklinie. Bewusst kein generisches KPI-Grid,
+       sondern der echte Weg vom gefundenen Kontakt bis zum Termin. -->
+  <section class="signal-ribbon" aria-label="Deine Pipeline heute">
+    <div class="signal-intro">
+      <span class="signal-kicker">Pipeline · live</span>
+      <strong class="signal-title">Dein Vertriebsfluss</strong>
+      <span class="signal-sub">Wo Bewegung entsteht – und wo du eingreifen solltest.</span>
+    </div>
+    <div class="signal-stages" id="signal-stages"></div>
+  </section>
+
+  <div class="dashboard-layout">
+  <div class="dashboard-primary">
+
   <!-- Hero-Kommandozeile -->
   <section class="command">
     <div class="cmd-hero">
@@ -736,9 +832,6 @@
       </div>
     </div>
   </section>
-
-  <!-- Action-Center: was jetzt zu tun ist (smart, spart die Suche) -->
-  <section class="action-center" id="action-center"></section>
 
   <!-- Aktivität & Verlauf: EIN grosses Panel mit zwei Diagrammen (weniger Kacheln) -->
   <section class="panel analytics-big">
@@ -828,6 +921,13 @@
       <div class="gauge-note" id="g-note">—</div>
     </div>
   </section>
+
+  </div><!-- /.dashboard-primary -->
+  <aside class="decision-rail" aria-label="Offene Entscheidungen">
+    <!-- Was auf menschliche Aufmerksamkeit wartet, bleibt immer am rechten Rand sichtbar. -->
+    <section class="action-center" id="action-center"></section>
+  </aside>
+  </div><!-- /.dashboard-layout -->
 
   <!-- Bot-Aktivität -->
   <section class="panel activity-panel">
@@ -1304,6 +1404,7 @@ function render() {
   const accD = document.getElementById("kpi-acc-delta"); if (accD) accD.innerHTML = deltaBadge(dl.accepted);
   const hotD = document.getElementById("kpi-hot-delta"); if (hotD) hotD.innerHTML = dl.replied ? deltaBadge(dl.replied) : "";
 
+  renderSignalRibbon();
   renderChart();
   renderTrend();
   renderSystemHealth();
@@ -1334,6 +1435,33 @@ function render() {
   renderRows();
   document.getElementById("foot").textContent =
     "Aktualisiert " + new Date(state.generatedAt).toLocaleTimeString("de-DE") + " · " + state.totals.contacts + " Kontakte · auto-refresh 20s";
+}
+
+/**
+ * Die Signal-Ribbon zeigt bewusst nicht noch mehr Kennzahlen, sondern die Reihenfolge, in der
+ * LinkedIn-Vertrieb wirklich funktioniert. Sie ist die visuelle Antwort auf „Was passiert gerade
+ * mit meiner Pipeline?“ – die letzte Stufe wird hervorgehoben, wenn sie menschliche Entscheidung
+ * braucht, statt eine bloße Erfolgsmeldung zu sein.
+ */
+function renderSignalRibbon() {
+  const el = document.getElementById("signal-stages");
+  if (!el) return;
+  const counts = Object.fromEntries((state.pipeline || []).map(p => [p.stage, p.count]));
+  const funnel = Object.fromEntries((state.funnel || []).map(p => [p.stage, p.count]));
+  const hot = (state.hotLeads || []).length;
+  const booked = (state.bookedLeads || []).length;
+  const stages = [
+    { label: "Neue Leads", value: counts.new || 0, note: "bereit für Kontakt" },
+    { label: "Vernetzt", value: funnel.eingeladen || 0, note: "Anfragen gesamt" },
+    { label: "Angenommen", value: funnel.angenommen || 0, note: "bereit für Nachricht" },
+    { label: "Antworten", value: funnel.geantwortet || 0, note: hot ? `${hot} brauchen dich jetzt` : "Gespräche im Fluss", attention: hot > 0 },
+    { label: "Termine", value: booked, note: booked ? "Übergabe bereit" : "noch offen", attention: booked > 0 },
+  ];
+  el.innerHTML = stages.map(s => `<div class="signal-stage${s.attention ? " is-attention" : ""}">
+    <span class="signal-stage-label">${s.label}</span>
+    <strong class="signal-stage-value">${s.value}</strong>
+    <span class="signal-stage-note">${s.note}</span>
+  </div>`).join("");
 }
 
 const SVG = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
