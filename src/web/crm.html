@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>NextLead · Dashboard</title>
-<link rel="icon" type="image/png" href="assets/mark.png" />
+<link rel="icon" type="image/png" href="assets/nextlead-mark-blue.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Sora:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -29,11 +29,11 @@
     --green: #1f9d63;         /* Erfolg / positiv */
     --amber: #c07a12;         /* Entwurf / Warnung (auf Weiss lesbar) */
     --red:   #dc4b52;         /* Gefahr / negativ */
-    --accent: #16855a;        /* Marken-Gruen (Akzent) */
-    --accent-2: #2fb47a;
+    --accent: #0a66c2;        /* LinkedIn-Blau: Marken-Akzent */
+    --accent-2: #3b82f6;
     --cyan: #0e9488;          /* fuer "messaged"-Badge (Variablenname beibehalten) */
-    --grad: linear-gradient(135deg, #1c7a52 0%, #22a06b 100%);
-    --hero-grad: linear-gradient(155deg, #1d7a51 0%, #14512f 100%);
+    --grad: linear-gradient(135deg, #0a66c2 0%, #3b82f6 100%);
+    --hero-grad: linear-gradient(155deg, #0a4b96 0%, #082f63 100%);
     --shadow: 0 1px 2px rgba(20,40,30,.05), 0 12px 28px -14px rgba(20,40,30,.14);
     --shadow-sm: 0 1px 2px rgba(20,40,30,.05), 0 4px 12px -8px rgba(20,40,30,.12);
     --radius: 20px;
@@ -628,40 +628,43 @@
     --ink: #11291f;
     --ink-dim: #607169;
     --ink-faint: #8b9992;
-    --accent: #167b57;
+    --accent: #0a66c2;
+    --accent-2: #3b82f6;
     --green: #159763;
     --amber: #b7791f;
     --red: #cf4d58;
     --radius: 16px;
-    --shadow: 0 1px 2px rgba(17,41,31,.03), 0 16px 38px -24px rgba(17,41,31,.20);
-    --shadow-sm: 0 1px 2px rgba(17,41,31,.04), 0 8px 18px -15px rgba(17,41,31,.16);
+    --grad: linear-gradient(135deg, #0a66c2 0%, #3b82f6 100%);
+    --hero-grad: linear-gradient(155deg, #0a4b96 0%, #082f63 100%);
+    --shadow: 0 1px 2px rgba(15,52,99,.03), 0 16px 38px -24px rgba(15,52,99,.20);
+    --shadow-sm: 0 1px 2px rgba(15,52,99,.04), 0 8px 18px -15px rgba(15,52,99,.16);
   }
-  body { background: radial-gradient(circle at 76% -20%, #e4f0e9 0, transparent 31rem), var(--bg); }
+  body { background: radial-gradient(circle at 76% -20%, #e4effc 0, transparent 31rem), var(--bg); }
   .sidebar { width: 252px; flex-basis: 252px; padding: 24px 17px 18px; background: rgba(255,255,255,.86); backdrop-filter: blur(18px); }
   .side-brand { padding: 5px 9px 26px; }
   .side-brand .bt span { letter-spacing: .11em; }
   .side-lab { padding-top: 10px; }
   .nav-item, .nav-grp { border-radius: 9px; }
-  .nav-item.active { background: #e5f2eb; }
-  .side-foot { border-radius: 12px; background: #163d2d; }
+  .nav-item.active { background: #e5f0fc; }
+  .side-foot { border-radius: 12px; background: #092b5a; }
   .wrap { max-width: 1450px; padding: 30px 36px 80px; }
   .topbar { align-items: center; margin-bottom: 22px; }
   .tb-title h1 { font-size: 30px; letter-spacing: -.035em; }
   .tb-title p { font-size: 13.5px; }
   .clock { border: none; box-shadow: none; background: rgba(255,255,255,.65); }
 
-  .signal-ribbon { display: flex; align-items: stretch; gap: 0; margin: 0 0 18px; padding: 0 10px; min-height: 100px; background: #173d2e; border-radius: 17px; color: white; box-shadow: 0 20px 45px -28px rgba(12,57,38,.64); overflow: hidden; }
+  .signal-ribbon { display: flex; align-items: stretch; gap: 0; margin: 0 0 18px; padding: 0 10px; min-height: 100px; background: #0a376f; border-radius: 17px; color: white; box-shadow: 0 20px 45px -28px rgba(10,64,138,.58); overflow: hidden; }
   .signal-intro { width: 210px; flex: 0 0 210px; display: flex; flex-direction: column; justify-content: center; padding: 20px 14px; border-right: 1px solid rgba(255,255,255,.14); }
-  .signal-kicker { font-family: var(--mono); font-size: 9px; letter-spacing: .13em; text-transform: uppercase; color: #92c9ad; }
+  .signal-kicker { font-family: var(--mono); font-size: 9px; letter-spacing: .13em; text-transform: uppercase; color: #a8ccfa; }
   .signal-title { margin-top: 5px; font-family: var(--display); font-size: 18px; font-weight: 700; letter-spacing: -.025em; }
   .signal-sub { margin-top: 4px; color: rgba(255,255,255,.62); font-size: 11px; line-height: 1.35; }
   .signal-stages { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); align-items: center; }
   .signal-stage { position: relative; min-width: 0; padding: 16px 20px; }
-  .signal-stage:not(:last-child)::after { content: ""; position: absolute; width: 23px; height: 1px; right: -11px; top: 52%; background: rgba(165,226,194,.38); z-index: 1; }
-  .signal-stage:not(:last-child)::before { content: "›"; position: absolute; right: -15px; top: calc(52% - 10px); color: #99d1b3; z-index: 2; font-size: 18px; }
+  .signal-stage:not(:last-child)::after { content: ""; position: absolute; width: 23px; height: 1px; right: -11px; top: 52%; background: rgba(174,211,255,.42); z-index: 1; }
+  .signal-stage:not(:last-child)::before { content: "›"; position: absolute; right: -15px; top: calc(52% - 10px); color: #a8ccfa; z-index: 2; font-size: 18px; }
   .signal-stage-label { display: block; color: rgba(255,255,255,.6); font-size: 10px; font-weight: 600; letter-spacing: .055em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .signal-stage-value { display: block; margin-top: 5px; font-family: var(--display); font-size: 27px; line-height: 1; font-weight: 700; letter-spacing: -.04em; }
-  .signal-stage-note { display: block; min-height: 13px; margin-top: 6px; color: #a9d8bd; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .signal-stage-note { display: block; min-height: 13px; margin-top: 6px; color: #b8d7fb; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .signal-stage.is-attention .signal-stage-value { color: #ffd084; }
   .signal-stage.is-attention .signal-stage-note { color: #ffe2af; }
 
@@ -683,7 +686,7 @@
   .decision-rail .ac-cta { display: none; }
   .command { grid-template-columns: 1.4fr repeat(4, minmax(115px, 1fr)); gap: 10px; margin-bottom: 10px; }
   .cmd-hero, .cmd-stat { min-height: 123px; padding: 17px 18px; border-radius: 14px; box-shadow: var(--shadow-sm); }
-  .cmd-hero { background: #1d4c38; }
+  .cmd-hero { background: #0a4b96; }
   .cmd-hero-num { font-size: 43px; }
   .cs-val { font-size: 27px; }
   .cs-ic { width: 27px; height: 27px; flex-basis: 27px; }
@@ -704,7 +707,7 @@
 <div class="app">
   <aside class="sidebar">
     <div class="side-brand">
-      <span class="logo"><img src="assets/mark.png" alt="NextLead" /></span>
+      <span class="logo"><img src="assets/nextlead-mark-blue.png" alt="NextLead" /></span>
       <span class="bt"><b>NextLead</b><span>LinkedIn Autopilot</span></span>
     </div>
     <div class="side-lab">Menü</div>
