@@ -9,6 +9,9 @@ dist/
 
 # Live-Ansicht (Screenshots fürs Dashboard)
 .live/
+
+# Kampagnen-Material (Flyer, Agenda, Bilder) — bleibt lokal
+.uploads/
 .DS_Store
 
 # Persönliches Nutzer-Profil (bleibt lokal, wie .env)

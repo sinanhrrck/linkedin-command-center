@@ -1610,12 +1610,12 @@ function render() {
     gv.style.color = healthy ? "var(--ink)" : "var(--red)";
     badge.textContent = healthy ? "Gesund" : "Kritisch";
     badge.className = "accept-badge " + (healthy ? "good" : "bad");
-    sub.innerHTML = `${accepted} von ${a.sample} haben deine Anfrage angenommen. <span style="color:var(--ink-faint)">(reife Einladungen der letzten 7 Tage – der Wert für den Schutz-Breaker; die Gesamtquote steht im Funnel unten)</span>`;
+    sub.innerHTML = `${accepted} von ${a.sample} haben deine Anfrage angenommen. <span style="color:var(--ink-faint)">(reife Einladungen der letzten ${a.windowDays || 14} Tage – bremst bei Bedarf nur neue Vernetzungen; die Gesamtquote steht im Funnel unten)</span>`;
     gFill.style.width = ratePct + "%";
     gFill.style.background = healthy ? "var(--green)" : "var(--red)";
     document.getElementById("g-note").textContent = healthy
-      ? `Alles im grünen Bereich. Der Bot pausiert automatisch, falls die Quote unter ${thPct} % fällt.`
-      : `Zu niedrig – der Bot hat das Vernetzen zum Schutz deines Accounts pausiert.`;
+      ? `Alles im grünen Bereich. Unter ${thPct} % würden nur neue Vernetzungen gebremst; der übrige Bot arbeitet weiter.`
+      : `Zu niedrig – nur neue Vernetzungen werden gebremst. Antworten, Entwürfe und Posts laufen weiter.`;
   } else {
     // Noch nicht genug Daten für eine Aussage – ehrlich benennen statt eine Zahl vortäuschen.
     gv.textContent = "—";
@@ -1733,13 +1733,17 @@ function renderSignalRibbon() {
   if (!el) return;
   const counts = Object.fromEntries((state.pipeline || []).map(p => [p.stage, p.count]));
   const funnel = Object.fromEntries((state.funnel || []).map(p => [p.stage, p.count]));
+  const active = state.metrics?.active || {};
+  const historical = state.metrics?.historical || {};
   const hot = (state.hotLeads || []).length;
   const booked = (state.bookedLeads || []).length;
+  const acceptancePct = historical.invited > 0 ? Math.round((historical.accepted || 0) / historical.invited * 100) : null;
+  const replyPct = historical.messaged > 0 ? Math.round((historical.replied || 0) / historical.messaged * 100) : null;
   const stages = [
     { label: "Neue Leads", value: counts.new || 0, note: "bereit für Kontakt" },
-    { label: "Vernetzt", value: funnel.eingeladen || 0, note: "Anfragen gesamt" },
-    { label: "Angenommen", value: funnel.angenommen || 0, note: "bereit für Nachricht" },
-    { label: "Antworten", value: funnel.geantwortet || 0, note: hot ? `${hot} aktiv${active.closedReplies ? ` · ${active.closedReplies} abgeschlossen` : ""}` : "Gespräche im Fluss", attention: hot > 0 },
+    { label: "Anfragen", value: funnel.eingeladen || 0, note: "versendet" },
+    { label: "Angenommen", value: funnel.angenommen || 0, note: acceptancePct === null ? "noch keine Daten" : `${acceptancePct} % · ${active.accepted || 0} warten` },
+    { label: "Antworten", value: funnel.geantwortet || 0, note: replyPct === null ? "noch keine Nachrichten" : `${replyPct} % aus ${historical.messaged || 0} Nachrichten`, attention: hot > 0 },
     { label: "Termine", value: booked, note: booked ? "Übergabe bereit" : "noch offen", attention: booked > 0 },
   ];
   el.innerHTML = stages.map(s => `<div class="signal-stage${s.attention ? " is-attention" : ""}">
@@ -2981,8 +2985,17 @@ document.querySelectorAll("thead th[data-sort]").forEach(th => th.onclick = () =
 function tick() { document.getElementById("clock").textContent = new Date().toLocaleTimeString("de-DE"); }
 async function load() {
   try {
-    const r = await fetch("/api/state"); state = await r.json(); render();
-  } catch (e) { document.getElementById("foot").textContent = "Verbindung zum Server verloren."; }
+    const r = await fetch("/api/state");
+    const nextState = await r.json();
+    if (!r.ok || nextState?.error) throw new Error(nextState?.error || `HTTP ${r.status}`);
+    state = nextState;
+    render();
+  } catch (e) {
+    console.error("[dashboard] Laden oder Darstellung fehlgeschlagen:", e);
+    document.getElementById("foot").textContent = navigator.onLine
+      ? "Dashboard konnte nicht vollständig geladen werden. App bitte neu starten."
+      : "Verbindung zum Server verloren.";
+  }
 }
 tick(); setInterval(tick, 1000);
 load(); setInterval(load, 20000);
@@ -3376,11 +3389,12 @@ function renderAnalytics(a) {
       <div class="an-bench">${k.Q.genugDaten ? `Ziel ≥ ${k.Q.gut}&#8239;% · <b class="an-b-${k.Q.tier}">${einord(k.Q)}</b>` : `zu wenig Daten – belastbar ab ${q.minN} reifen`}</div>
     </div>`).join("");
   const tr = q.trend7d;
+  const trendDays = tr.windowDays || 14;
   const trendCard = `
     <div class="an-qcard">
-      <div class="an-qtop"><span class="an-qlab">Trend (7 Tage)</span><span class="an-nchip">n=${tr.n}</span></div>
+      <div class="an-qtop"><span class="an-qlab">Trend (${trendDays} Tage)</span><span class="an-nchip">n=${tr.n}</span></div>
       <div class="an-qval" style="color:${tr.genugDaten ? "var(--green)" : "var(--ink-faint)"}">${tr.genugDaten && tr.pct != null ? tr.pct + " %" : "—"}</div>
-      <div class="an-qsub">Annahmequote der letzten 7 Tage</div>
+      <div class="an-qsub">Annahmequote der letzten ${trendDays} Tage</div>
       <div class="an-bench">${tr.genugDaten ? "zeigt die aktuelle Richtung" : "zu wenig frische Daten"}</div>
     </div>`;
   document.getElementById("an-quoten").innerHTML = cards + trendCard;

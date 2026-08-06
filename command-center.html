@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NextLead</title>
+  <link rel="stylesheet" href="/command-center.css" />
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><img src="/assets/nextlead-mark-blue.png" alt=""/><div><b>NextLead</b><span>LinkedIn Arbeitszentrale</span></div></div>
+    <nav aria-label="Hauptnavigation">
+      <button class="nav active" data-view="today"><span class="nav-icon">◎</span>Heute <i id="nav-attention"></i></button>
+      <button class="nav" data-view="campaigns"><span class="nav-icon">◇</span>Kampagnen <i id="nav-campaigns"></i></button>
+      <button class="nav" data-view="contacts"><span class="nav-icon">○</span>Kontakte</button>
+      <button class="nav" data-view="insights"><span class="nav-icon">↗</span>Auswertung</button>
+    </nav>
+    <button class="nav settings-nav" data-view="settings"><span class="nav-icon">⚙</span>Einstellungen</button>
+    <div class="side-status"><span id="side-dot"></span><div><b id="side-state">Prüfe…</b><small id="side-detail">Lokale Engine</small></div></div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div><p id="page-kicker">DEIN ARBEITSTAG</p><h1 id="page-title">Heute</h1></div>
+      <div class="top-actions"><span id="updated-at">–</span><button id="emergency" class="danger-ghost">Not-Aus</button></div>
+    </header>
+
+    <section class="view active" id="view-today">
+      <div class="status-strip" id="status-strip"></div>
+      <section class="today-hero">
+        <div><span class="eyebrow">Was braucht dich jetzt?</span><h2 id="attention-title">Deine Arbeit wird sortiert.</h2><p id="attention-copy">Antworten zuerst, dann Freigaben. NextLead erledigt den Rest im Hintergrund.</p></div>
+        <div class="hero-done"><b id="today-auto">–</b><span>heute automatisch erledigt</span></div>
+      </section>
+      <section class="activity-board" aria-labelledby="activity-title">
+        <div class="activity-head"><div><span class="eyebrow">Bot-Aktivität</span><h3 id="activity-title">Was läuft und was kommt</h3></div><span class="activity-live"><i></i><span id="activity-live-label">Live</span></span></div>
+        <div class="activity-lanes">
+          <div class="activity-lane current-lane"><span class="lane-label">Jetzt</span><div id="activity-current"></div></div>
+          <div class="activity-lane"><span class="lane-label">Danach</span><div id="activity-next" class="activity-list"></div></div>
+          <div class="activity-lane"><span class="lane-label">Zuletzt erledigt</span><div id="activity-recent" class="activity-list recent-list"></div></div>
+        </div>
+      </section>
+      <div class="today-grid">
+        <section><div class="section-head"><div><span class="eyebrow">Arbeitskorb</span><h3>Nach Wirkung priorisiert</h3></div><span class="muted" id="work-total"></span></div><div id="work-groups" class="work-groups"></div></section>
+        <aside class="result-card"><span class="eyebrow">Ergebnis · Outreach</span><div id="mini-funnel" class="mini-funnel"></div><p>Bestehendes Netzwerk wird getrennt gemessen.</p></aside>
+      </div>
+      <section id="reviewer" class="reviewer hidden" aria-live="polite"></section>
+    </section>
+
+    <section class="view" id="view-campaigns">
+      <section class="page-intro"><div><span class="eyebrow">Gezielte Aufträge</span><h2>Wen soll NextLead wofür erreichen?</h2><p>Eine Kampagne bündelt Zielgruppe, Event und Vorgehen. Bestehendes Netzwerk und neue Kontakte laufen gemeinsam, aber nachvollziehbar.</p></div><button id="new-campaign" class="primary">Event-Kampagne anlegen</button></section>
+      <section id="campaign-form" class="campaign-form hidden">
+        <div class="form-head"><div><span class="eyebrow">Neue Event-Kampagne</span><h3>Ziel und Zielgruppe festlegen</h3></div><button id="close-campaign" class="icon-btn" aria-label="Schließen">×</button></div>
+        <div class="form-grid">
+          <label>Name<input id="campaign-name" placeholder="z. B. Karriereabend Heidelberg" /></label>
+          <label>Event-URL<input id="campaign-url" type="url" placeholder="https://www.linkedin.com/events/…" /></label>
+          <label>Datum<input id="campaign-date" type="date" /></label>
+          <label>Wo suchen?<select id="campaign-scope"><option value="both">Netzwerk und außerhalb</option><option value="network">Nur bestehendes Netzwerk</option><option value="external">Nur außerhalb</option></select></label>
+          <label>Schlagwörter<input id="campaign-keywords" placeholder="Bankkaufmann, Ausbildung, Vertrieb" /></label>
+          <label>Region im Profiltext<input id="campaign-region" placeholder="z. B. Heidelberg" /></label>
+          <label>Mindest-Lead-Score<input id="campaign-score" type="number" min="0" max="100" value="50" /></label>
+          <label>Entwürfe pro Tag<input id="campaign-limit" type="number" min="1" max="30" value="10" /></label>
+          <label class="wide">Einladungstext<textarea id="campaign-message" rows="4" placeholder="Hey {name}, ich veranstalte am {date} „{event}“… {url}"></textarea><small>Platzhalter: {name}, {event}, {date}, {url}</small></label>
+        </div>
+        <div class="campaign-preview"><div><b id="preview-total">0</b><span>passende Kontakte</span></div><div><b id="preview-network">0</b><span>im Netzwerk</span></div><div><b id="preview-external">0</b><span>außerhalb</span></div><button id="save-campaign" class="primary">Kampagne starten</button></div>
+        <p id="campaign-note" class="form-note"></p>
+      </section>
+      <div id="campaign-list" class="campaign-list"></div>
+    </section>
+
+    <section class="view" id="view-contacts">
+      <section class="page-intro compact"><div><span class="eyebrow">Eine Kontaktbasis</span><h2>Kontakte und Gespräche</h2><p>Jede Person erscheint nur einmal. Filter zeigen, wo der Kontakt gerade steht.</p></div></section>
+      <div class="contact-toolbar"><input id="contact-search" type="search" placeholder="Name oder Headline suchen"/><select id="contact-filter"><option value="all">Alle Kontakte</option><option value="attention">Braucht Entscheidung</option><option value="new">Noch nicht kontaktiert</option><option value="invited">Anfrage offen</option><option value="accepted">Angenommen</option><option value="messaged">Angeschrieben</option><option value="replied">Hat geantwortet</option><option value="closed">Abgeschlossen</option></select><span id="contact-count"></span></div>
+      <div class="contact-table"><div class="contact-row contact-head"><span>Kontakt</span><span>Status</span><span>Nächster Schritt</span><span></span></div><div id="contact-rows"></div></div>
+    </section>
+
+    <section class="view" id="view-insights">
+      <section class="page-intro compact"><div><span class="eyebrow">Belastbare Zahlen</span><h2>Was funktioniert wirklich?</h2><p>Nur Kontakte aus deinem Outreach-Funnel. Bestehende Verbindungen verzerren die Quoten nicht.</p></div></section>
+      <div id="insight-kpis" class="insight-kpis"></div>
+      <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Conversion</span><h3>Vom Lead zur Antwort</h3></div></div><div id="funnel-bars"></div></section>
+      <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Aktivität heute</span><h3>Was NextLead ausgeführt hat</h3></div></div><div id="today-actions" class="today-actions"></div></section>
+    </section>
+
+    <section class="view" id="view-settings">
+      <section class="page-intro compact"><div><span class="eyebrow">Arbeitsweise</span><h2>Automatik und Sicherheit</h2><p>Hier legst du fest, was NextLead selbst erledigt. Der tägliche Arbeitskorb bleibt davon frei.</p></div></section>
+      <div class="settings-grid">
+        <section class="setting-card"><span class="eyebrow">Engine</span><h3 id="engine-title">Lokale Engine</h3><p id="engine-copy"></p><div class="button-row"><button id="engine-toggle" class="primary"></button><button id="backup-now">Jetzt sichern</button></div></section>
+        <section class="setting-card"><span class="eyebrow">Automatik</span><h3>Wer entscheidet?</h3><div id="automation-levels" class="segmented"><button data-level="vorschlaege">Ich prüfe alles</button><button data-level="halb">Erstkontakt automatisch</button><button data-level="agent_test">Gespräche testen</button><button data-level="agent_live">Gespräche automatisch</button></div><p id="automation-copy"></p></section>
+        <section class="setting-card"><span class="eyebrow">Schutz</span><h3>Globale Grenzen</h3><div id="safety-summary"></div></section>
+        <section class="setting-card"><span class="eyebrow">Lead-Quellen</span><h3>Automatischer Nachschub</h3><div class="source-form"><input id="source-label" placeholder="Name der Quelle"/><input id="source-url" placeholder="LinkedIn-Such-URL"/><button id="source-add">Quelle hinzufügen</button></div><div id="source-list"></div></section>
+      </div>
+    </section>
+
+    <footer>NextLead arbeitet lokal auf diesem Mac · <span id="footer-count">–</span></footer>
+  </main>
+</div>
+<div id="toast" role="status"></div>
+<script type="module" src="/command-center.js"></script>
+</body>
+</html>

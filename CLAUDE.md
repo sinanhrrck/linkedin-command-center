@@ -39,6 +39,29 @@ braucht den Governor NICHT.
   passt (z.B. Azubi-Quelle mit /ausbildung|azubi/i → CRM bleibt dauerhaft trainee-only).
   CLI: `npm run source -- add "<url>" "<label>" ["<filter-regex>"]`.
 - `modules/crm.ts` — SQLite-Kontakte
+- `core/profileUrl.ts` + `db/dataIntegrity.ts` — kanonische LinkedIn-Profil-URLs und
+  idempotente Dubletten-Reparatur. Alle abhängigen Kontakte, Aufgaben, Entwürfe, Aktionen und
+  Versand-Sperren werden vor dem Löschen einer Dublette auf den Gewinner umgebogen.
+- `modules/campaigns.ts` + `modules/campaignRunner.ts` — Event-Kampagnen mit fester
+  Zielgruppen-Momentaufnahme, getrennt nach bestehendem Netzwerk und externen Kontakten.
+  Externe Kontakte laufen zuerst durch den normalen Vernetzungsprozess; nach Annahme entsteht
+  ein freizugebender `kind='event'`-Nachrichtenentwurf. Versand bleibt governor-gated.
+  BEARBEITEN + KONTEXT (2026-08-04): Kampagnen sind im Cockpit editierbar (dasselbe Formular legt
+  an und ändert). Neue Felder `event_time`, `location`, `briefing` plus Tabelle `campaign_assets`
+  (Flyer/Link + vom Nutzer gepflegte Kernaussagen; Datei liegt lokal unter `config.paths.uploadDir`,
+  Upload läuft als JSON+Base64 über `/api/campaign-asset`, max. 8 MB). `campaignContext(id)` baut
+  daraus einen Prompt-Baustein, den `regenerateText` beim NEUSCHREIBEN von Event-Entwürfen einspeist
+  ("nichts dazuerfinden") — der Erstentwurf bleibt bewusst Template, das schont das Gemini-Limit.
+  Template kennt zusätzlich `{zeit}`, `{ort}`, `{briefing}`. Beim Speichern läuft
+  `pruneCampaignTargets`: verengte Filter entfernen nur Kontakte OHNE Entwurf/Versand.
+  LÖSCHEN + EIGENER PRÜFPLATZ (2026-08-04): `deleteCampaign(id)` entfernt Kampagne, Zielgruppe,
+  Material samt lokalen Dateien und ALLE Entwürfe mit `incoming='campaign:<id>'` (auch bereits
+  freigegebene); Kontakte bleiben und verlieren nur `campaign_id`. `actions` bleibt unangetastet –
+  das Versandprotokoll darf nie von einer Aufräumaktion abhängen. Kampagnen-Entwürfe erscheinen
+  NICHT mehr im Arbeitskorb „Heute" (Gruppe `eventInvites` raus, `attention.total` zählt
+  `kind='event'` nicht mit), sondern werden in der Kampagne selbst geprüft: `reviewCampaign` im
+  Dashboard-JS schaltet denselben Prüf-Bereich auf den Container `#campaign-reviewer` um und
+  filtert nach `incoming`.
 - `modules/personalize.ts` — Gemini: Vernetzungsnotiz + Erstnachricht
 - `modules/outreach.ts` — connect/message über echte Session, governor-gated
 - `modules/outreachTick.ts` — Loop: neue Leads → personalisieren → vernetzen
@@ -62,7 +85,20 @@ braucht den Governor NICHT.
   Sinans Werte stehen in seiner lokalen profil.local.json; sein `promptKontext()` ist byte-
   identisch zu vorher (einzige Abweichung: Erstnachricht-Winkel sagt "keine Werbung" statt
   "keine Werbung für Fin.Co" — die Marke gehört ins Profil, nicht in den geteilten Grundtext).
-- `web/crm.html` — lokales CRM-Cockpit. HELLES SaaS-Design (2026-07-18, inspiriert von
+- `web/command-center.html` + `.css` + `.js` — aktives lokales CRM-Cockpit (seit 2026-08-04).
+  Fünf eindeutige Bereiche: Heute, Kampagnen, Kontakte, Auswertung, Einstellungen. „Heute"
+  ist ein priorisierter Arbeitskorb und zeigt nur echte Entscheidungen; die Entwurfsprüfung
+  ist bewusst einzeln und fokussiert. Kampagnen zeigen Zielgruppen-Vorschau und Fortschritt.
+  `crmServer.ts` liefert diese Seite aus.
+- **Entwurfsfeedback (2026-08-04):** `drafts.phase='approach'` ist eine nicht sendbare
+  Richtungswahl. `draft_feedback` speichert Ablehnungsgrund, Freitext, Wortlaut und gewählten
+  `approach_key`. `draftDirections.ts` bietet je Nachrichtenart echte Gesprächsrichtungen und
+  priorisiert noch nie verworfene. `approveDraft`/`sendDraft` blockieren Richtungswahlen hart.
+- **Aktivitätsleitstand (2026-08-04):** `bot_activity` protokolliert Start, Abschluss und Fehler
+  aller seriellen Engine-Jobs. Das Dashboard zeigt „Jetzt", die bedarfsabhängig geplanten
+  nächsten Arbeiten und die letzten Abschlüsse. Sendende Aktionen bleiben zusätzlich in
+  `actions` als unveränderliches Safety-/Metrik-Protokoll.
+- `web/crm.html` — vorheriges CRM-Cockpit, nur noch als Altbestand im Repository. HELLES SaaS-Design (2026-07-18, inspiriert von
   Donezo/Nexus/Zentra): App-Shell mit linker Sidebar (`.app > .sidebar + .wrap`), grüner
   Marken-Akzent, weiche Schatten, Card-Layout, grosse Zahlen. WICHTIG bei Umbauten: das CSS
   nutzt durchgängig CSS-Variablen mit BEIBEHALTENEN Namen (`--accent`, `--green`, `--amber`,

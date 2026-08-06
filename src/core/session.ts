@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "../config.js";
 import { governor } from "./safetyGovernor.js";
+import { zaehleAbruf, pruefeLeseBudget } from "./leseBudget.js";
 
 let context: BrowserContext | null = null;
 
@@ -96,10 +97,43 @@ export async function getContext(opts: { visible?: boolean } = {}): Promise<Brow
     console.warn("[session] Browser-Kontext geschlossen – nächster Zugriff startet neu.");
     context = null;
   });
+  context.on("page", haengeZaehlerAn);
+  // WICHTIG (Fix 2026-08-06): `context.on("page")` feuert NUR für neu erzeugte Seiten. Der Bot
+  // arbeitet aber auf der Seite, die launchPersistentContext beim Start bereits mitbringt –
+  // die bekam nie einen Handler, und das Lese-Budget zählte deshalb schlicht nichts. Live
+  // aufgefallen, als nach mehreren Postfach-Aufrufen weiterhin 0 Abrufe im Dashboard standen.
+  for (const page of context.pages()) haengeZaehlerAn(page);
   return context;
 }
 
-export async function newPage(): Promise<Page> {
+/**
+ * ABRUF-ZÄHLUNG AN DER QUELLE (2026-08-05). Bewusst am Navigations-Ereignis und nicht an den
+ * 15 verstreuten `page.goto`-Aufrufen: So wird JEDER Seitenabruf erfasst – auch der, den jemand
+ * später irgendwo neu einbaut. Vergessen ist damit ausgeschlossen.
+ * Nur Hauptframe und nur LinkedIn; Unterframes und Werbe-Iframes zählen nicht.
+ */
+const gezaehlteSeiten = new WeakSet<Page>();
+function haengeZaehlerAn(page: Page): void {
+  if (gezaehlteSeiten.has(page)) return; // niemals doppelt zählen
+  gezaehlteSeiten.add(page);
+  page.on("framenavigated", (frame) => {
+    if (frame !== page.mainFrame()) return;
+    const url = frame.url();
+    if (!/^https?:\/\/[^/]*linkedin\.com\//i.test(url)) return;
+    try { zaehleAbruf(url); } catch { /* Zählung darf den Bot nie zum Absturz bringen */ }
+  });
+}
+
+/**
+ * EINZIGER Weg zu einer Seite – und damit der richtige Ort für die Durchsetzung des
+ * Lese-Budgets. Ist es aufgebraucht, bekommt kein Job mehr eine Seite und bricht sauber ab,
+ * statt weiterzulesen, bis LinkedIn eingreift (siehe core/leseBudget.ts).
+ */
+export async function newPage(opts: { manuell?: boolean } = {}): Promise<Page> {
+  // `manuell` = der Mensch sitzt davor (npm run login). Das Lese-Budget bremst den BOT,
+  // nicht den Nutzer: Wäre es aufgebraucht, käme man sich sonst nicht mal mehr einloggen –
+  // eine Sicherung, die sich selbst aussperrt.
+  if (!opts.manuell) pruefeLeseBudget();
   const ctx = await getContext();
   const page = ctx.pages()[0] ?? (await ctx.newPage());
   return page;

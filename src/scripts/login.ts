@@ -8,7 +8,7 @@ import { getContext, newPage, closeSession } from "../core/session.js";
 async function main() {
   // Sichtbar: hier musst DU tippen (Login + 2FA). Im Betrieb läuft der Browser versteckt.
   await getContext({ visible: true });
-  const page = await newPage();
+  const page = await newPage({ manuell: true });
   await page.goto("https://www.linkedin.com/login");
   console.info("→ Bitte im geöffneten Browser einloggen. Fenster offen lassen, bis du fertig bist.");
   console.info("→ Danach dieses Terminal mit STRG+C beenden. Die Session ist dann gespeichert.");

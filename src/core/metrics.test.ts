@@ -28,20 +28,30 @@ test("trennt Funnel, aktive Antworten und Aktionsereignisse", () => {
   add("c", "messaged", true, true, true, false);
   add("d", "accepted", true, true, false, false);
   add("e", "invited", true, false, false, false);
+  // Eine bestehende Verbindung hat keine Einladung durch dieses System durchlaufen. Sie darf
+  // weder Annahmequote noch offene Outreach-Annahmen künstlich erhöhen.
+  db.prepare(
+    "INSERT INTO contacts(profile_url,full_name,status,accepted_at,aus_netzwerk) VALUES(?,?,?,?,1)",
+  ).run("https://example.test/network", "network", "accepted", old);
   db.prepare("INSERT INTO actions(type,target) VALUES(?,?)").run("connect", "https://example.test/a");
   db.prepare("INSERT INTO actions(type,target) VALUES(?,?)").run("connect", "https://example.test/a");
   db.prepare("INSERT INTO actions(type,target) VALUES(?,?)").run("reply", "https://example.test/a");
+  db.prepare("INSERT INTO drafts(kind,thread_url,participant,incoming,draft) VALUES('message',?,?,?,?)")
+    .run("https://example.test/thread-a", "a", "Hallo", "Antwort");
 
   const dashboard = getDashboardData();
   const analytics = getAnalytics();
 
   assert.deepEqual(dashboard.metrics.historical, { invited: 5, accepted: 4, messaged: 3, replied: 2 });
   assert.deepEqual(dashboard.metrics.active, { accepted: 1, replies: 1, closedReplies: 1 });
+  assert.deepEqual(dashboard.funnel.map((x) => x.count), [5, 5, 4, 3, 2]);
+  assert.deepEqual(analytics.funnel.map((x) => x.count), [5, 5, 4, 3, 2]);
   assert.deepEqual(dashboard.metrics.connectEvents, { total: 2, uniqueTargets: 1, duplicates: 1 });
   assert.equal(dashboard.weekActivity.reduce((n, day) => n + day.total, 0), 3, "Antworten zählen zur Wochenaktivität");
   assert.equal(analytics.quellen[0]?.antwortPct, 67, "Quellenquote teilt durch angeschriebene Kontakte");
   assert.equal(analytics.projektion.anschreibRate, 75);
   assert.equal(analytics.projektion.szenarien.at(-1)?.hotLeads, 40, "Forecast enthält den Schritt Annahme → Nachricht");
+  assert.equal(dashboard.drafts[0]?.profile?.profileUrl, "https://example.test/a", "Entwurf enthält die passende Profilvorschau");
 });
 
 test.after(() => {

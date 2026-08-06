@@ -58,7 +58,7 @@ function statusText(): string {
   return (
     `📊 Command Center\n\n` +
     `Anfragen heute: ${s.connect.today}/${s.connect.effectiveCap}  ·  Woche: ${s.connect.week}/${s.connect.weeklyCap}\n` +
-    `Akzeptanzrate (7T): ${rate}\n` +
+    `Akzeptanzrate (${s.acceptance.windowDays}T): ${rate}\n` +
     `🔥 Hot Leads (geantwortet): ${hotLeads().length}\n` +
     `Offene Entwürfe: ${pendingDrafts().length}\n` +
     `CRM: ${Object.entries(crm).map(([k, v]) => `${k} ${v}`).join(" · ") || "leer"}\n` +

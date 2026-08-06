@@ -53,16 +53,34 @@ export async function selbstCheck(): Promise<HealthReport> {
       return r;
     }
 
-    r.inbox = (await page.locator(SEL.listItem).count().catch(() => 0)) > 0;
+    // LinkedIn liefert nach `domcontentloaded` oft erst Shell/Navi und baut die Gesprächsliste
+    // einige Sekunden später auf. Der frühere einmalige `count()` nach 2,5–4 s erklärte einen
+    // langsamen Start fälschlich zum Selektorbruch und legte dadurch den gesamten Versand lahm.
+    // Auf das echte Element warten; bei einem temporären Ladefehler genau einmal sauber neu laden.
+    const warteAufInbox = async (timeout: number) =>
+      page.locator(SEL.listItem).first().waitFor({ state: "visible", timeout }).then(() => true).catch(() => false);
+    r.inbox = await warteAufInbox(15_000);
     if (!r.inbox) {
-      r.grund = "Postfach-Liste nicht lesbar (Selektor listItem greift nicht – LinkedIn-UI geändert?).";
+      await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
+      await humanDelay(1500, 2500);
+      if (await guardAgainstCheckpoint(page)) {
+        r.login = false;
+        r.grund = "Nicht eingeloggt / Checkpoint – bitte einmal manuell anmelden (npm run login).";
+        finalisieren(r);
+        return r;
+      }
+      r.inbox = await warteAufInbox(15_000);
+    }
+    if (!r.inbox) {
+      r.grund = "Postfach-Liste auch nach erneutem Laden nicht lesbar (LinkedIn/Netz oder Selektor).";
       finalisieren(r);
       return r;
     }
 
     // Ersten Thread öffnen und die Sende-Elemente prüfen (rein lesend, kein Versand).
-    await page.locator(SEL.listItem).first().click().catch(() => {});
+    await page.locator(SEL.listItem).first().click();
     await humanDelay(1800, 3000);
+    await page.locator(SEL.messageBox).first().waitFor({ state: "visible", timeout: 12_000 }).catch(() => {});
     r.messageBox = (await page.locator(SEL.messageBox).count().catch(() => 0)) > 0;
     r.sendButton = (await page.locator(SEL.sendButton).count().catch(() => 0)) > 0;
     // threadTitle nur informativ (Empfänger-Absicherung hängt daran).

@@ -22,6 +22,18 @@ function personZeile(c: Contact): string {
   return `Person: ${c.full_name ?? "Unbekannt"}${c.headline ? ` – ${c.headline}` : ""}.`;
 }
 
+export type TextVariation = {
+  instruction: string;
+  rejectedTexts?: string[];
+};
+
+function variationBlock(variation?: TextVariation): string {
+  if (!variation) return "";
+  const rejected = (variation.rejectedTexts || []).filter(Boolean).slice(-5);
+  return `\nVERBINDLICHE NEUE GESPRÄCHSRICHTUNG:\n${variation.instruction}\n` +
+    (rejected.length ? `\nBEREITS ABGELEHNT. Übernimm weder deren Gesprächsidee noch Satzbau oder Frage:\n${rejected.map((text, i) => `${i + 1}. ${text}`).join("\n")}\n` : "");
+}
+
 /**
  * Kurze, personalisierte Vernetzungsnotiz (< 200 Zeichen, LinkedIn-Limit).
  * Personalisierung ist hier kein Nice-to-have: Sie ist der einzige Hebel, der
@@ -43,13 +55,17 @@ Nimm EINEN konkreten Bezug zur Person (z.B. ihre Rolle/Ausbildung). Gib NUR die 
  * Bewusst eigenständig (nutzt NICHT promptKontext), damit die strengen Vorgaben 1:1 greifen.
  * Person-Daten (Name + Profil-Headline mit Bank/Lehrjahr/Standort) werden unten als INPUT injiziert.
  */
-export async function firstMessage(c: Contact): Promise<string> {
-  const prompt = `Du bist Sinan. Du schreibst LinkedIn-Erstnachrichten an Auszubildende oder Berufseinsteiger im Bankwesen. Dein Ziel ist NIEMALS der Verkauf oder Pitch in der ersten Nachricht, sondern das Öffnen eines echten, lockeren Gesprächs auf Augenhöhe. Du bist neugierig, ehrlich und kommst sofort auf den Punkt. Du warst selbst mal Azubi in einer Bank und holst die Leute genau über diese gemeinsame Lebenslage ab.
-
-AUFBAU (Nutze immer diese 3 Bausteine, genau in dieser Reihenfolge):
+export async function firstMessage(c: Contact, variation?: TextVariation): Promise<string> {
+  const aufbau = variation
+    ? `AUFBAU FÜR DIESE NEUGENERIERUNG:\nFolge der unten genannten neuen Gesprächsrichtung. Du darfst die übliche Reihenfolge Profilbezug, eigene Geschichte, offene Frage ausdrücklich verlassen. Nutze nur Bausteine, die zu dieser Richtung passen.`
+    : `AUFBAU (Nutze immer diese 3 Bausteine, genau in dieser Reihenfolge):
 1. Persönliche Anknüpfung (1 Zeile). Beziehe dich auf etwas Konkretes aus dem Profil: Bank, Standort, Ausbildungsjahr, ein Post. Kein "Ich sehe du bist im Vertrieb tätig". Etwas, das nur auf diese Person zutrifft.
 2. Eigener Bezug (1 Zeile). Erkläre kurz, warum du schreibst. Beispiel: "Ich hab damals auch in der Bank angefangen" oder "Ich bin gerade viel im Austausch mit Leuten aus dem Bankumfeld".
-3. Offene Frage (1 Zeile). Stelle exakt EINE ehrliche, offene Frage zu seiner aktuellen Situation. Keine Suggestivfragen. Keine Verkaufsfragen. Beispiele: "Wie erlebst du das gerade?", "Ist das so, wie du dir das vorgestellt hast?". Die Nachricht ENDET mit dieser Frage – KEINE Absichtserklärung, KEIN "ich will nichts verkaufen", KEIN "das ist kein Pitch" hinterher.
+3. Offene Frage (1 Zeile). Stelle exakt EINE ehrliche, offene Frage zu seiner aktuellen Situation. Keine Suggestivfragen. Keine Verkaufsfragen. Beispiele: "Wie erlebst du das gerade?", "Ist das so, wie du dir das vorgestellt hast?". Die Nachricht ENDET mit dieser Frage – KEINE Absichtserklärung, KEIN "ich will nichts verkaufen", KEIN "das ist kein Pitch" hinterher.`;
+  const prompt = `Du bist Sinan. Du schreibst LinkedIn-Erstnachrichten an Auszubildende oder Berufseinsteiger im Bankwesen. Dein Ziel ist NIEMALS der Verkauf oder Pitch in der ersten Nachricht, sondern das Öffnen eines echten, lockeren Gesprächs auf Augenhöhe. Du bist neugierig, ehrlich und kommst sofort auf den Punkt. Du warst selbst mal Azubi in einer Bank und holst die Leute genau über diese gemeinsame Lebenslage ab.
+
+${aufbau}
+${variationBlock(variation)}
 
 HARTE STIL- UND FORMATREGELN (Zwingend einhalten):
 - IMMER Duzen, niemals siezen.
@@ -78,6 +94,47 @@ Name: ${c.full_name ?? "Unbekannt"}
 Profil-Headline (enthält oft Bank, Ausbildungsjahr, Studiengang, Standort): ${c.headline ?? "unbekannt"}
 
 OUTPUT-REGEL: Generiere GENAU EINE Nachricht nach obigem Aufbau. Nichts drumherum, keine Erklärungen davor oder danach, kein "Hier ist die Nachricht:". Gib ausschließlich den Text der Nachricht aus.`;
+  return saubern(await generateText(prompt));
+}
+
+/**
+ * KAMPAGNEN-EINLADUNG (Sinan 2026-08-05): Der im Cockpit hinterlegte Einladungstext ist
+ * VORLAGE, nicht Versandtext. Die KI übernimmt Kernaussage, Ton und Fakten, formuliert aber
+ * für jede Person neu – sonst bekommen 500 Leute wortgleich dieselbe Nachricht (erkennbar
+ * als Massenversand, schlechte Antwortquote, Report-Risiko).
+ * Fakten dürfen NUR aus Vorlage + Kampagnen-Kontext stammen, nichts dazuerfinden.
+ */
+export async function eventInvitation(input: {
+  name?: string | null;
+  headline?: string | null;
+  kontext?: string;
+  vorlage: string;
+}): Promise<string> {
+  const firstName = String(input.name || "").trim().split(/\s+/)[0];
+  const prompt = `Du bist Sinan und lädst per LinkedIn-Direktnachricht zu deiner eigenen Veranstaltung ein.
+${promptKontext()}
+${input.kontext || ""}
+
+PERSON: ${firstName || "unbekannt"}${input.headline ? ` – ${input.headline}` : ""}
+
+VORLAGE VON SINAN (Kernaussage, Ton und Fakten übernehmen – aber NICHT abschreiben):
+"""
+${input.vorlage}
+"""
+
+AUFGABE: Schreibe daraus EINE eigene Einladung an genau diese Person.
+- Nutze die Vorlage als Inspiration: gleiche Aussage, gleiches Angebot, gleiche Fakten.
+- Formuliere eigenständig: anderer Satzbau, andere Wortwahl, eigener Einstieg. Übernimm KEINEN
+  ganzen Satz wortgleich aus der Vorlage.
+- Beziehe dich mit EINEM kurzen, konkreten Bezug auf die Person (Rolle, Ausbildung, Bank aus der
+  Headline). Ist nichts Konkretes bekannt, lass den Bezug weg statt etwas zu erfinden.
+- Erfinde NICHTS dazu: Datum, Uhrzeit, Ort, Link und Inhalte nur, wenn sie oben stehen. Der Link
+  gehört unverändert in die Nachricht, falls er in der Vorlage oder den Fakten steht.
+- Stil: Du-Form, gesprochene Sprache, kurze Sätze, keine Emojis, keine Gedankenstriche als
+  Satztrenner, keine Werbesprache, maximal 5 Zeilen, höchstens EINE Frage.
+- Starte mit "Hey ${firstName || "{Vorname}"}".
+
+Gib NUR den Nachrichtentext aus, ohne Anführungszeichen und ohne Erklärung.`;
   return saubern(await generateText(prompt));
 }
 
@@ -230,7 +287,7 @@ Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
  *  - Stufe 2 (nach weiteren ~7 Tagen): kurz, ehrlich, mit sauberem Schlussstrich –
  *    das nimmt Druck raus und bringt erfahrungsgemäß die meisten späten Antworten.
  */
-export async function followupMessage(c: Contact, stufe: 1 | 2 = 1): Promise<string> {
+export async function followupMessage(c: Contact, stufe: 1 | 2 = 1, variation?: TextVariation): Promise<string> {
   const stufenText =
     stufe === 1
       ? `Kontext: Sinan hatte der Person schon geschrieben, aber noch keine Antwort bekommen.
@@ -244,6 +301,7 @@ mehr, die Tür bleibt aber offen, falls sie sich später doch melden möchte. Ke
 ${promptKontext()}
 ${personZeile(c)}
 ${stufenText}
+${variationBlock(variation)}
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
   return saubern(await generateText(prompt));
 }

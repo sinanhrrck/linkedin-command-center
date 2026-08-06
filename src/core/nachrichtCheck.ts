@@ -48,8 +48,22 @@ export function istPlausibleNachricht(text: string): { ok: boolean; grund?: stri
   const zifferMix = woerter.filter((w) => /[a-zäöü]/i.test(w) && /\d/.test(w)).length;
   if (zifferMix >= 2) return { ok: false, grund: "Buchstaben-Ziffern-Mix (Kauderwelsch)" };
 
-  // Lange Konsonantenketten (>=6) = Tastatur-Mashing.
-  if (/[bcdfghjklmnpqrstvwxyzßñ]{6,}/i.test(t)) return { ok: false, grund: "lange Konsonantenkette" };
+  /**
+   * Lange Konsonantenketten = Tastatur-Mashing. ABER: Deutsch häuft Konsonanten völlig legitim.
+   *
+   * FEHLALARM GEFIXT 2026-08-06: Die frühere Regel zählte rohe Buchstaben ab 6 und blockierte
+   * damit "sel-BSTST-ändig" – ausgerechnet Sinans Kernwort. Vier von zehn "technischen
+   * Problemen" im Dashboard waren genau das, und weil nach jedem Block ein neuer Entwurf
+   * entstand, lief es im Kreis: 20 Versuche für einen einzigen Kontakt. Ebenfalls betroffen:
+   * "durchschnittlich", "Angstschweiß", "Herbstschnee".
+   *
+   * Jetzt werden die festen deutschen Mehrgraphen vorher zu einem Zeichen zusammengefasst.
+   * "lbstst" sind damit vier Bausteine (l-b-st-st) statt sechs Buchstaben, echtes Mashing
+   * ("xkfjghwq") bleibt dagegen bei sechs und wird weiter erkannt.
+   */
+  const MEHRGRAPHEN = /sch|tsch|ch|ck|ph|qu|sh|th|st|sp|tz|ng|nk|pf|ss/gi;
+  const entzerrt = t.replace(MEHRGRAPHEN, "×");
+  if (/[bcdfghjklmnpqrstvwxyzßñ×]{6,}/i.test(entzerrt)) return { ok: false, grund: "lange Konsonantenkette" };
 
   // Mehrere längere Wörter ganz ohne Vokal = Kauderwelsch.
   const vokallos = woerter.filter((w) => w.length >= 4 && !/[aeiouäöüy]/i.test(w)).length;

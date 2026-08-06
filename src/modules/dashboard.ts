@@ -2,6 +2,9 @@ import { statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { db, getState, getMode, getFocus, getAgentMode } from "../db/index.js";
 import { governor } from "../core/safetyGovernor.js";
+import { leseStand } from "../core/leseBudget.js";
+import { verlaufsBelegStand } from "./outreach.js";
+import { config } from "../config.js";
 import { pendingDrafts, approvedCount } from "./drafts.js";
 import { pendingPosts } from "./content.js";
 import { hotLeads } from "./crm.js";
@@ -46,6 +49,9 @@ type ContactRow = {
   status: string;
   invited_at: string | null;
   accepted_at: string | null;
+  messaged_at: string | null;
+  replied_at: string | null;
+  aus_netzwerk: number | null;
   created_at: string;
   lead_score: number | null;
   campaign_id: number | null;
@@ -53,14 +59,20 @@ type ContactRow = {
   outcome_stage: string | null;
   outcome_note: string | null;
   outcome_value_cents: number | null;
+  open_draft_id: number | null;
+  open_draft_kind: string | null;
+  open_draft_status: string | null;
 };
 
 export function getDashboardData() {
   const contacts = db
     .prepare(
       `SELECT c.id, c.full_name, c.headline, c.profile_url, c.status, c.invited_at, c.accepted_at,
-              c.created_at, c.lead_score, c.campaign_id, ca.name AS campaign_name,
-              o.stage AS outcome_stage, o.note AS outcome_note, o.value_cents AS outcome_value_cents
+              c.messaged_at,c.replied_at,c.aus_netzwerk,c.created_at,c.lead_score,c.campaign_id,ca.name AS campaign_name,
+              o.stage AS outcome_stage,o.note AS outcome_note,o.value_cents AS outcome_value_cents,
+              (SELECT d.id FROM drafts d WHERE d.thread_url=c.profile_url AND d.status IN ('pending','approved','sending') ORDER BY CASE d.status WHEN 'sending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,d.created_at DESC LIMIT 1) AS open_draft_id,
+              (SELECT d.kind FROM drafts d WHERE d.thread_url=c.profile_url AND d.status IN ('pending','approved','sending') ORDER BY CASE d.status WHEN 'sending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,d.created_at DESC LIMIT 1) AS open_draft_kind,
+              (SELECT d.status FROM drafts d WHERE d.thread_url=c.profile_url AND d.status IN ('pending','approved','sending') ORDER BY CASE d.status WHEN 'sending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,d.created_at DESC LIMIT 1) AS open_draft_status
        FROM contacts c
        LEFT JOIN campaigns ca ON ca.id=c.campaign_id
        LEFT JOIN sales_outcomes o ON o.contact_id=c.id
@@ -74,9 +86,10 @@ export function getDashboardData() {
   const counts: Record<string, number> = Object.fromEntries(PIPELINE.map((s) => [s, 0]));
   for (const c of contacts) counts[c.status] = (counts[c.status] ?? 0) + 1;
 
-  // KUMULATIVER Funnel: wer hat JE diese Stufe erreicht (aus den Zeitstempeln), nicht wer
-  // gerade in dem Status steht. Nur so ist es ein echter Funnel (jede Stufe ⊆ der vorigen)
-  // und die Conversion-Raten stimmen: z.B. Angenommen/Eingeladen = echte Annahmequote.
+  // KUMULATIVER OUTREACH-Funnel: wer hat JE diese Stufe erreicht (aus den Zeitstempeln),
+  // nicht wer gerade in dem Status steht. Bereits bestehende Netzwerk-Kontakte werden hier
+  // bewusst ausgeschlossen: sie wurden nie eingeladen und würden sonst als Annahmen eine
+  // unmögliche Quote erzeugen. Jede Folgestufe verlangt zudem explizit ihre Vorstufen.
   // Vorher zählte der Funnel den AKTUELLEN Status → "Angenommen 9" obwohl 18 angenommen
   // hatten (9 waren schon weiter zu angeschrieben/geantwortet). Das war der Zahlen-Widerspruch.
   const f = db
@@ -84,10 +97,11 @@ export function getDashboardData() {
       `SELECT
          COUNT(*) AS gesammelt,
          SUM(CASE WHEN invited_at  IS NOT NULL THEN 1 ELSE 0 END) AS eingeladen,
-         SUM(CASE WHEN accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS angenommen,
-         SUM(CASE WHEN messaged_at IS NOT NULL THEN 1 ELSE 0 END) AS angeschrieben,
-         SUM(CASE WHEN replied_at  IS NOT NULL THEN 1 ELSE 0 END) AS geantwortet
-       FROM contacts`,
+         SUM(CASE WHEN invited_at IS NOT NULL AND accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS angenommen,
+         SUM(CASE WHEN invited_at IS NOT NULL AND accepted_at IS NOT NULL AND messaged_at IS NOT NULL THEN 1 ELSE 0 END) AS angeschrieben,
+         SUM(CASE WHEN invited_at IS NOT NULL AND accepted_at IS NOT NULL AND messaged_at IS NOT NULL AND replied_at IS NOT NULL THEN 1 ELSE 0 END) AS geantwortet
+       FROM contacts
+       WHERE COALESCE(aus_netzwerk, 0) = 0`,
     )
     .get() as { gesammelt: number; eingeladen: number | null; angenommen: number | null; angeschrieben: number | null; geantwortet: number | null };
   const funnel = [
@@ -100,8 +114,10 @@ export function getDashboardData() {
   // Dashboard braucht beide Wahrheiten: den historischen Funnel für Performance und die
   // aktuellen Status für die Arbeitspriorität. Sie werden bewusst getrennt ausgeliefert,
   // damit eine offene Annahme nicht wie alle jemals angenommenen Kontakte aussieht.
-  const activeReplies = counts.replied ?? 0;
-  const closedReplies = (db.prepare("SELECT COUNT(*) n FROM contacts WHERE status='closed' AND replied_at IS NOT NULL").get() as { n: number }).n;
+  const outreachOnly = "COALESCE(aus_netzwerk, 0) = 0";
+  const activeAccepted = (db.prepare(`SELECT COUNT(*) n FROM contacts WHERE status='accepted' AND ${outreachOnly}`).get() as { n: number }).n;
+  const activeReplies = (db.prepare(`SELECT COUNT(*) n FROM contacts WHERE status='replied' AND ${outreachOnly}`).get() as { n: number }).n;
+  const closedReplies = (db.prepare(`SELECT COUNT(*) n FROM contacts WHERE status='closed' AND replied_at IS NOT NULL AND ${outreachOnly}`).get() as { n: number }).n;
   const connectEvents = (db.prepare("SELECT COUNT(*) n FROM actions WHERE type='connect'").get() as { n: number }).n;
   const uniqueConnectTargets = (db.prepare("SELECT COUNT(DISTINCT target) n FROM actions WHERE type='connect' AND target IS NOT NULL").get() as { n: number }).n;
   const metrics = {
@@ -111,7 +127,7 @@ export function getDashboardData() {
       messaged: f.angeschrieben ?? 0,
       replied: f.geantwortet ?? 0,
     },
-    active: { accepted: counts.accepted ?? 0, replies: activeReplies, closedReplies },
+    active: { accepted: activeAccepted, replies: activeReplies, closedReplies },
     connectEvents: { total: connectEvents, uniqueTargets: uniqueConnectTargets, duplicates: Math.max(0, connectEvents - uniqueConnectTargets) },
   };
 
@@ -224,6 +240,78 @@ export function getDashboardData() {
     accepted: wow("SELECT COUNT(*) n FROM contacts WHERE accepted_at >= datetime('now',?) AND accepted_at < datetime('now',?)"),
     replied: wow("SELECT COUNT(*) n FROM contacts WHERE replied_at >= datetime('now',?) AND replied_at < datetime('now',?)"),
   };
+  const openDrafts = pendingDrafts();
+  const contactByUrl = new Map(contacts.map((contact) => [contact.profile_url, contact]));
+  const contactByName = new Map<string, ContactRow>();
+  for (const contact of contacts) {
+    const key = String(contact.full_name || "").trim().toLocaleLowerCase("de-DE");
+    if (key && !contactByName.has(key)) contactByName.set(key, contact);
+  }
+  const draftsForDashboard = openDrafts.map((draft) => {
+    const nameKey = String(draft.participant || "").trim().toLocaleLowerCase("de-DE");
+    const contact = contactByUrl.get(draft.thread_url) || contactByName.get(nameKey);
+    return {
+      ...draft,
+      profile: contact ? {
+        id: contact.id,
+        fullName: contact.full_name,
+        headline: contact.headline,
+        profileUrl: contact.profile_url,
+        status: contact.status,
+        leadScore: contact.lead_score,
+        campaignName: contact.campaign_name,
+        networkContact: !!contact.aus_netzwerk,
+      } : null,
+    };
+  });
+  const draftCount = (...kinds: string[]) => openDrafts.filter((draft) => kinds.includes(draft.kind)).length;
+  const meetingAttention = (db.prepare("SELECT COUNT(*) n FROM conversations WHERE status='booked'").get() as { n: number }).n;
+  const systemIssues = Number(getState("send_health") === "broken") +
+    (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status IN ('blockiert','unknown')").get() as { n: number }).n;
+  // Kampagnen-Einladungen zählen bewusst NICHT in den Arbeitskorb "Heute": sie werden in der
+  // jeweiligen Kampagne geprüft, damit dort Zielgruppe, Kontext und Texte zusammen bleiben.
+  const attention = {
+    total: openDrafts.filter((draft) => draft.kind !== "event").length + meetingAttention + systemIssues,
+    replies: draftCount("message", "pitchidee"),
+    firstMessages: draftCount("first"),
+    followups: draftCount("followup"),
+    reactivations: draftCount("reaktivierung"),
+    eventInvites: draftCount("event"),
+    meetings: meetingAttention,
+    systemIssues,
+  };
+  const governorState = governor.snapshot();
+  const botActivity = db
+    .prepare(
+      `SELECT id,job,status,detail,started_at,finished_at
+         FROM bot_activity
+        WHERE status IN ('done','failed')
+          AND NOT (job='post' AND detail='Geprüft, nichts Neues')
+        ORDER BY COALESCE(finished_at,started_at) DESC
+        LIMIT 12`,
+    )
+    .all() as { id: number; job: string; status: string; detail: string | null; started_at: string; finished_at: string | null }[];
+  const activeJob = getState("engine_active_job") || null;
+  const activeActivity = activeJob
+    ? db.prepare("SELECT job,detail,started_at FROM bot_activity WHERE status='running' AND job=? ORDER BY id DESC LIMIT 1")
+        .get(activeJob) as { job: string; detail: string | null; started_at: string } | undefined
+    : undefined;
+  const approved = approvedCount();
+  const campaignWaiting = (db.prepare(
+    `SELECT COUNT(*) n FROM campaign_targets t JOIN campaigns c ON c.id=t.campaign_id
+      WHERE c.active=1 AND t.status IN ('queued','awaiting_connection')`,
+  ).get() as { n: number }).n;
+  const newContacts = counts.new ?? 0;
+  const connectState = governorState.connect;
+  const connectRemaining = Math.max(0, Number(connectState?.effectiveCap || connectState?.hardCap || 0) - Number(connectState?.today || 0));
+  const upcoming: { job: string; detail: string; timing: string; blocked?: boolean }[] = [];
+  if (!governorState.notAus) {
+    if (approved) upcoming.push({ job: "sendApproved", detail: `${approved} freigegebene Nachricht${approved === 1 ? "" : "en"}`, timing: "innerhalb von 10 Minuten" });
+    if (campaignWaiting) upcoming.push({ job: "campaign", detail: `${campaignWaiting} Kampagnenkontakt${campaignWaiting === 1 ? "" : "e"} weiterführen`, timing: "innerhalb von 10 Minuten" });
+    if (newContacts && connectRemaining) upcoming.push({ job: "outreach", detail: `bis zu ${Math.min(newContacts, connectRemaining)} neue Vernetzung${Math.min(newContacts, connectRemaining) === 1 ? "" : "en"}`, timing: "innerhalb von 12 Minuten" });
+    else if (newContacts && !connectRemaining) upcoming.push({ job: "outreach", detail: `${newContacts} Kontakte warten, Tageslimit erreicht`, timing: "morgen im Zeitfenster", blocked: true });
+    upcoming.push({ job: getAgentMode() === "off" ? "drafts" : "agent", detail: "Neue Antworten im Postfach prüfen", timing: "innerhalb von 15 Minuten" });
+  }
 
   return {
     generatedAt: new Date().toISOString(),
@@ -237,19 +325,121 @@ export function getDashboardData() {
       nextJob: getState("engine_queue_next") || null,
     },
     recentActions,
+    activity: {
+      current: activeActivity ?? null,
+      queue: {
+        count: Number(getState("engine_queue_length") || 0) || 0,
+        nextJob: getState("engine_queue_next") || null,
+      },
+      upcoming: upcoming.slice(0, 4),
+      recent: botActivity,
+      paused: !!governorState.notAus,
+    },
+    // Lese-Budget: die Kennzahl, die LinkedIn tatsächlich beobachtet. Muss sichtbar sein,
+    // sonst wächst sie wieder unbemerkt (siehe core/leseBudget.ts).
+    leseBudget: leseStand(),
     leadSources,
     campaigns: listCampaigns(),
+    /**
+     * Zuordnung Kontakt → Kampagne für das Kampagnen-CRM (2026-08-05). Bewusst als schlanke
+     * Liste statt angereicherter Kontakte: Ein Kontakt kann in mehreren Kampagnen stecken, und
+     * `contacts.campaign_id` hält nur die ERSTE fest. Die Wahrheit über die Zugehörigkeit steht
+     * in campaign_targets. Das Cockpit verbindet beides über die Kontakt-ID.
+     */
+    campaignTargets: db
+      .prepare(
+        // `invitedAt` = wann die Einladung DIESER Kampagne nachweislich rausging. Ohne diesen
+        // Zeitpunkt lässt sich eine Reaktion auf die Kampagne nicht von einer alten Antwort aus
+        // dem CRM unterscheiden – genau daran ist die erste Fassung gescheitert (sie zeigte
+        // Juli-Antworten als Kampagnen-Erfolg, teils für Leute ohne jede Einladung).
+        `SELECT t.campaign_id campaignId, t.contact_id contactId, t.status, t.route,
+                (SELECT MAX(d.sent_at) FROM drafts d
+                  WHERE d.thread_url=(SELECT profile_url FROM contacts WHERE id=t.contact_id)
+                    AND d.kind='event' AND d.incoming='campaign:'||t.campaign_id AND d.status='sent') invitedAt
+           FROM campaign_targets t`,
+      )
+      .all() as Array<{ campaignId: number; contactId: number; status: string; route: string; invitedAt: string | null }>,
     experiments: listExperiments(),
     salesDesk: salesDesk(),
     salesTasks: openSalesTasks(),
     todayDone: { drafts: draftsToday, posts: postsToday, leads: leadsToday },
-    governor: governor.snapshot(),
+    attention,
+    governor: governorState,
     // SYSTEMSTATUS + FEHLER SICHTBAR: der Selbst-Check-Zustand und was zuletzt schiefging.
     systemHealth: {
       sendeWeg: getState("send_health") || "unbekannt", // "ok" | "broken" | "unbekannt"
       grund: getState("send_health_grund") || null,
       geprueft: getState("send_health_ts") || null,
     },
+    /**
+     * WARUM STEHT ES GERADE? (2026-08-06, Sinans Kernanliegen)
+     *
+     * Der Bot hat heute mehrfach völlig korrekt blockiert – Checkpoint-Pause, Akzeptanz-Bremse,
+     * leere Warteschlange, fehlende Freigaben – und dabei jedes Mal GESCHWIEGEN. Sichtbar war
+     * nur ein Cockpit, in dem nichts passiert; die Ursache musste jedes Mal aus der Datenbank
+     * gegraben werden. Diese Liste beantwortet die Frage an einer Stelle, in Klartext.
+     * Rein lesend, reine Diagnose – sie ändert nichts am Verhalten.
+     */
+    /**
+     * Blockierte und unklare Entwürfe waren bisher NUR eine Zahl im Arbeitskorb: `pendingDrafts()`
+     * liefert ausschließlich 'pending', also tauchten sie nirgends auf. Man konnte sie weder
+     * ansehen noch erledigen – der Zähler konnte konstruktionsbedingt nur wachsen (real auf 10).
+     * Jetzt kommen sie mit Text und Grund ins Cockpit und lassen sich dort abhaken.
+     */
+    technischeFaelle: db.prepare(
+      `SELECT id, kind, status, participant, thread_url, draft, created_at, blockiert_grund
+         FROM drafts WHERE status IN ('blockiert','unknown') ORDER BY created_at DESC LIMIT 50`,
+    ).all() as Array<{ id: number; kind: string; status: string; participant: string | null; thread_url: string; draft: string; created_at: string; blockiert_grund: string | null }>,
+    blockaden: (() => {
+      /**
+       * `aktion` macht jeden Eintrag KLICKBAR (Sinans Vorgabe 2026-08-06): entweder wird die
+       * Ursache direkt behoben ("sofort": Engine starten, Not-Aus lösen, Pause fortsetzen) oder
+       * das Cockpit springt genau dorthin, wo man sie beheben kann ("gehe"). Erledigt sich die
+       * Ursache, verschwindet der Eintrag beim nächsten Aktualisieren von selbst – die Liste
+       * wird bei jedem Abruf neu berechnet, es gibt nichts zum Wegklicken.
+       * `art: "warten"` = nichts zu tun, läuft von allein weiter (kein Knopf).
+       */
+      type Aktion =
+        | { art: "sofort"; befehl: "engine_start" | "notaus_loesen" | "pause_loesen"; text: string }
+        | { art: "gehe"; ziel: "today" | "settings" | "contacts" | "campaigns"; text: string }
+        | { art: "kampagne"; id: number; text: string }
+        | { art: "warten"; text: string };
+      const liste: { was: string; grund: string; tun: string; aktion: Aktion }[] = [];
+      if (governorState.notAus) liste.push({ was: "Jeder Versand", grund: "Not-Aus ist aktiv", tun: "Not-Aus lösen", aktion: { art: "sofort", befehl: "notaus_loesen", text: "Not-Aus lösen" } });
+      if (governorState.paused) liste.push({ was: "Alle Aktionen", grund: governorState.pauseReason || "Sicherheitspause", tun: "Fortsetzen", aktion: { art: "sofort", befehl: "pause_loesen", text: "Fortsetzen" } });
+      if (!engineAlive) liste.push({ was: "Alle Hintergrundarbeit", grund: "Die Engine läuft nicht", tun: "Engine starten", aktion: { art: "sofort", befehl: "engine_start", text: "Engine starten" } });
+      const lese = leseStand();
+      if (lese.erschoepft) liste.push({ was: "Lesen und damit fast alles", grund: lese.grund!, tun: "Läuft morgen automatisch weiter", aktion: { art: "warten", text: "Läuft morgen weiter" } });
+      const acc = governorState.acceptance;
+      if (acc.armed && acc.rate < config.safety.hardStopAcceptance) {
+        liste.push({ was: "Vernetzungen", grund: `Annahmequote ${(acc.rate * 100).toFixed(0)}% – unter ${(config.safety.hardStopAcceptance * 100).toFixed(0)}% wird gestoppt`, tun: "Lead-Quellen prüfen", aktion: { art: "gehe", ziel: "settings", text: "Lead-Quellen prüfen" } });
+      } else if (acc.armed && acc.rate < acc.minRate) {
+        liste.push({ was: "Vernetzungen (halbes Tempo)", grund: `Annahmequote ${(acc.rate * 100).toFixed(0)}% liegt unter ${(acc.minRate * 100).toFixed(0)}%`, tun: "Lead-Quellen prüfen", aktion: { art: "gehe", ziel: "settings", text: "Lead-Quellen prüfen" } });
+      }
+      if (getState("send_health") === "broken") liste.push({ was: "Nachrichtenversand", grund: getState("send_health_grund") || "Sendeweg gestört", tun: "Sendeweg prüfen", aktion: { art: "gehe", ziel: "settings", text: "Sendeweg prüfen" } });
+      // Zweiter Versandbeleg systematisch gebrochen? Dann meldet der Bot Erfolge, die er nicht
+      // mehr nachweisen kann – der Fall, der im Juli zu falsch gemeldeten Versänden führte.
+      const beleg = verlaufsBelegStand();
+      if (beleg.verdaechtig) {
+        liste.push({
+          was: "Versandbestätigung",
+          grund: `Nur ${beleg.bestaetigt} von ${beleg.geprueft} Versänden im Verlauf wiedergefunden – der Beleg-Selektor stimmt vermutlich nicht mehr`,
+          tun: "Verlauf stichprobenartig prüfen",
+          aktion: { art: "gehe", ziel: "settings", text: "Verlauf prüfen" },
+        });
+      }
+      if (!approved && openDrafts.length) liste.push({ was: "Versand", grund: `${openDrafts.length} Entwürfe warten auf deine Freigabe`, tun: "Jetzt prüfen", aktion: { art: "gehe", ziel: "today", text: "Jetzt prüfen" } });
+      const kampagnenOhneZiel = db.prepare(
+        `SELECT c.id, c.name FROM campaigns c WHERE c.active=1
+           AND NOT EXISTS (SELECT 1 FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status='queued')`,
+      ).all() as { id: number; name: string }[];
+      for (const k of kampagnenOhneZiel) {
+        liste.push({ was: `Kampagne „${k.name}"`, grund: "Kein Kontakt mehr in der Warteschlange", tun: "Zielgruppe bearbeiten", aktion: { art: "kampagne", id: k.id, text: "Zielgruppe bearbeiten" } });
+      }
+      const faelle = (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status IN ('blockiert','unknown')").get() as { n: number }).n;
+      if (faelle) liste.push({ was: "Nicht zugestellte Nachrichten", grund: `${faelle} Fälle warten auf deine Entscheidung`, tun: "Ansehen und abhaken", aktion: { art: "gehe", ziel: "settings", text: "Ansehen und abhaken" } });
+      return liste;
+    })(),
     operations: {
       backup: getBackupStatus(),
       codeVersion: getState("engine_code_version") || null,
@@ -275,7 +465,7 @@ export function getDashboardData() {
     totals: { contacts: contacts.length },
     actionsToday: Object.fromEntries(actionsToday.map((a) => [a.type, a.n])),
     posts: Object.fromEntries(posts.map((p) => [p.status, p.n])),
-    drafts: pendingDrafts(),
+    drafts: draftsForDashboard,
     approvedCount: approvedCount(),
     postDrafts: pendingPosts(),
     weekActivity,
@@ -288,7 +478,7 @@ export function getDashboardData() {
       const offen = new Set(
         (db
           .prepare(
-            "SELECT DISTINCT thread_url FROM drafts WHERE status IN ('pending','approved') AND kind IN ('message','first','followup','reaktivierung')",
+            "SELECT DISTINCT thread_url FROM drafts WHERE status IN ('pending','approved') AND kind IN ('message','first','followup','reaktivierung','event')",
           )
           .all() as { thread_url: string }[]).map((r) => r.thread_url),
       );

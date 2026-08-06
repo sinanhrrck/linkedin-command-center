@@ -23,16 +23,19 @@ function quote(n: number, von: number, gut: number, mittel: number): Quote {
 const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
 export function getAnalytics() {
-  // --- Grundzahlen (kumulativ) ---
+  // --- Grundzahlen (kumulativer Outreach-Funnel) ---
+  // Bestehende Verbindungen (`aus_netzwerk=1`) starten bereits hinter der Annahme-Stufe und
+  // gehören deshalb nicht in die Conversion einer versendeten Vernetzungsanfrage.
   const g = db
     .prepare(
       `SELECT
          COUNT(*) AS gesammelt,
          SUM(CASE WHEN invited_at  IS NOT NULL THEN 1 ELSE 0 END) AS eingeladen,
-         SUM(CASE WHEN accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS angenommen,
-         SUM(CASE WHEN messaged_at IS NOT NULL THEN 1 ELSE 0 END) AS angeschrieben,
-         SUM(CASE WHEN replied_at  IS NOT NULL THEN 1 ELSE 0 END) AS geantwortet
-       FROM contacts`,
+         SUM(CASE WHEN invited_at IS NOT NULL AND accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS angenommen,
+         SUM(CASE WHEN invited_at IS NOT NULL AND accepted_at IS NOT NULL AND messaged_at IS NOT NULL THEN 1 ELSE 0 END) AS angeschrieben,
+         SUM(CASE WHEN invited_at IS NOT NULL AND accepted_at IS NOT NULL AND messaged_at IS NOT NULL AND replied_at IS NOT NULL THEN 1 ELSE 0 END) AS geantwortet
+       FROM contacts
+       WHERE COALESCE(aus_netzwerk, 0) = 0`,
     )
     .get() as Record<string, number>;
   const gesamt = {
@@ -84,7 +87,7 @@ export function getAnalytics() {
     return { pct, zaehler, nenner, genugDaten, gut, mittel, tier };
   };
 
-  const akz = governor.acceptanceRate(); // rollierende reife 7-Tage-Kohorte (Breaker-Wert) → als Trend
+  const akz = governor.acceptanceRate(); // rollierende reife Kohorte (Breaker-Wert) → als Trend
   const quoten = {
     reifeTage: REIFE_TAGE,
     minN: MIN_N,
@@ -95,6 +98,7 @@ export function getAnalytics() {
     trend7d: {
       pct: akz.sample > 0 ? Math.round(akz.rate * 100) : null,
       n: akz.sample,
+      windowDays: config.safety.acceptanceWindowDays,
       genugDaten: akz.sample >= (config.safety.acceptanceRateMinSample ?? 15),
     },
   };

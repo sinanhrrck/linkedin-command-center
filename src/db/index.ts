@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { config } from "../config.js";
+import { repairContactDuplicates } from "./dataIntegrity.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -63,6 +64,23 @@ try {
 } catch {
   /* Spalte existiert bereits */
 }
+for (const [column, definition] of [
+  ["phase", "TEXT NOT NULL DEFAULT 'message'"],
+  ["parent_draft_id", "INTEGER"],
+  ["approach_key", "TEXT"],
+  ["rejection_reason", "TEXT"],
+  /**
+   * Warum wurde ein Entwurf blockiert bzw. warum ist sein Versand unklar? (2026-08-06)
+   * Der Grund stand bisher NUR im Log. Im Cockpit hieß es bei jedem Fall gleichlautend "von der
+   * Sicherheitsprüfung gestoppt" – ob ein Textproblem, ein Duplikat oder ein technischer Abbruch
+   * dahintersteckte, musste aus den Rohdaten rekonstruiert werden. Genau das ist der Unterschied
+   * zwischen "erneut senden hilft" und "erneut senden läuft in denselben Fehler".
+   */
+  ["blockiert_grund", "TEXT"],
+] as const) {
+  try { db.exec(`ALTER TABLE drafts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
+}
+
 try {
   // Aus welcher Lead-Quelle stammt der Kontakt? Fuer den Quellen-Vergleich in der Analytics
   // (welche Suche bringt die besten Annahme-/Antwortquoten). Wird beim Scrapen gesetzt;
@@ -80,6 +98,22 @@ try {
   /* Spalte existiert bereits */
 }
 
+// Migration 2026-08-04: Ein früherer Acceptance-Backfill behandelte bestehende Verbindungen
+// fälschlich wie frisch angenommene Akquise-Leads. Offene Texte bleiben erhalten, werden aber in
+// den separaten, immer freizugebenden Netzwerk-Zusatz verschoben. Existiert dort bereits ein
+// offener Entwurf, wird nur die doppelte First-Zeile als erledigt markiert.
+db.exec(
+  `UPDATE drafts
+      SET status='discarded', rejection_reason='network_duplicate'
+    WHERE kind='first' AND status='pending'
+      AND EXISTS (SELECT 1 FROM contacts c WHERE c.profile_url=drafts.thread_url AND COALESCE(c.aus_netzwerk,0)=1)
+      AND EXISTS (SELECT 1 FROM drafts r WHERE r.thread_url=drafts.thread_url AND r.kind='reaktivierung' AND r.status IN ('pending','approved','sent'));
+   UPDATE drafts
+      SET kind='reaktivierung', intent=COALESCE(intent,'network_addon')
+    WHERE kind='first' AND status='pending'
+      AND EXISTS (SELECT 1 FROM contacts c WHERE c.profile_url=drafts.thread_url AND COALESCE(c.aus_netzwerk,0)=1);`,
+);
+
 try {
   db.exec("ALTER TABLE lead_sources ADD COLUMN campaign_id INTEGER");
 } catch {
@@ -89,6 +123,28 @@ try {
   db.exec("ALTER TABLE contacts ADD COLUMN campaign_id INTEGER");
 } catch {
   /* Spalte existiert bereits */
+}
+try {
+  db.exec("ALTER TABLE contacts ADD COLUMN normalized_url TEXT");
+} catch {
+  /* Spalte existiert bereits */
+}
+
+for (const [column, definition] of [
+  ["kind", "TEXT NOT NULL DEFAULT 'outreach'"],
+  ["event_url", "TEXT"],
+  ["event_date", "TEXT"],
+  ["audience_scope", "TEXT NOT NULL DEFAULT 'external'"],
+  ["filters_json", "TEXT"],
+  ["message_template", "TEXT"],
+  ["daily_limit", "INTEGER NOT NULL DEFAULT 10"],
+  // 2026-08-04: Kampagnen sollen echten Sachkontext tragen (Ort, Uhrzeit, Ablauf/Nutzen),
+  // damit Einladungstexte und Neu-Generierungen nicht mehr raten müssen.
+  ["event_time", "TEXT"],
+  ["location", "TEXT"],
+  ["briefing", "TEXT"],
+] as const) {
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
 }
 
 // Bestehende Leads lassen sich automatisch ihrer Quelle und damit einer später zugeordneten
@@ -100,6 +156,12 @@ db.exec(
       AND source_id IS NOT NULL
       AND (SELECT campaign_id FROM lead_sources s WHERE s.id = contacts.source_id) IS NOT NULL`,
 );
+
+// Einmaliger und danach idempotenter Integritaetslauf. Der produktive Umbau legt vor dem ersten
+// Lauf eine separate SQLite-Sicherung an; weitere Starts finden keine Gruppen mehr.
+const integrity = repairContactDuplicates(db);
+if (integrity.removed) console.info(`[daten] ${integrity.groups} doppelte Kontaktgruppen zusammengefuehrt (${integrity.removed} Altzeilen).`);
+try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_normalized_url ON contacts(normalized_url) WHERE normalized_url IS NOT NULL"); } catch { /* wird beim naechsten Start erneut versucht */ }
 
 /** Key/Value-State */
 export const getState = (key: string): string | undefined =>

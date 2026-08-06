@@ -1,4 +1,5 @@
 import { db } from "../db/index.js";
+import { canonicalProfileUrl } from "../core/profileUrl.js";
 
 export type Contact = {
   id: number;
@@ -7,12 +8,14 @@ export type Contact = {
   headline?: string;
   status: string;
   notes?: string;
+  aus_netzwerk?: number | null;
   /** azubi | student – steuert den Winkel der Erstnachricht. Sinan hat NICHT studiert. */
   zielgruppe?: string | null;
 };
 
 /** Kontakt anlegen oder ergänzen (kein Duplikat pro Profil-URL). */
 export function upsertContact(c: { profileUrl: string; fullName?: string; headline?: string; sourceId?: number }) {
+  const profileUrl = canonicalProfileUrl(c.profileUrl);
   // Zielgruppe direkt beim Anlegen bestimmen – sie entscheidet später den Winkel der
   // Erstnachricht (Azubi vs. Student). Aus der Headline, nicht aus der Quelle: eine Suche
   // liefert gemischte Ergebnisse, die Headline ist die Wahrheit über die Person.
@@ -24,9 +27,9 @@ export function upsertContact(c: { profileUrl: string; fullName?: string; headli
     ? (db.prepare("SELECT campaign_id FROM lead_sources WHERE id=?").get(c.sourceId) as { campaign_id: number | null } | undefined)?.campaign_id ?? null
     : null;
   db.prepare(
-    `INSERT INTO contacts(profile_url, full_name, headline, zielgruppe, lead_score, score_grund, source_id, campaign_id)
-     VALUES(?,?,?,?,?,?,?,?)
-     ON CONFLICT(profile_url) DO UPDATE SET
+    `INSERT INTO contacts(profile_url, normalized_url, full_name, headline, zielgruppe, lead_score, score_grund, source_id, campaign_id)
+     VALUES(?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(normalized_url) DO UPDATE SET
        full_name   = COALESCE(excluded.full_name, contacts.full_name),
        headline    = COALESCE(excluded.headline,  contacts.headline),
        zielgruppe  = COALESCE(excluded.zielgruppe, contacts.zielgruppe),
@@ -34,7 +37,7 @@ export function upsertContact(c: { profileUrl: string; fullName?: string; headli
        score_grund = excluded.score_grund,
        source_id   = COALESCE(contacts.source_id, excluded.source_id),
        campaign_id = COALESCE(contacts.campaign_id, excluded.campaign_id)`,
-  ).run(c.profileUrl, c.fullName ?? null, c.headline ?? null, zg, score, grund, c.sourceId ?? null, campaignId);
+  ).run(profileUrl, profileUrl, c.fullName ?? null, c.headline ?? null, zg, score, grund, c.sourceId ?? null, campaignId);
 }
 
 /** Nächste noch nicht kontaktierte Leads. */
@@ -50,7 +53,21 @@ export const SCORE_MIN = 25;
 export function nextNewContacts(limit: number): Contact[] {
   return db
     .prepare(
-      "SELECT * FROM contacts WHERE status = 'new' ORDER BY COALESCE(lead_score, 50) DESC, created_at LIMIT ?",
+      `SELECT *
+       FROM contacts
+       WHERE status = 'new'
+       ORDER BY
+         CASE WHEN EXISTS (
+           SELECT 1
+           FROM campaign_targets ct
+           JOIN campaigns c ON c.id = ct.campaign_id
+           WHERE ct.contact_id = contacts.id
+             AND ct.status = 'awaiting_connection'
+             AND c.active = 1
+         ) THEN 0 ELSE 1 END,
+         COALESCE(lead_score, 50) DESC,
+         created_at
+       LIMIT ?`,
     )
     .all(limit) as Contact[];
 }

@@ -72,8 +72,18 @@ prüfen". Fertig.
    ```
 2. **Bot starten:** Im Dashboard oben auf **„Bot starten"**. Ab jetzt vernetzt er sich
    automatisch (gedrosselt & sicher) und legt dir Nachrichten als **Entwurf** vor.
-3. **Freigeben:** Unter **„Entwürfe"** liest du jeden Vorschlag, klickst **Genehmigen** (der
-   Bot sendet beim nächsten Durchgang) oder **Ablehnen** (er schreibt einen neuen).
+3. **Entscheiden:** Unter **„Heute"** siehst du nur die Aufgaben, die wirklich deine
+   Entscheidung brauchen. Prüfe jeweils einen Entwurf und klicke **Genehmigen** (der Bot
+   sendet beim nächsten Durchgang) oder **Ablehnen**. Beim Ablehnen kannst du einen komplett
+   anderen Gesprächsansatz wählen oder angeben, ob der Text künstlich, zu persönlich oder zu
+   verkäuferisch war. NextLead speichert dieses Feedback und vermeidet verworfene Richtungen.
+
+Die Aktivitätsschiene unter **„Heute"** zeigt jederzeit, was NextLead gerade macht, welche
+Aufgaben danach geplant sind und was zuletzt abgeschlossen wurde.
+
+Für ein Event legst du unter **„Kampagnen"** Zielgruppe, Event-Link und Einladungstext fest.
+Kontakte aus deinem Netzwerk erhalten einen Nachrichtenentwurf; Kontakte außerhalb werden
+zuerst regulär und gedrosselt vernetzt und nach der Annahme in dieselbe Kampagne übernommen.
 
 Das war's. Schau einmal am Tag rein, gib frei, was gut ist – der Rest läuft von allein.
 

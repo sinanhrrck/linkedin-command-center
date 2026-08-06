@@ -8,6 +8,8 @@ export const config = {
   paths: {
     sessionDir: process.env.SESSION_DIR ?? "./.session",
     dbPath: process.env.DB_PATH ?? "./data.db",
+    // Kampagnen-Material (Flyer, Agenda, Bilder). Bleibt lokal wie die Session, nie im Repo.
+    uploadDir: process.env.UPLOAD_DIR ?? "./.uploads",
   },
 
   gemini: {
@@ -91,10 +93,28 @@ export const config = {
     dailyCaps: {
       connect: 20, // Vernetzungsanfragen (Wochenlimit bremst zusätzlich)
       message: 30, // KALTE Erstnachrichten (+ Follow-ups) an neue Kontakte – das ist der riskante Teil, den LinkedIn beobachtet
+      /**
+       * KAMPAGNEN-EINLADUNGEN (Sinans Vorgabe 2026-08-05): eigener Topf, damit ein laufendes
+       * Event NICHT das Akquise-Kontingent auffrisst und umgekehrt. Empfänger sind bereits
+       * bestätigte Verbindungen, keine Fremden – das Risikoprofil ist niedriger als bei `message`.
+       * ACHTUNG: LinkedIn sieht trotzdem die SUMME aller Nachrichten. Dieser Topf erhöht das
+       * Tagesvolumen real auf bis zu 50 unaufgeforderte Nachrichten. Wer hier hochdreht,
+       * kauft sich Reichweite mit Sperr-Risiko.
+       */
+      campaign: 20,
       reply: 120, // ANTWORTEN in bestehenden Gesprächen (jemand hat DIR geschrieben) – quasi risikofrei, eigener Topf, damit heiße Leads nie durch kalte Outreach blockiert werden
       comment: 15,
       like: 40, // Likes sind harmlos, duerfen autonom + haeufiger; Governor-Delay bremst trotzdem
-      profileView: 120,
+      /**
+       * LESE-BUDGET (2026-08-05, nach der Kontosperre). LinkedIn hat NICHT das Senden moniert,
+       * sondern: "Ihr Konto hat eine große Menge an LinkedIn Profildaten abgerufen". Genau das
+       * war bis dahin ungedeckelt – ein einziger Postfach-Lauf öffnete bis zu 100 Chats.
+       * Diese beiden Werte sind die Sicherung dagegen (siehe core/leseBudget.ts).
+       * Bewusst knapp: Ein Mensch ruft an einem Arbeitstag keine 60 fremden Profile auf.
+       * NICHT hochdrehen – das ist die Grenze, an der das Konto zuletzt gesperrt wurde.
+       */
+      profileView: 60, // fremde Profile pro Tag (/in/…)
+      pageRead: 120, // sonstige LinkedIn-Seiten: Postfach, Threads, Suche, Feed
     },
     // Wochenlimit für Vernetzungen – LinkedIns praktische Sperr-Schwelle liegt bei ~100/Woche.
     // DARÜBER droht Konto-Restriktion. Das ist die echte Decke, nicht der Tages-Cap.
@@ -123,8 +143,19 @@ export const config = {
     // Circuit-Breaker: fällt die Akzeptanzrate der letzten 7 Tage darunter,
     // pausiert der Outreach automatisch.
     minAcceptanceRate: 0.30,
+    /**
+     * Ab HIER wird komplett gestoppt (2026-08-06). Zwischen diesem Wert und `minAcceptanceRate`
+     * läuft nur noch das halbe Tageskontingent. Grund: Ein harter Stopp bei 30% legte den
+     * gesamten Betrieb still und konnte sich nicht selbst auflösen. Unter 20% ist die Quote
+     * dagegen so schwach, dass LinkedIn die Einladungsfunktion einschränkt – da ist Schluss.
+     */
+    hardStopAcceptance: 0.20,
     // Erst ab dieser Zahl versendeter Invites greift die Akzeptanzraten-Prüfung.
     acceptanceRateMinSample: 20,
+    // Rollierendes Bewertungsfenster. 7 Tage waren bei 20 Anfragen/Tag zu nervös: wenige
+    // schlechte Suchtage kippten sofort den ganzen Bot, obwohl die Gesamtquote gesund war.
+    // 14 Tage reagieren weiterhin auf echte Verschlechterungen, glätten aber Tagesausreißer.
+    acceptanceWindowDays: 14,
     // Reifezeit: so viele Tage bekommt eine Einladung, BEVOR sie in die Akzeptanzrate zählt.
     // Ohne das würden die Anfragen von heute die Quote künstlich nach unten ziehen (niemand
     // nimmt in Minuten an) und der Circuit-Breaker pausiert grundlos. Menschen brauchen 1-3 Tage.

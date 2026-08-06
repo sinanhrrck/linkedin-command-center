@@ -2,11 +2,25 @@ import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { governor, GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { humanDelay, humanScroll, humanType, humanTypeInto } from "../core/humanize.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
-import { db } from "../db/index.js";
+import { db, getState, setState } from "../db/index.js";
 
 /** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
 function normText(s: string): string {
-  return (s || "").replace(/​/g, "").replace(/\s+/g, " ").trim();
+  return (s || "")
+    .normalize("NFC")
+    // LinkedIns Rich-Text-Editor setzt je nach Absatz/Browser unsichtbare Steuerzeichen ein.
+    // Sie sind keine Nutzzeichen und dürfen den Soll/Ist-Vergleich nicht fälschlich kippen.
+    .replace(/[\u200b-\u200d\u2060\ufeff]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Technischer Fehler, bevor LinkedIn überhaupt einen Sendeversuch bekommen konnte. */
+export class VersandNichtVersucht extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "VersandNichtVersucht";
+  }
 }
 
 /**
@@ -196,9 +210,9 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
 /**
  * Tippt den Text, sendet ihn und VERIFIZIERT, dass er wirklich im Chat gelandet ist.
  *
- * WARUM: Ohne diese Prüfung hat der Bot gelogen. Real passiert am 2026-07-16: Jonas Jüppner
- * (09:43) und Ben Endress (10:06) wurden als 'messaged' markiert, die Aktion protokolliert und
- * ein Telegram-Push "Nachricht gesendet" verschickt – im Postfach kam nie etwas an. Der alte
+ * WARUM: Ohne diese Prüfung hat der Bot gelogen. Real passiert am 2026-07-16: zwei Kontakte
+ * wurden als 'messaged' markiert, die Aktion protokolliert und ein Telegram-Push "Nachricht
+ * gesendet" verschickt – im Postfach kam nie etwas an. Der alte
  * Code tippte, drückte Enter und markierte bedingungslos als gesendet, ohne je nachzusehen.
  *
  * Zwei unabhängige Belege müssen stimmen:
@@ -217,8 +231,28 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
  * Chat-Fenster → eine Nachricht ("Hey Jack …") ging an die FALSCHE Person. Der Inhalts-Abgleich
  * prüfte nur den Text, nie den Empfänger. Diese Zuordnung schließt die Lücke.
  */
-async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger: string, nurHaupt = false) {
+/**
+ * Welcher Namensteil muss auf der Seite stehen, damit der Empfänger als bestätigt gilt?
+ *
+ * LinkedIn kürzt Nachnamen ab, wenn ein Profil sie nicht preisgibt – im CRM steht dann "Marie K."
+ * oder "Tobias R.". Auf der Profil- bzw. Thread-Seite erscheint jedoch der VOLLE Name
+ * ("Marie Kowalczyk"), der die Zeichenfolge "marie k." nicht enthält. Die Prüfung schlug deshalb fehl
+ * und brach den Versand ab – live an zwei Kontakten beobachtet, betrifft 23 Kontakte.
+ *
+ * Bei abgekürzten Namen wird deshalb nur der Vorname verlangt. Das ist schwächer, aber vertretbar:
+ * Die eigentliche Zusicherung ist die aufgerufene Profil-/Thread-URL, der Name ist die zweite
+ * Sicherung. Zu kurze Vornamen (unter 3 Zeichen) wären als Prüfmerkmal wertlos – dann lieber
+ * den vollen String verlangen und im Zweifel nicht senden.
+ */
+export function pruefNameFuer(empfaenger: string): string {
   const ziel = empfaenger.trim().toLowerCase();
+  if (!/\s\p{L}\.?$/u.test(ziel)) return ziel; // vollständiger Name → unverändert prüfen
+  const vorname = ziel.split(/\s+/)[0] ?? "";
+  return vorname.length >= 3 ? vorname : ziel;
+}
+
+async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger: string, nurHaupt = false) {
+  const ziel = pruefNameFuer(empfaenger);
   if (!ziel) return null;
 
   // THREAD-MODUS: Wir sind direkt in dieser Thread-URL – die URL (in sendThreadReply geprüft)
@@ -257,7 +291,14 @@ async function fensterFuerEmpfaenger(page: import("playwright").Page, empfaenger
   return treffer.length === 1 ? treffer[0] : null; // eindeutig ODER gar nicht (fail-safe, Overlay-Modus)
 }
 
-async function tippenUndSenden(page: import("playwright").Page, text: string, empfaenger: string, nurHaupt = false, urlVerbuergt = false) {
+async function tippenUndSenden(
+  page: import("playwright").Page,
+  text: string,
+  empfaenger: string,
+  nurHaupt = false,
+  urlVerbuergt = false,
+  onVersandVersucht: () => void = () => {},
+) {
   // SICHERHEITSSCHLEIFE 1: kein Kauderwelsch/Fehler-Text. Im Zweifel gar nicht senden.
   const plaus = istPlausibleNachricht(text);
   if (!plaus.ok) throw new UnsichereNachricht(plaus.grund ?? "unplausibel");
@@ -338,7 +379,11 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
     await box.focus();
     await page.keyboard.insertText(text); // zuverlässig, kein Editor-Race
     await humanDelay(400, 900);
-    const ist = normText(await box.evaluate((el) => el.textContent || "").catch(() => ""));
+    // `textContent` klebt Blockelemente ohne Trennzeichen zusammen ("Absatz 1Absatz 2").
+    // `innerText` bildet die sichtbaren Absatzumbrüche ab und ist damit der richtige Vergleich
+    // für mehrzeilige Nachrichten. Das war die Ursache dafür, dass kurze Texte gingen, längere
+    // Nachrichten mit Absätzen aber trotz korrektem Inhalt blockiert wurden.
+    const ist = normText(await box.evaluate((el) => (el as HTMLElement).innerText || el.textContent || "").catch(() => ""));
     if (ist === sollNorm) feldOk = true;
     else console.warn(`[send] Feld-Inhalt weicht ab (Versuch ${versuch}) – steht: "${ist.slice(0, 45)}"`);
   }
@@ -347,11 +392,16 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
   const sendBtn = fenster.locator(SEL.sendButton).last();
   // Erst NACH allen rein lokalen Prüfungen reservieren. Scheitert ein Selektor oder das Tippen,
   // bleibt der Entwurf normal korrigierbar; ab diesem Punkt kann LinkedIn den Versand annehmen.
+  const sendAktiv = await sendBtn.isEnabled().catch(() => false);
   if (!reserviereVersand(empfaenger, text)) {
     console.warn(`[send] Duplikat verhindert – "${empfaenger}" hat diese Nachricht schon bekommen.`);
     throw new DuplikatBlockiert(empfaenger);
   }
-  if (await sendBtn.isEnabled().catch(() => false)) await sendBtn.click();
+  // Ab genau hier ist ein Versand technisch möglich. Fehler davor dürfen sicher erneut versucht
+  // werden; Fehler ab hier bleiben absichtlich "unknown", weil LinkedIn den Klick angenommen
+  // haben könnte und ein automatischer Retry ein Duplikat riskieren würde.
+  onVersandVersucht();
+  if (sendAktiv) await sendBtn.click();
   else await page.keyboard.press("Enter"); // Fallback
 
   /**
@@ -375,16 +425,63 @@ async function tippenUndSenden(page: import("playwright").Page, text: string, em
    * gesendet), führte das Werfen zu einem ERNEUTEN Versand = Duplikat. Genau das war der
    * Doppel-Nachrichten-Bug. Feld-leer zählt, die Verlaufssuche ist nur noch Zusatz-Info.
    */
-  const marker = normText(text).slice(0, 40);
-  const imVerlauf = await fenster.locator(SEL.threadItem).filter({ hasText: marker }).count().catch(() => 0);
+  /**
+   * ROBUSTER seit 2026-08-06. Die Prüfung lief GENAU EINMAL, sofort nach dem Klick, und nur im
+   * zuvor ermittelten Fenster-Container. Beides ist zu eng: LinkedIn hängt die gesendete Nachricht
+   * verzögert in den Verlauf, und der Container kann nach dem Senden neu aufgebaut werden.
+   * Ergebnis: Der zweite Beleg schlug bei JEDEM Versand fehl – die Doppelabsicherung, die im Juli
+   * wegen falsch gemeldeter Versände eingebaut wurde, war faktisch wirkungslos.
+   *
+   * Jetzt: mehrere Versuche mit Wartezeit, zusätzlich ein Blick auf die ganze Seite, und ein
+   * kürzerer Marker (Umbrüche und Sonderzeichen brechen lange Textvergleiche eher).
+   * Bleibt es dabei, wird das FESTGEHALTEN statt nur geloggt – häuft es sich, stimmt der
+   * Selektor nicht mehr und das gehört ins Cockpit, nicht in eine Logdatei.
+   */
+  const marker = normText(text).slice(0, 25);
+  let imVerlauf = 0;
+  for (let versuch = 0; versuch < 4 && imVerlauf === 0; versuch++) {
+    if (versuch) await humanDelay(900, 1600);
+    imVerlauf = await fenster.locator(SEL.threadItem).filter({ hasText: marker }).count().catch(() => 0);
+    if (!imVerlauf) imVerlauf = await page.locator(SEL.threadItem).filter({ hasText: marker }).count().catch(() => 0);
+  }
+  merkeVerlaufsBeleg(imVerlauf > 0);
   if (imVerlauf === 0)
     console.warn("[send] Feld geleert (= gesendet), aber Text nicht im Verlauf gefunden – Verlaufsprüfung unsicher, kein erneuter Versand.");
 }
 
-/** Erstnachricht an einen bereits verbundenen Kontakt. */
-export async function sendMessage(profileUrl: string, text: string) {
+/**
+ * Wie verlässlich ist die Verlaufs-Prüfung zuletzt gewesen? Gespeichert werden nur die letzten
+ * 20 Ergebnisse als kompakte Kette ("1" bestätigt, "0" nicht gefunden) – keine Inhalte, keine
+ * Namen. Zweck: Ein systematisch gebrochener Selektor soll AUFFALLEN, statt in engine.log zu
+ * versickern. Genau das ist hier einen Tag lang unbemerkt passiert.
+ */
+function merkeVerlaufsBeleg(ok: boolean): void {
   try {
-    return await governor.execute("message", profileUrl, async () => {
+    const bisher = getState("verlauf_belege") || "";
+    setState("verlauf_belege", (bisher + (ok ? "1" : "0")).slice(-20));
+  } catch { /* Telemetrie darf den Versand nie stören */ }
+}
+
+/** Anteil bestätigter Versände der letzten Läufe – für die Anzeige im Cockpit. */
+export function verlaufsBelegStand(): { geprueft: number; bestaetigt: number; verdaechtig: boolean } {
+  const kette = getState("verlauf_belege") || "";
+  const geprueft = kette.length;
+  const bestaetigt = (kette.match(/1/g) || []).length;
+  // Erst ab 5 Versänden urteilen; unter 30% Trefferquote stimmt mit hoher Wahrscheinlichkeit
+  // der Selektor nicht mehr (bei intaktem Selektor liegt die Quote nahe 100%).
+  return { geprueft, bestaetigt, verdaechtig: geprueft >= 5 && bestaetigt / geprueft < 0.3 };
+}
+
+/**
+ * Erstnachricht an einen bereits verbundenen Kontakt.
+ * `typ` wählt den Governor-Topf: "message" für Akquise (Erstnachricht, Follow-up, Reaktivierung),
+ * "campaign" für Event-Einladungen – die laufen in ein eigenes Tageskontingent, damit sich
+ * Kampagne und Akquise nicht gegenseitig blockieren. Der Sendeweg ist identisch.
+ */
+export async function sendMessage(profileUrl: string, text: string, typ: "message" | "campaign" = "message") {
+  let versandVersucht = false;
+  try {
+    return await governor.execute(typ, profileUrl, async () => {
       const page = await newPage();
       await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
       if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
@@ -405,7 +502,7 @@ export async function sendMessage(profileUrl: string, text: string) {
       // nurHaupt=true: wir haben gezielt den Nachricht-Button DIESES Profils geklickt → der
       // Compose im Hauptbereich gehört dieser Person. Robuster Haupt-Bereich-Weg + text-basierte
       // Namensprüfung (statt der kaputten Fenster-/Klassen-Erkennung, an der Follow-ups hingen).
-      await tippenUndSenden(page, text, empfaenger, true);
+      await tippenUndSenden(page, text, empfaenger, true, false, () => { versandVersucht = true; });
 
       db.prepare(
         "UPDATE contacts SET status='messaged', messaged_at=datetime('now') WHERE profile_url = ?",
@@ -417,6 +514,15 @@ export async function sendMessage(profileUrl: string, text: string) {
     // sie z.B. am Sonntag/außerhalb der Zeit blockiert hat. Weiterreichen → der Aufrufer behält den
     // Entwurf 'approved' und versucht es, wenn wieder gesendet werden darf.
     if (e instanceof GovernorBlocked) console.info(`[outreach] Nachricht blockiert (${profileUrl}): ${e.message}`);
+    if (
+      !versandVersucht &&
+      !(e instanceof GovernorBlocked) &&
+      !(e instanceof DuplikatBlockiert) &&
+      !(e instanceof UnsichereNachricht) &&
+      !(e instanceof VersandNichtVersucht)
+    ) {
+      throw new VersandNichtVersucht((e as Error)?.message || "Technischer Fehler vor dem Versand");
+    }
     throw e;
   }
 }
@@ -432,17 +538,19 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
   // an einen heißen Lead. Alle übrigen Schutzmechanismen (Delay, Arbeitszeit, Not-Aus, send_health)
   // gelten unverändert.
   return governor.execute("reply", threadUrl, async () => {
-    const page = await newPage();
-    await page.goto(threadUrl, { waitUntil: "domcontentloaded" });
-    if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
-    await humanDelay(1200, 2500);
+    let versandVersucht = false;
+    try {
+      const page = await newPage();
+      await page.goto(threadUrl, { waitUntil: "domcontentloaded" });
+      if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
+      await humanDelay(1200, 2500);
 
     // EMPFÄNGER-GARANTIE im Thread-Modus: Die Thread-ID muss nach dem Laden noch in der URL stehen
     // (LinkedIn hat uns nicht wegnavigiert/umgeleitet). Das ersetzt die fragile Fenster-/Namens-
     // Erkennung – zuverlässiger und ohne von LinkedIn-CSS-Klassen abzuhängen.
-    const idMatch = threadUrl.match(/thread\/([^/?#]+)/);
-    if (idMatch && !page.url().includes(idMatch[1]))
-      throw new UnsichereNachricht(`Thread-URL nach Laden verändert (erwartet ${idMatch[1]}) – Versand abgebrochen`);
+      const idMatch = threadUrl.match(/thread\/([^/?#]+)/);
+      if (idMatch && !page.url().includes(idMatch[1]))
+        throw new UnsichereNachricht(`Thread-URL nach Laden verändert (erwartet ${idMatch[1]}) – Versand abgebrochen`);
 
     /**
      * FRISCHE-CHECK (Bug-Fix 2026-07-26): Zwischen dem Lesen des Postfachs und diesem Versand
@@ -451,18 +559,30 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
      * Tippen, nochmal in den Chat schauen: Ist die LETZTE Nachricht wirklich von der Person
      * (Klasse „--other")? Ist sie es NICHT (also von Sinan/dem Bot), NICHT senden → wird Entwurf.
      */
-    const letzteVonPerson = await page
-      .locator(SEL.threadItem)
-      .last()
-      .evaluate((el) => /--other\b/.test(el.className) || !!el.closest(".msg-s-event-listitem--other"))
-      .catch(() => null);
-    if (letzteVonPerson === false)
-      throw new UnsichereNachricht("Letzte Nachricht im Chat ist nicht von der Person (jemand hat schon geantwortet) – Versand abgebrochen, wird Entwurf");
+      const letzteVonPerson = await page
+        .locator(SEL.threadItem)
+        .last()
+        .evaluate((el) => /--other\b/.test(el.className) || !!el.closest(".msg-s-event-listitem--other"))
+        .catch(() => null);
+      if (letzteVonPerson === false)
+        throw new UnsichereNachricht("Letzte Nachricht im Chat ist nicht von der Person (jemand hat schon geantwortet) – Versand abgebrochen, wird Entwurf");
 
     // nurHaupt=true: ins Eingabefeld des Haupt-Bereichs <main> schreiben (Overlay-Bubbles ausgeschlossen).
     // urlVerbuergt=true: die geprüfte Thread-URL (oben) bürgt bereits für den Empfänger – falls der
     // h2-Kopf mal nicht lesbar ist, NICHT fälschlich abbrechen (das hatte hier alles blockiert).
-    await tippenUndSenden(page, text, empfaenger, true, true);
+      await tippenUndSenden(page, text, empfaenger, true, true, () => { versandVersucht = true; });
+    } catch (e) {
+      if (
+        !versandVersucht &&
+        !(e instanceof GovernorBlocked) &&
+        !(e instanceof DuplikatBlockiert) &&
+        !(e instanceof UnsichereNachricht) &&
+        !(e instanceof VersandNichtVersucht)
+      ) {
+        throw new VersandNichtVersucht((e as Error)?.message || "Technischer Fehler vor dem Versand");
+      }
+      throw e;
+    }
   });
 }
 

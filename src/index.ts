@@ -13,6 +13,7 @@ import { generateInboxDrafts, generateFollowups, sendApprovedDrafts, reviveChat,
 import { generatePostIdeas } from "./modules/content.js";
 import { commentTick } from "./modules/comment.js";
 import { scanNetzwerk, generateReaktivierung } from "./modules/netzwerk.js";
+import { campaignTick } from "./modules/campaignRunner.js";
 import { agentTick } from "./agent/runtime/agentRunner.js";
 import { selbstCheck } from "./modules/healthcheck.js";
 import { config } from "./config.js";
@@ -44,7 +45,25 @@ const jobQueue = new SerialJobQueue((snapshot) => {
 });
 
 async function einzeln(name: string, fn: () => Promise<unknown>, priority = 50) {
-  const { queued, done } = jobQueue.enqueue(name, fn, priority);
+  const protokolliert = async () => {
+    const info = db.prepare("INSERT INTO bot_activity(job,status) VALUES(?,'running')").run(name);
+    const id = Number(info.lastInsertRowid);
+    try {
+      const result = await fn();
+      const detail = typeof result === "number"
+        ? result > 0 ? `${result} Element${result === 1 ? "" : "e"} bearbeitet` : "Geprüft, nichts Neues"
+        : "Prüfung abgeschlossen";
+      db.prepare("UPDATE bot_activity SET status='done',detail=?,finished_at=datetime('now') WHERE id=?").run(detail, id);
+      // Das Protokoll ist eine Betriebsanzeige, kein ewiges Audit-Log.
+      db.prepare("DELETE FROM bot_activity WHERE id NOT IN (SELECT id FROM bot_activity ORDER BY id DESC LIMIT 300)").run();
+      return result;
+    } catch (error) {
+      db.prepare("UPDATE bot_activity SET status='failed',detail=?,finished_at=datetime('now') WHERE id=?")
+        .run(String((error as Error)?.message || error).slice(0, 180), id);
+      throw error;
+    }
+  };
+  const { queued, done } = jobQueue.enqueue(name, protokolliert, priority);
   if (!queued) {
     console.info(`[${name}] bereits aktiv oder vorgemerkt.`);
     return false;
@@ -135,6 +154,23 @@ function versucheBinden(): Promise<"ok" | "belegt" | "fehler"> {
   if (frei) console.info(`[start] ${frei} hängende Lead-Ansprüche ('inviting') wieder freigegeben.`);
 }
 
+/**
+ * HÄNGENDE VERSÄNDE AUFRÄUMEN (2026-08-05). Stirbt der Prozess mitten in `sendDraft` – bei einem
+ * App-Update, Absturz oder Kill –, bleibt der Entwurf auf 'sending' stehen. In diesem Zustand
+ * fasst ihn NICHTS mehr an: Der Versand-Job holt nur 'approved', das Cockpit zeigt nur 'pending'.
+ * Der Entwurf verschwindet also lautlos, obwohl vielleicht ein Mensch auf die Antwort wartet.
+ *
+ * Bewusst NICHT zurück auf 'approved': Ob LinkedIn den Klick noch angenommen hat, ist nach einem
+ * harten Abbruch nicht beweisbar. Ein blinder zweiter Versuch wäre ein Doppel-Versand. Deshalb
+ * 'unknown' – derselbe Zustand wie bei jedem anderen unklaren Versand: sichtbar als technischer
+ * Hinweis im Cockpit, und ein Mensch entscheidet nach Blick in den Verlauf.
+ * Sicher, weil beim Start garantiert kein Versand läuft (der Portlock lässt nur eine Engine zu).
+ */
+{
+  const haengend = db.prepare("UPDATE drafts SET status='unknown' WHERE status='sending'").run().changes;
+  if (haengend) console.warn(`[start] ${haengend} Entwurf/Entwürfe hingen im Versand ('sending') – als "Status unklar" markiert, bitte im LinkedIn-Verlauf prüfen.`);
+}
+
 // Die tatsächlich laufende Code-Version festhalten (aus der mitgebündelten package.json – die kommt
 // aus DEMSELBEN app.asar wie dieser Engine-Code). Das Dashboard vergleicht sie mit der Version auf
 // der Platte und warnt, falls nach einem Update noch eine alte Engine im Speicher läuft.
@@ -149,6 +185,7 @@ setState("engine_code_version", ENGINE_CODE_VERSION);
 setState("engine_active_job", "");
 setState("engine_queue_length", "0");
 setState("engine_queue_next", "");
+db.prepare("UPDATE bot_activity SET status='failed',detail='Durch Neustart beendet',finished_at=datetime('now') WHERE status='running'").run();
 cron.schedule("* * * * *", async () => {
   setState("engine_heartbeat", new Date().toISOString());
   // Ein Screenshot auf derselben Seite darf keine Navigation/Interaktion unterbrechen.
@@ -176,6 +213,7 @@ setTimeout(async () => {
   // Beim Start einmal Nachschub holen: wer Quellen angelegt + den Bot gestartet hat, bekommt
   // gleich Leads, statt bis zum nächsten festen Fütter-Termin zu warten.
   await einzeln("feed", () => feedTick(), 20);
+  await einzeln("campaign", () => campaignTick(), 50);
   // Post-Ideen: nur nachlegen, wenn KEINE offen sind (schont das Gemini-Limit). So sieht der
   // Nutzer gleich beim ersten Start Beitrags-Entwürfe zum Freigeben, statt bis Montag zu warten.
   await einzeln("content", async () => {
@@ -203,7 +241,7 @@ cron.schedule("* * * * *", () =>
     const claim = db.prepare(
       "UPDATE posts SET status='posting' WHERE id=(SELECT id FROM posts WHERE status='approved' AND scheduled_for <= datetime('now') ORDER BY scheduled_for LIMIT 1)",
     ).run();
-    if (claim.changes === 0) return; // nichts fällig
+    if (claim.changes === 0) return 0; // nichts fällig
     const due = db.prepare("SELECT id, body FROM posts WHERE status='posting' ORDER BY scheduled_for LIMIT 1").get() as { id: number; body: string } | undefined;
     if (!due) return;
     try {
@@ -216,6 +254,7 @@ cron.schedule("* * * * *", () =>
         db.prepare("UPDATE posts SET status='posted' WHERE id=?").run(due.id);
         console.info("[post] veröffentlicht (Browser).");
       }
+      return 1;
     } catch (e) {
       db.prepare("UPDATE posts SET status='failed' WHERE id=?").run(due.id);
       console.error(`[post] fehlgeschlagen (#${due.id}):`, (e as Error)?.message?.slice(0, 120));
@@ -240,6 +279,10 @@ cron.schedule("5 9-22 * * *", () => einzeln("acceptance", () => checkAcceptances
 // Lead-Fütterung 2x täglich: gespeicherte Such-Quellen abgrasen (rein lesend).
 // Hält die Pipeline gefüllt, damit der Outreach nicht trockenläuft.
 cron.schedule("0 10,16 * * *", () => einzeln("feed", () => feedTick(), 20));
+
+// Aktive Event-Kampagnen arbeiten parallel zum normalen Outreach. Die eigentliche Nachricht
+// bleibt ein normaler Entwurf und durchlaeuft denselben Freigabe- und Governor-Weg.
+cron.schedule("*/10 * * * *", () => einzeln("campaign", () => campaignTick(), 50));
 
 // SOFORT-NACHSCHUB auf Knopfdruck: das Dashboard setzt "feed_now"=1 (neue Quelle oder
 // "Jetzt Nachschub holen"). Der Loop prüft alle 2 Min und füttert dann gleich – so wirkt der
@@ -281,7 +324,19 @@ cron.schedule("30 9 * * 2", () => einzeln("netzwerk", () => netzwerkLauf(3), 35)
  *  - automatisch 1x täglich (9:05), damit nichts liegen bleibt.
  * Läuft nur, wenn der Agent NICHT live antwortet (sonst doppelte Entwürfe zum selben Thread).
  */
-async function offeneAntwortenScan(max = 40) {
+/**
+ * DECKEL: 40 → 100 (Vormittag 2026-08-05) → 25 (Abend desselben Tages).
+ *
+ * Die Anhebung auf 100 war ein Fehler mit Folgen. Der Lauf lud 240 Konversationen und öffnete
+ * bis zu 100 davon einzeln – zweimal an einem Nachmittag. LinkedIn sperrte das Konto noch am
+ * selben Tag mit der Begründung, es seien große Mengen an Profildaten abgerufen worden.
+ *
+ * Der ursprüngliche Zweck bleibt richtig: Chats sollen nicht liegen bleiben. Nur muss er über
+ * VIELE KLEINE Läufe erreicht werden statt über einen großen. 25 Chats täglich sind in einer
+ * Woche 175 – mehr als das Postfach hergibt – und fallen dabei nicht auf.
+ * NICHT wieder hochsetzen. Das Lese-Budget (core/leseBudget.ts) bremst zusätzlich.
+ */
+async function offeneAntwortenScan(max = 25) {
   if (getAgentMode() !== "off") return;
   await generateInboxDrafts(max, false);
 }
@@ -289,10 +344,10 @@ cron.schedule("*/2 * * * *", () =>
   einzeln("offene", async () => {
     if (getState("offene_now") !== "1") return;
     setState("offene_now", "");
-    await offeneAntwortenScan(40);
+    await offeneAntwortenScan(25);
   }, 85),
 );
-cron.schedule("5 9 * * *", () => einzeln("offene", () => offeneAntwortenScan(40), 80));
+cron.schedule("5 9 * * *", () => einzeln("offene", () => offeneAntwortenScan(25), 80));
 
 // PITCH Stufe 2 auf Knopfdruck: Dashboard setzt "pitch_now"={id,idee} → der Loop generiert aus dem
 // gewählten Ansatz die Nachricht (neuer 'message'-Entwurf zur zweiten Freigabe). Nur LLM, kein Browser.

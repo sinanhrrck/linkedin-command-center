@@ -45,21 +45,55 @@ export async function fetchThreads(max = 8, onlyUnread = false): Promise<ThreadC
   await humanDelay(2500, 4000);
   await humanScroll(page);
 
-  // TIEFER SCAN (für "alle offenen Antworten prüfen"): LinkedIn rendert nur die obersten Zeilen
-  // der Konversationsliste; ältere Chats kommen erst nach, wenn man die LISTE (nicht die Seite)
-  // scrollt. Je größer max, desto mehr Runden – so erreichen wir auch alte, längst gelesene Chats,
-  // in denen noch eine Antwort von Sinan offen ist.
-  const scrollRunden = Math.min(15, Math.max(1, Math.ceil(max / 8)));
-  for (let i = 0; i < scrollRunden; i++) {
-    await page
-      .evaluate((sel) => {
-        const li = document.querySelector(sel);
-        const liste = (li?.closest("ul") as HTMLElement | null) || (li?.parentElement as HTMLElement | null);
-        (liste || document.scrollingElement || document.body)?.scrollBy(0, 5000);
-      }, SEL.listItem)
-      .catch(() => {});
-    await humanDelay(800, 1500);
+  /**
+   * TIEFER SCAN (für "alle offenen Antworten prüfen"): LinkedIn rendert nur die obersten Zeilen
+   * der Konversationsliste; ältere Chats kommen erst nach, wenn man die LISTE (nicht die Seite)
+   * scrollt. Was nicht im DOM steht, existiert für diesen Scan nicht.
+   *
+   * MIT ERFOLGSKONTROLLE seit 2026-08-05. Vorher wurde eine feste Rundenzahl (max/8) BLIND
+   * gescrollt, ohne je zu prüfen, ob dabei Zeilen nachgeladen wurden. Lud LinkedIn langsamer
+   * nach als die 5 Runden dauerten, meldete der Scan "nichts offen", obwohl weiter unten Chats
+   * auf Antwort warteten – live nachgewiesen an einem Chat vom 27.07., der nie wieder auftauchte.
+   * Jetzt wird gescrollt, bis genug Zeilen geladen sind ODER die Liste nachweislich zu Ende ist.
+   */
+  const scrollSchritt = () =>
+    page.evaluate((sel) => {
+      const li = document.querySelector(sel);
+      if (!li) return { geladen: 0, bewegt: false };
+      // Das wirklich scrollbare Element suchen – die <ul> selbst ist es nicht immer.
+      let el = li.parentElement as HTMLElement | null;
+      while (el && el.scrollHeight <= el.clientHeight + 4) el = el.parentElement as HTMLElement | null;
+      const ziel = el || (document.scrollingElement as HTMLElement);
+      const vorher = ziel.scrollTop;
+      ziel.scrollTop = ziel.scrollHeight; // ans Ende springen → lädt die nächste Seite nach
+      return { geladen: document.querySelectorAll(sel).length, bewegt: ziel.scrollTop !== vorher };
+    }, SEL.listItem);
+
+  /**
+   * OBERGRENZE 2026-08-05 (Abend): war `min(250, max*3)` und lud real 240 Konversationen –
+   * mit ein Auslöser der Kontosperre am selben Tag. Jetzt eng am tatsächlichen Bedarf:
+   * etwas mehr Zeilen als Ziele, weil der Vorschau-Filter danach welche wegwirft, aber
+   * nie mehr als 60. Wer alle Chats sehen will, bekommt sie über mehrere Tage statt in
+   * einem auffälligen Rutsch.
+   */
+  const zeilenZiel = Math.min(60, Math.ceil(max * 1.5));
+  let geladen = 0;
+  let stagniert = 0;
+  for (let runde = 0; runde < 12; runde++) {
+    const r = await scrollSchritt().catch(() => null);
+    await humanDelay(700, 1300);
+    const jetzt = r?.geladen ?? 0;
+    if (jetzt >= zeilenZiel) break;
+    // Drei Runden ohne Zuwachs = Ende der Liste (eine Runde Toleranz reicht nicht, LinkedIn
+    // lädt spürbar verzögert nach).
+    if (jetzt <= geladen) {
+      if (++stagniert >= 3) break;
+    } else {
+      stagniert = 0;
+    }
+    geladen = Math.max(geladen, jetzt);
   }
+  if (geladen) console.info(`[inbox] ${geladen} Konversationen geladen (Ziel ${zeilenZiel}).`);
 
   // Listen-Metadaten (Name, ungelesen, VORSCHAU) je Position einsammeln. Die Vorschau ist der
   // Schlüssel: LinkedIn stellt "Sie: …" voran, wenn DU zuletzt geschrieben hast. Fehlt das,

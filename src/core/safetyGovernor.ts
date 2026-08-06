@@ -6,7 +6,13 @@ import { events } from "./events.js";
 // "message" = KALTE Erstnachricht/Follow-up an neue Kontakte (riskant, eng gecappt).
 // "reply"   = Antwort in einem bestehenden Gespräch (jemand schrieb DIR) – risikoarm, eigener,
 //             großzügiger Cap, damit Antworten an heiße Leads nie durch kalte Outreach blockiert werden.
-export type ActionType = "connect" | "message" | "reply" | "comment" | "profileView" | "like";
+/**
+ * `campaign` = Event-/Kampagnen-Einladung an eine bestehende Verbindung. Bewusst ein eigener
+ * Topf neben `message` (kalte Erstnachricht) und `reply` (Antwort im laufenden Gespräch), damit
+ * eine Kampagne die Akquise nicht aushungert. Für Arbeitszeit und Wochenende gilt dieselbe
+ * strenge Regel wie für `message`: nur werktags, nur im Zeitfenster.
+ */
+export type ActionType = "connect" | "message" | "campaign" | "reply" | "comment" | "profileView" | "like";
 
 type Decision = { ok: true } | { ok: false; reason: string };
 
@@ -16,6 +22,16 @@ type Decision = { ok: true } | { ok: false; reason: string };
  * JETZT ohne unnötiges Ban-Risiko erlaubt ist.
  */
 class SafetyGovernor {
+  constructor() {
+    // Migration von v0.2.0/v0.2.1: Der alte Akzeptanz-Breaker setzte fälschlich die GLOBALE
+    // Pause und blockierte damit sogar Antworten, Entwürfe und Posts. Nur genau diese alte,
+    // eindeutig erkennbare Pause lösen; Not-Aus und andere Sicherheitsgründe bleiben bestehen.
+    if (getState("paused") === "1" && (getState("pause_reason") || "").startsWith("Akzeptanzrate")) {
+      this.resume();
+      console.info("[migration] Globale Akzeptanz-Pause gelöst; die Quote bremst nur noch Vernetzungen.");
+    }
+  }
+
   /** Globaler Not-Aus. Wird vom Circuit-Breaker / Checkpoint-Detektor gesetzt. */
   isPaused(): boolean {
     return getState("paused") === "1";
@@ -113,7 +129,7 @@ class SafetyGovernor {
     return true;
   }
 
-  /** Akzeptanzrate der letzten 7 Tage (accepted / invited). */
+  /** Akzeptanzrate des rollierenden, geglätteten Fensters (accepted / invited). */
   /**
    * Akzeptanzrate über eine KOHORTE: von den Einladungen, die alt genug sind, um
    * angenommen worden zu sein, wie viele wurden es?
@@ -125,21 +141,23 @@ class SafetyGovernor {
    * und Nenner kamen aus verschiedenen Gruppen (eine Annahme von heute zählte oben mit, auch
    * wenn die Einladung 10 Tage alt war und unten fehlte).
    *
-   * Jetzt: nur Einladungen aus dem Fenster [heute-7d ... heute-{maturityDays}d] und von
+   * Jetzt: nur Einladungen aus dem konfigurierten Fenster
+   * [heute-windowDays ... heute-{maturityDays}d] und von
    * genau DIESEN wird gezählt, wie viele accepted_at haben. Gleiche Gruppe oben wie unten.
    */
   acceptanceRate(): { rate: number; sample: number } {
     const reif = config.safety.acceptanceMaturityDays;
+    const fenster = config.safety.acceptanceWindowDays;
     const row = db
       .prepare(
         `SELECT COUNT(*) AS n,
                 SUM(CASE WHEN accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS ok
            FROM contacts
           WHERE invited_at IS NOT NULL
-            AND invited_at >= datetime('now','-7 days')
+            AND invited_at >= datetime('now', ?)
             AND invited_at <= datetime('now', ?)`,
       )
-      .get(`-${reif} days`) as { n: number; ok: number | null };
+      .get(`-${fenster} days`, `-${reif} days`) as { n: number; ok: number | null };
     const invited = row.n;
     const accepted = row.ok ?? 0;
     return { rate: invited === 0 ? 1 : accepted / invited, sample: invited };
@@ -186,12 +204,29 @@ class SafetyGovernor {
     if (type === "connect" && this.countThisWeek("connect") >= config.safety.weeklyConnectCap)
       return { ok: false, reason: "Wochenlimit Vernetzungen erreicht" };
 
-    // Circuit-Breaker Akzeptanzrate
+    // Akzeptanz-Bremse: Eine schwache Quote stoppt NUR weitere Vernetzungen. Der alte globale
+    // pause()-Aufruf legte auch Antworten, Entwürfe, Posts und Hot Leads still – genau die Arbeit,
+    // die trotz schlechter Lead-Quelle weiterlaufen muss.
+    /**
+     * GESTAFFELT statt hart (Sinans Vorgabe 2026-08-06). Vorher stoppte eine Quote unter 30%
+     * JEDE weitere Vernetzung – und konnte sich selbst nicht mehr auflösen: ohne neue
+     * Einladungen keine neuen Annahmen, also blieb die Quote, wo sie war. Real legte das
+     * bei 23% den kompletten Betrieb still, inklusive der Event-Kampagne, deren Kontakte auf
+     * eine Vernetzung warteten. Der Nutzer sah nur einen Bot, der nichts tut.
+     *
+     * Jetzt: unter `hardStopAcceptance` (echte Gefahrenzone) weiterhin Stopp, dazwischen nur
+     * das halbe Tageskontingent – weniger Anfragen bei schwacher Quote ist sachlich richtig,
+     * ein Totalstillstand ist es nicht.
+     */
     if (type === "connect") {
       const { rate, sample } = this.acceptanceRate();
-      if (sample >= config.safety.acceptanceRateMinSample && rate < config.safety.minAcceptanceRate) {
-        this.pause(`Akzeptanzrate ${(rate * 100).toFixed(0)}% < ${config.safety.minAcceptanceRate * 100}%`);
-        return { ok: false, reason: "Akzeptanzrate zu niedrig – automatisch pausiert" };
+      if (sample >= config.safety.acceptanceRateMinSample) {
+        if (rate < config.safety.hardStopAcceptance) {
+          return { ok: false, reason: `Akzeptanzrate ${(rate * 100).toFixed(0)}% – zu riskant, Vernetzungen gestoppt` };
+        }
+        if (rate < config.safety.minAcceptanceRate && this.countToday("connect") >= Math.ceil(this.effectiveCap("connect") / 2)) {
+          return { ok: false, reason: `Akzeptanzrate ${(rate * 100).toFixed(0)}% unter ${(config.safety.minAcceptanceRate * 100).toFixed(0)}% – heute nur halbes Kontingent` };
+        }
       }
     }
 
@@ -225,9 +260,22 @@ class SafetyGovernor {
         week: this.countThisWeek("connect"),
         weeklyCap: config.safety.weeklyConnectCap,
       },
+      // Nachrichten-Töpfe getrennt sichtbar: "Kampagne blockiert" und "Akquise blockiert" sind
+      // zwei verschiedene Diagnosen und dürfen nicht hinter einer Zahl verschwinden.
+      message: {
+        today: this.countToday("message"),
+        effectiveCap: this.effectiveCap("message"),
+        hardCap: config.safety.dailyCaps.message,
+      },
+      campaign: {
+        today: this.countToday("campaign"),
+        effectiveCap: this.effectiveCap("campaign"),
+        hardCap: config.safety.dailyCaps.campaign,
+      },
       acceptance: {
         rate,
         sample,
+        windowDays: config.safety.acceptanceWindowDays,
         minRate: config.safety.minAcceptanceRate,
         minSample: config.safety.acceptanceRateMinSample,
         armed: sample >= config.safety.acceptanceRateMinSample,

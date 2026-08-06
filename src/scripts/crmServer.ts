@@ -5,13 +5,18 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
 import { getAnalytics } from "../modules/analytics.js";
-import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, deleteDraft, retryBlockierte, pitchZuNachricht } from "../modules/drafts.js";
+import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, chooseDraftApproach, deleteDraft, retryBlockierte, pitchZuNachricht } from "../modules/drafts.js";
+import type { RejectionReason } from "../modules/draftDirections.js";
 import { getPost, approvePost, discardPost, generatePostDraft } from "../modules/content.js";
 import { addSource, deleteSource } from "../modules/leadFeed.js";
 import { deleteContact } from "../modules/crm.js";
-import { createCampaign, updateCampaign, setCampaignActive, recordOutcome, OUTCOME_STAGES, type OutcomeStage } from "../modules/campaigns.js";
+import {
+  createCampaign, updateCampaign, deleteCampaign, setCampaignActive, recordOutcome, OUTCOME_STAGES, type OutcomeStage,
+  addCampaignAsset, updateCampaignAsset, deleteCampaignAsset, getCampaignAsset, campaignAssetPath,
+} from "../modules/campaigns.js";
 import { addSalesTask, completeSalesTask, deleteSalesTask } from "../modules/salesDesk.js";
 import { createDatabaseBackup } from "../core/backups.js";
+import { governor } from "../core/safetyGovernor.js";
 import { createExperiment, setExperimentStatus, EXPERIMENT_METRICS, type ExperimentMetric } from "../modules/experiments.js";
 import { getConversationWorkspace } from "../modules/conversationWorkspace.js";
 import { db, getState, setState, setMode, setFocus, getFocus, setAgentMode, type Mode, type Focus, type AgentMode } from "../db/index.js";
@@ -23,7 +28,7 @@ import { LIVE_SHOT_PATH } from "../core/session.js";
  * und den Zustand als JSON bereitstellt. Rein lesend – kein Senden, kein Governor-Bypass.
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const HTML_PATH = join(__dirname, "..", "web", "crm.html");
+const HTML_PATH = join(__dirname, "..", "web", "command-center.html");
 const SETUP_PATH = join(__dirname, "..", "web", "setup.html");
 const PROJECT_ROOT = join(__dirname, "..", "..");
 // WICHTIG: .env + Profil liegen im ARBEITSVERZEICHNIS, nicht im Code-Ordner. Im Dev ist das
@@ -234,11 +239,17 @@ const server = createServer((req, res) => {
           // Genehmigen: der Bot sendet beim nächsten Lauf (governor-gedrosselt). Kein Direktversand.
           approveDraft(Number(id), typeof text === "string" ? text : undefined);
         } else if (action === "reject") {
-          // Ablehnen: verwerfen + sofort einen neuen Entwurf erzeugen (async, KI-Aufruf).
-          rejectDraft(Number(id))
+          // Ablehnen speichert den Grund. Bei „anderer Ansatz" folgt zuerst eine echte
+          // Richtungswahl; bei Qualitätsfeedback entsteht direkt ein korrigierter Text.
+          rejectDraft(Number(id), String(text?.reason || "different_approach") as RejectionReason, String(text?.instruction || ""))
             .then((r) => res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(r)))
             .catch((e) => res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String(e?.message ?? e).slice(0, 160) })));
           return; // Antwort kommt asynchron
+        } else if (action === "choose_approach") {
+          chooseDraftApproach(Number(id), String(text?.approachKey || ""))
+            .then((ok) => res.writeHead(ok ? 200 : 409, { "Content-Type": "application/json" }).end(JSON.stringify({ ok })))
+            .catch((e) => res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String(e?.message ?? e).slice(0, 160) })));
+          return;
         } else if (action === "send") {
           // Vorher speichern, falls im Feld editiert wurde – sonst geht der alte Text raus.
           if (typeof text === "string" && text.trim()) {
@@ -467,6 +478,28 @@ const server = createServer((req, res) => {
     return;
   }
 
+  /**
+   * SICHERHEITSPAUSE LÖSEN (2026-08-06). Der Circuit-Breaker (Checkpoint, Fehlerserie) pausiert
+   * den Governor und verlangt bewusst manuelles Eingreifen. Bisher gab es dafür KEINEN Weg im
+   * Cockpit – die Pause musste von Hand in der Datenbank gelöst werden, während der Nutzer nur
+   * einen stillen Bot sah. Jetzt ein Klick aus dem "Warum steht etwas still"-Kasten.
+   */
+  if (url.pathname === "/api/pause" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { an } = JSON.parse(body || "{}");
+        if (an) governor.pause("Manuell im Cockpit pausiert");
+        else governor.resume();
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, paused: !!an }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
   // NOT-AUS: mit EINEM Klick jeden Versand blockieren (ohne die Engine zu stoppen). Setzt das
   // Flag, das der Governor VOR jeder sendenden Aktion prüft. Wirkt sofort für alle Sendewege.
   if (url.pathname === "/api/notaus" && req.method === "POST") {
@@ -526,13 +559,17 @@ const server = createServer((req, res) => {
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       try {
-        const { action, id, name, audience, valueProp, goal } = JSON.parse(body || "{}");
+        const input = JSON.parse(body || "{}");
+        const { action, id } = input;
         if (action === "create") {
-          const campaignId = createCampaign({ name, audience, valueProp, goal });
+          const campaignId = createCampaign(input);
           res.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, id: campaignId }));
         } else if (action === "update") {
-          const ok = updateCampaign(Number(id), { name, audience, valueProp, goal });
+          const ok = updateCampaign(Number(id), input);
           res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else if (action === "delete") {
+          const result = deleteCampaign(Number(id));
+          res.writeHead(result.ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify(result));
         } else if (action === "pause" || action === "resume") {
           const ok = setCampaignActive(Number(id), action === "resume");
           res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
@@ -543,6 +580,62 @@ const server = createServer((req, res) => {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
       }
     });
+    return;
+  }
+
+  // KAMPAGNEN-MATERIAL: Flyer, Agenda, Links samt Kernaussagen. Der Upload läuft als JSON mit
+  // Base64-Inhalt, damit kein Multipart-Parser nötig ist; die Datei bleibt rein lokal.
+  if (url.pathname === "/api/campaign-asset" && req.method === "POST") {
+    let body = "";
+    let zuGross = false;
+    req.on("data", (c) => {
+      body += c;
+      // 16 MB Rohgrenze: 8 MB Datei werden als Base64 rund 11 MB groß.
+      if (body.length > 16 * 1024 * 1024 && !zuGross) {
+        zuGross = true;
+        res.writeHead(413, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "Datei zu groß (max. 8 MB)." }));
+        req.destroy();
+      }
+    });
+    req.on("end", () => {
+      if (zuGross) return;
+      try {
+        const input = JSON.parse(body || "{}");
+        const { action, id } = input;
+        if (action === "add") {
+          const assetId = addCampaignAsset(input);
+          res.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, id: assetId }));
+        } else if (action === "update") {
+          const ok = updateCampaignAsset(Number(id), input);
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else if (action === "delete") {
+          const ok = deleteCampaignAsset(Number(id));
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
+        }
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // Hochgeladenes Material wieder anzeigen/herunterladen (nur lokal, nur aus dem Kampagnenordner).
+  if (url.pathname === "/api/campaign-asset" && req.method === "GET") {
+    const asset = getCampaignAsset(Number(url.searchParams.get("id")));
+    const path = asset ? campaignAssetPath(asset) : null;
+    if (!asset || !path) {
+      res.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "not found" }));
+      return;
+    }
+    res
+      .writeHead(200, {
+        "Content-Type": asset.mime || "application/octet-stream",
+        "Content-Disposition": `inline; filename="${(asset.name || "material").replace(/[^\w.\- ]+/g, "_")}"`,
+        "Cache-Control": "no-store",
+      })
+      .end(readFileSync(path));
     return;
   }
 
@@ -797,6 +890,18 @@ const server = createServer((req, res) => {
       const buf = readFileSync(join(__dirname, "..", "web", "assets", name));
       const typ = name.endsWith(".svg") ? "image/svg+xml" : name.endsWith(".jpg") || name.endsWith(".jpeg") ? "image/jpeg" : "image/png";
       res.writeHead(200, { "Content-Type": typ, "Cache-Control": "max-age=86400" }).end(buf);
+    } catch {
+      res.writeHead(404, { "Content-Type": "text/plain" }).end("nicht gefunden");
+    }
+    return;
+  }
+
+  if (url.pathname === "/command-center.css" || url.pathname === "/command-center.js") {
+    try {
+      const name = url.pathname.slice(1);
+      const body = readFileSync(join(__dirname, "..", "web", name));
+      const type = name.endsWith(".css") ? "text/css" : "text/javascript";
+      res.writeHead(200, { "Content-Type": `${type}; charset=utf-8`, "Cache-Control": "no-store" }).end(body);
     } catch {
       res.writeHead(404, { "Content-Type": "text/plain" }).end("nicht gefunden");
     }

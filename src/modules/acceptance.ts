@@ -86,6 +86,7 @@ export async function checkAcceptances(): Promise<number> {
     .prepare(
       `SELECT c.* FROM contacts c
        WHERE c.status='accepted'
+         AND COALESCE(c.aus_netzwerk,0)=0
          AND NOT EXISTS (SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='first'
                           AND d.status IN ('pending','approved','sent'))
        ORDER BY c.accepted_at DESC LIMIT 10`,
