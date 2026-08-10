@@ -343,6 +343,21 @@ export function startTelegram() {
     },
   );
 
+  events.on(
+    "goal:deviation",
+    (e: { participant: string; currentGoal: string; suggestedGoal: string | null; summary: string; threadUrl: string }) => {
+      if (!bot || !config.telegram.chatId) return;
+      bot.api.sendMessage(
+        config.telegram.chatId,
+        `🧭 *Gespräch ändert die Richtung*\n\n` +
+          `*${e.participant}* ist im Auftrag ${e.currentGoal}, das Gespräch deutet aber auf *${e.suggestedGoal || "einen anderen Weg"}*.\n\n` +
+          `${e.summary || "Die Unterhaltung passt nicht mehr eindeutig zum gewählten Ziel."}\n\n` +
+          `💬 [Chat öffnen](${e.threadUrl})\nDer Bot hat angehalten. Du entscheidest über den Zielwechsel.`,
+        { parse_mode: "Markdown", link_preview_options: { is_disabled: true } },
+      ).catch(() => {});
+    },
+  );
+
   // Autopilot-Handoff: KI hat einen Termin klargemacht → Kontakt sofort pushen.
   events.on("lead:booked", (l: { participant: string; contact: string | null; threadUrl: string }) => {
     if (!bot || !config.telegram.chatId) return;

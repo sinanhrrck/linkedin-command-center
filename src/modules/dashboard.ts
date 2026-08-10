@@ -265,20 +265,31 @@ export function getDashboardData() {
     };
   });
   const draftCount = (...kinds: string[]) => openDrafts.filter((draft) => kinds.includes(draft.kind)).length;
+  const goalDeviationDrafts = openDrafts.filter((draft) => draft.intent === "goal_deviation").length;
   const meetingAttention = (db.prepare("SELECT COUNT(*) n FROM conversations WHERE status='booked'").get() as { n: number }).n;
+  const goalAlerts = db.prepare(
+    `SELECT a.id,a.campaign_id campaignId,a.contact_id contactId,a.thread_url threadUrl,a.participant,
+            a.current_goal currentGoal,a.suggested_goal suggestedGoal,a.summary,a.created_at createdAt,
+            c.headline,ca.name campaignName
+       FROM goal_alerts a
+       LEFT JOIN contacts c ON c.id=a.contact_id
+       LEFT JOIN campaigns ca ON ca.id=a.campaign_id
+      WHERE a.status='open' ORDER BY a.created_at DESC`,
+  ).all();
   const systemIssues = Number(getState("send_health") === "broken") +
     (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status IN ('blockiert','unknown')").get() as { n: number }).n;
   // Kampagnen-Einladungen zählen bewusst NICHT in den Arbeitskorb "Heute": sie werden in der
   // jeweiligen Kampagne geprüft, damit dort Zielgruppe, Kontext und Texte zusammen bleiben.
   const attention = {
-    total: openDrafts.filter((draft) => draft.kind !== "event").length + meetingAttention + systemIssues,
-    replies: draftCount("message", "pitchidee"),
+    total: openDrafts.filter((draft) => draft.kind !== "event" && draft.intent !== "goal_deviation").length + meetingAttention + systemIssues + goalAlerts.length,
+    replies: Math.max(0, draftCount("message", "pitchidee") - goalDeviationDrafts),
     firstMessages: draftCount("first"),
     followups: draftCount("followup"),
     reactivations: draftCount("reaktivierung"),
     eventInvites: draftCount("event"),
     meetings: meetingAttention,
     systemIssues,
+    goalChanges: goalAlerts.length,
   };
   const governorState = governor.snapshot();
   const botActivity = db
@@ -340,6 +351,7 @@ export function getDashboardData() {
     leseBudget: leseStand(),
     leadSources,
     campaigns: listCampaigns(),
+    goalAlerts,
     /**
      * Zuordnung Kontakt → Kampagne für das Kampagnen-CRM (2026-08-05). Bewusst als schlanke
      * Liste statt angereicherter Kontakte: Ein Kontakt kann in mehreren Kampagnen stecken, und
@@ -431,6 +443,7 @@ export function getDashboardData() {
       if (!approved && openDrafts.length) liste.push({ was: "Versand", grund: `${openDrafts.length} Entwürfe warten auf deine Freigabe`, tun: "Jetzt prüfen", aktion: { art: "gehe", ziel: "today", text: "Jetzt prüfen" } });
       const kampagnenOhneZiel = db.prepare(
         `SELECT c.id, c.name FROM campaigns c WHERE c.active=1
+           AND c.goal_code IS NULL
            AND NOT EXISTS (SELECT 1 FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status='queued')`,
       ).all() as { id: number; name: string }[];
       for (const k of kampagnenOhneZiel) {

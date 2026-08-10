@@ -3,6 +3,7 @@ let activeView = "today";
 let reviewKinds = null;
 let reviewCampaign = null;
 let reviewIndex = 0;
+let missionGoal = null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -140,6 +141,7 @@ function renderStatus() {
 
 const GROUPS = [
   { key: "systemIssues", kinds: [], icon: "!", title: "Technisches Problem lösen", copy: "Sendeweg oder unklare Zustellungen zuerst prüfen.", cls: "urgent", view: "settings" },
+  { key: "goalChanges", kinds: [], icon: "↗", title: "Gesprächsweg entscheiden", copy: "Ein Chat entwickelt sich weg vom gewählten Ziel.", cls: "urgent", view: "today" },
   { key: "replies", kinds: ["message", "pitchidee"], icon: "↩", title: "Antworten prüfen", copy: "Menschen haben geschrieben – diese Gespräche zuerst.", cls: "urgent" },
   { key: "meetings", kinds: [], icon: "✓", title: "Termine übernehmen", copy: "Persönliche Übergaben, die nicht warten sollten.", view: "contacts" },
   { key: "firstMessages", kinds: ["first"], icon: "+", title: "Erstnachrichten freigeben", copy: "Neue Vernetzungen persönlich eröffnen." },
@@ -158,13 +160,36 @@ function renderToday() {
   $("work-groups").innerHTML = groups.length ? groups.map((group) => `<button class="work-item ${group.cls || ""}" data-group="${group.key}"><span class="work-icon">${group.icon}</span><span class="work-copy"><b>${group.title}</b><span>${group.copy}</span></span><span class="work-count">${attention[group.key]}</span></button>`).join("") : `<div class="empty-work"><b>Arbeitskorb leer</b><br/>NextLead arbeitet weiter und meldet sich, sobald eine Entscheidung nötig ist.</div>`;
   document.querySelectorAll("[data-group]").forEach((button) => button.addEventListener("click", () => {
     const group = GROUPS.find((item) => item.key === button.dataset.group);
+    if (group?.key === "goalChanges") return $("goal-alerts")?.scrollIntoView({ behavior: "smooth", block: "center" });
     if (group?.view) return showView(group.view);
     reviewCampaign = null; reviewKinds = group?.kinds || null; reviewIndex = 0; renderReviewer();
   }));
+  renderGoalAlerts();
   const funnel = Object.fromEntries((state.funnel || []).map((item) => [item.stage, item.count]));
   const rows = [["Anfragen", funnel.eingeladen || 0, 100], ["Angenommen", funnel.angenommen || 0, pct(funnel.angenommen || 0, funnel.eingeladen || 0) || 0], ["Nachrichten", funnel.angeschrieben || 0, pct(funnel.angeschrieben || 0, funnel.eingeladen || 0) || 0], ["Antworten", funnel.geantwortet || 0, pct(funnel.geantwortet || 0, funnel.eingeladen || 0) || 0]];
   $("mini-funnel").innerHTML = rows.map(([label, count, width]) => `<div class="mini-row"><span>${label}</span><b>${count}</b><em><i style="width:${width}%"></i></em></div>`).join("");
   renderActivity();
+}
+
+function renderGoalAlerts() {
+  const alerts = state.goalAlerts || [];
+  const box = $("goal-alerts");
+  if (!box) return;
+  box.classList.toggle("hidden", !alerts.length);
+  box.innerHTML = alerts.length ? `<div class="goal-alert-head"><div><span class="eyebrow">Richtungswechsel</span><h3>Der Bot hat angehalten</h3></div><span>${alerts.length} offen</span></div>` + alerts.map((alert) => `
+    <article class="goal-alert">
+      <div class="goal-shift"><b>${esc(alert.currentGoal)}</b><i>→</i><strong>${esc(alert.suggestedGoal || "anderer Weg")}</strong></div>
+      <div><h4>${esc(alert.participant || "Kontakt")}</h4><p>${esc(alert.summary)}</p>${alert.headline ? `<small>${esc(alert.headline)}</small>` : ""}</div>
+      <div class="goal-alert-actions"><a href="${esc(alert.threadUrl)}" target="_blank" rel="noopener">Chat öffnen ↗</a>${alert.suggestedGoal ? `<button class="primary" data-goal-alert="${alert.id}" data-action="accepted">Auf ${esc(alert.suggestedGoal)} wechseln</button>` : ""}<button data-goal-alert="${alert.id}" data-action="dismissed">Beim Ziel bleiben</button></div>
+    </article>`).join("") : "";
+  box.querySelectorAll("[data-goal-alert]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      await post("/api/goal-alert", { id: Number(button.dataset.goalAlert), action: button.dataset.action });
+      await load(true);
+      toast(button.dataset.action === "accepted" ? "Gesprächsweg gewechselt." : "Der bestehende Gesprächsweg bleibt aktiv.");
+    } catch (error) { toast(`Entscheidung nicht gespeichert: ${error.message}`); button.disabled = false; }
+  }));
 }
 
 function renderActivity() {
@@ -424,8 +449,8 @@ function renderCampaigns() {
     const facts = [campaign.event_date, campaign.event_time, campaign.location].filter(Boolean).join(" · ");
     const assets = (campaign.assets || []).length;
     const offen = (state.drafts || []).filter((draft) => String(draft.incoming) === `campaign:${campaign.id}`).length;
-    return `<article class="campaign-card"><div><div class="campaign-meta"><span class="pill ${campaign.active ? "live" : ""}">${campaign.active ? "Läuft" : "Pausiert"}</span><span class="pill">${campaign.kind === "event" ? "Event" : "Outreach"}</span><span class="pill">${campaign.audience_scope === "both" ? "Netzwerk + außerhalb" : campaign.audience_scope === "network" ? "Netzwerk" : "Außerhalb"}</span>${assets ? `<span class="pill">${assets} Material${assets === 1 ? "" : "ien"}</span>` : ""}</div><h3>${esc(campaign.name)}</h3><span class="muted">${esc(facts || campaign.goal || "")}${campaign.event_url ? ` · <a href="${esc(campaign.event_url)}" target="_blank" rel="noopener">Event öffnen ↗</a>` : ""}</span>${campaign.briefing ? `<p class="campaign-briefing">${esc(String(campaign.briefing).slice(0, 220))}${String(campaign.briefing).length > 220 ? "…" : ""}</p>` : ""}<div class="campaign-stats"><div><b>${campaign.targets || campaign.leads || 0}</b><span>Zielgruppe</span></div><div><b>${campaign.daily_limit || 0}</b><span>Entwürfe/Tag</span></div><div><b>${campaign.target_network || 0}</b><span>Netzwerk</span></div><div><b>${campaign.target_external || 0}</b><span>Außerhalb</span></div><div><b>${campaign.target_drafted || 0}</b><span>Entwürfe</span></div><div><b>${campaign.target_sent || 0}</b><span>Gesendet</span></div></div></div><div class="campaign-actions">${offen ? `<button class="primary" data-campaign-review="${campaign.id}">${offen} Nachricht${offen === 1 ? "" : "en"} prüfen</button>` : `<span class="campaign-clear">Keine Nachricht offen</span>`}<button data-campaign-crm="${campaign.id}">Kontakte ansehen</button><button data-campaign-edit="${campaign.id}">Bearbeiten</button><button data-campaign-toggle="${campaign.id}" data-active="${campaign.active ? 1 : 0}">${campaign.active ? "Pausieren" : "Fortsetzen"}</button><button class="delete-draft" data-campaign-delete="${campaign.id}" data-name="${esc(campaign.name)}" data-offen="${offen}">Löschen</button></div></article>`;
-  }).join("") : `<div class="empty-work">Noch keine Kampagne. Lege ein Event an und prüfe vor dem Start die gefilterte Zielgruppe.</div>`;
+    return `<article class="campaign-card ${campaign.goal_code ? "mission-card" : ""}"><div><div class="campaign-meta"><span class="pill ${campaign.active ? "live" : ""}">${campaign.active ? "Läuft" : "Pausiert"}</span>${campaign.goal_code ? `<span class="pill goal-code goal-${esc(String(campaign.goal_code).toLowerCase())}">${esc(campaign.goal_code)}</span>` : ""}<span class="pill">${campaign.kind === "event" ? "Event" : "Outreach"}</span><span class="pill">${campaign.audience_scope === "both" ? "Netzwerk + außerhalb" : campaign.audience_scope === "network" ? "Netzwerk" : "Außerhalb"}</span>${assets ? `<span class="pill">${assets} Material${assets === 1 ? "" : "ien"}</span>` : ""}</div><h3>${esc(campaign.name)}</h3><span class="muted">${esc(campaign.search_brief || facts || campaign.goal || "")}${campaign.event_url ? ` · <a href="${esc(campaign.event_url)}" target="_blank" rel="noopener">Event öffnen ↗</a>` : ""}</span>${campaign.briefing ? `<p class="campaign-briefing">${esc(String(campaign.briefing).slice(0, 220))}${String(campaign.briefing).length > 220 ? "…" : ""}</p>` : ""}<div class="campaign-stats"><div><b>${campaign.targets || campaign.leads || 0}</b><span>Zielgruppe</span></div><div><b>${campaign.sources || 0}</b><span>Suchen</span></div><div><b>${campaign.target_external || 0}</b><span>Zu vernetzen</span></div><div><b>${campaign.target_drafted || 0}</b><span>Entwürfe</span></div><div><b>${campaign.replied || 0}</b><span>Antworten</span></div><div><b>${campaign.meetings || 0}</b><span>Termine</span></div></div></div><div class="campaign-actions">${offen ? `<button class="primary" data-campaign-review="${campaign.id}">${offen} Nachricht${offen === 1 ? "" : "en"} prüfen</button>` : `<span class="campaign-clear">Keine Nachricht offen</span>`}<button data-campaign-crm="${campaign.id}">Kontakte ansehen</button>${campaign.goal_code ? "" : `<button data-campaign-edit="${campaign.id}">Bearbeiten</button>`}<button data-campaign-toggle="${campaign.id}" data-active="${campaign.active ? 1 : 0}">${campaign.active ? "Pausieren" : "Fortsetzen"}</button><button class="delete-draft" data-campaign-delete="${campaign.id}" data-name="${esc(campaign.name)}" data-offen="${offen}">Löschen</button></div></article>`;
+  }).join("") : `<div class="empty-work"><b>Noch kein Auftrag.</b><br/>Beschreibe, wen NextLead finden soll, und wähle B1, P1 oder AEC.</div>`;
   document.querySelectorAll("[data-campaign-toggle]").forEach((button) => button.addEventListener("click", async () => { await post("/api/campaign", { action: button.dataset.active === "1" ? "pause" : "resume", id: Number(button.dataset.campaignToggle) }); await load(); toast("Kampagne aktualisiert."); }));
   document.querySelectorAll("[data-campaign-edit]").forEach((button) => button.addEventListener("click", () => {
     openCampaignForm((state.campaigns || []).find((campaign) => campaign.id === Number(button.dataset.campaignEdit)));
@@ -567,7 +592,30 @@ function render(reviewerBehalten = false) {
 async function load(reviewerBehalten = false) { try { const response = await fetch("/api/state", { cache: "no-store" }); const data = await response.json(); if (!response.ok || data.error) throw new Error(data.error || "Laden fehlgeschlagen"); state = data; render(reviewerBehalten); } catch (error) { toast(`Dashboard nicht erreichbar: ${error.message}`); } }
 
 $("emergency").onclick = async () => { await post("/api/notaus", { an: !state.governor?.notAus }); await load(); };
-$("new-campaign").onclick = () => openCampaignForm(null);
+$("new-campaign").onclick = () => { $("mission-form").classList.toggle("hidden"); if (!$("mission-form").classList.contains("hidden")) $("mission-search").focus(); };
+document.querySelectorAll("[data-mission-goal]").forEach((button) => button.addEventListener("click", () => {
+  missionGoal = button.dataset.missionGoal;
+  document.querySelectorAll("[data-mission-goal]").forEach((item) => item.classList.toggle("active", item === button));
+  $("mission-rail-goal").textContent = `${missionGoal} erreichen`;
+  $("mission-note").textContent = "";
+}));
+$("mission-advanced").onclick = () => { $("mission-form").classList.add("hidden"); openCampaignForm(null); };
+$("mission-start").onclick = async () => {
+  const button = $("mission-start"); const note = $("mission-note"); note.textContent = "";
+  const searchBrief = $("mission-search").value.trim();
+  if (!searchBrief) { note.textContent = "Beschreibe zuerst, wen NextLead finden soll."; return; }
+  if (!missionGoal) { note.textContent = "Wähle B1, P1 oder AEC."; return; }
+  button.disabled = true; button.textContent = "Suchen werden geplant…";
+  try {
+    const result = await post("/api/mission", { searchBrief, goalCode: missionGoal });
+    $("mission-search").value = ""; $("mission-form").classList.add("hidden");
+    document.querySelectorAll("[data-mission-goal]").forEach((item) => item.classList.remove("active"));
+    missionGoal = null; $("mission-rail-goal").textContent = "Ziel wählen";
+    await load();
+    toast(`${result.routes.length} LinkedIn-Suche${result.routes.length === 1 ? "" : "n"} erstellt. Der Auftrag läuft.`);
+  } catch (error) { note.textContent = error.message; }
+  finally { button.disabled = false; button.textContent = "Auftrag starten"; }
+};
 $("close-campaign").onclick = () => { $("campaign-form").classList.add("hidden"); editingCampaign = null; };
 ["campaign-keywords", "campaign-region", "campaign-score", "campaign-scope"].forEach((id) => $(id).addEventListener(id === "campaign-scope" ? "change" : "input", updateCampaignPreview));
 $("save-campaign").onclick = async () => {

@@ -38,6 +38,19 @@ export function upsertContact(c: { profileUrl: string; fullName?: string; headli
        source_id   = COALESCE(contacts.source_id, excluded.source_id),
        campaign_id = COALESCE(contacts.campaign_id, excluded.campaign_id)`,
   ).run(profileUrl, profileUrl, c.fullName ?? null, c.headline ?? null, zg, score, grund, c.sourceId ?? null, campaignId);
+  // Quellengebundene Aufträge nehmen ausschließlich die Kontakte auf, die über genau diese
+  // Quelle gefunden wurden. Bestehende Kontakte werden beim Anlegen eines neuen Auftrags nicht
+  // rückwirkend vereinnahmt; Duplikate bleiben durch INSERT OR IGNORE sicher.
+  if (campaignId) {
+    const row = db.prepare("SELECT id,status,accepted_at,aus_netzwerk FROM contacts WHERE normalized_url=?").get(profileUrl) as
+      | { id: number; status: string; accepted_at: string | null; aus_netzwerk: number | null }
+      | undefined;
+    if (row) {
+      const connected = !!row.aus_netzwerk || !!row.accepted_at || ["accepted", "messaged", "replied"].includes(row.status);
+      db.prepare("INSERT OR IGNORE INTO campaign_targets(campaign_id,contact_id,route,status) VALUES(?,?,?,?)")
+        .run(campaignId, row.id, connected ? "network" : "external", connected ? "queued" : "awaiting_connection");
+    }
+  }
 }
 
 /** Nächste noch nicht kontaktierte Leads. */

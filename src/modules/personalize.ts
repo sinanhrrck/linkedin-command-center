@@ -3,6 +3,7 @@ import { generateClaude, claudeAvailable } from "../core/claude.js";
 import { config } from "../config.js";
 import type { Contact } from "./crm.js";
 import { promptKontext, saubern, erstnachrichtAngle, type Zielgruppe } from "../context.js";
+import type { ConversationGoal, GoalCode } from "./goals.js";
 
 /**
  * Router für den Autopilot-Text: bezahltes Claude (Standard im Voll-Modus, Qualität +
@@ -55,7 +56,7 @@ Nimm EINEN konkreten Bezug zur Person (z.B. ihre Rolle/Ausbildung). Gib NUR die 
  * Bewusst eigenständig (nutzt NICHT promptKontext), damit die strengen Vorgaben 1:1 greifen.
  * Person-Daten (Name + Profil-Headline mit Bank/Lehrjahr/Standort) werden unten als INPUT injiziert.
  */
-export async function firstMessage(c: Contact, variation?: TextVariation): Promise<string> {
+export async function firstMessage(c: Contact, variation?: TextVariation, goal?: ConversationGoal | null): Promise<string> {
   const aufbau = variation
     ? `AUFBAU FÜR DIESE NEUGENERIERUNG:\nFolge der unten genannten neuen Gesprächsrichtung. Du darfst die übliche Reihenfolge Profilbezug, eigene Geschichte, offene Frage ausdrücklich verlassen. Nutze nur Bausteine, die zu dieser Richtung passen.`
     : `AUFBAU (Nutze immer diese 3 Bausteine, genau in dieser Reihenfolge):
@@ -92,6 +93,7 @@ Falsch: "Hallo, ich hoffe es geht dir gut. Ich würde mich freuen, wenn wir uns 
 INPUT für diese Person (nutze nur, was da ist; erfinde nichts dazu):
 Name: ${c.full_name ?? "Unbekannt"}
 Profil-Headline (enthält oft Bank, Ausbildungsjahr, Studiengang, Standort): ${c.headline ?? "unbekannt"}
+${goal ? `\nLANGFRISTIGER GESPRÄCHSAUFTRAG: ${goal.code} – ${goal.label}. ${goal.instruction}\nDie Erstnachricht bleibt trotzdem ein echter Icebreaker ohne Pitch. Wähle nur eine Anknüpfung, die später natürlich zu diesem Ziel passen kann.` : ""}
 
 OUTPUT-REGEL: Generiere GENAU EINE Nachricht nach obigem Aufbau. Nichts drumherum, keine Erklärungen davor oder danach, kein "Hier ist die Nachricht:". Gib ausschließlich den Text der Nachricht aus.`;
   return saubern(await generateText(prompt));
@@ -146,17 +148,33 @@ export type ConverseStep = {
   zusammenfassung: string;
   /** Warum dieser intent + wie Sinan damit umgehen sollte. Der Rat, nicht nur die Einordnung. */
   strategie: string;
+  /** Der Bot erkennt eine andere sinnvolle Route, wechselt sie aber niemals selbst. */
+  goalAlignment: "on_goal" | "different_goal" | "unclear";
+  suggestedGoal: GoalCode | null;
 };
+
+function goalBlock(goal?: ConversationGoal | null): string {
+  if (!goal) return "";
+  return `\nVERBINDLICHER AUFTRAG FÜR DIESEN KONTAKT:
+- Aktueller Weg: ${goal.code} – ${goal.label}
+- Ziel: ${goal.instruction}
+- Bleib auf diesem Weg, solange das Gespräch dazu passt.
+- Wenn die Person klar einen anderen der drei Wege öffnet, markiere goalAlignment als "different_goal" und suggestedGoal als B1, P1 oder AEC.
+- B1 bedeutet Kunde/Kundenberatung. P1 bedeutet Vertriebspartner. AEC ist ein eigenständiges Ziel; erfinde keine Bedeutung dafür.
+- Bei einer Abweichung darfst du eine hilfreiche Antwort vorschlagen, aber der Bot hält vor dem Senden an und meldet die Richtungsänderung.
+`;
+}
 
 /**
  * AUTOPILOT-Kern: analysiert die letzte Nachricht der Person UND formuliert Sinans
  * nächste Antwort – in EINEM Call (spart KI-Kontingent). Ziel: mehrwert-first zu einem
  * kurzen Kennenlern-Telefonat bewegen, ohne aufdringlich zu sein.
  */
-export async function converseStep(messages: { sender: string; text: string }[], participant: string): Promise<ConverseStep | null> {
+export async function converseStep(messages: { sender: string; text: string }[], participant: string, goal?: ConversationGoal | null): Promise<ConverseStep | null> {
   const transcript = messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
   const prompt = `Du bist Sinan und führst einen LinkedIn-Chat mit ${participant}.
 ${promptKontext()}
+${goalBlock(goal)}
 
 DEINE ROLLE IN DIESEM CHAT:
 Du chattest mit Bankkaufmann-Azubis und Berufseinsteigern. Ziel ist NICHT ein Verkauf im Chat,
@@ -203,7 +221,7 @@ Bisheriger Verlauf:
 ${transcript}
 
 Analysiere die LETZTE Nachricht der Person und antworte AUSSCHLIESSLICH mit JSON (kein Text drumherum):
-{"intent":"meeting|chance|positive|absage|einwand|neutral","contact":"Telefonnummer oder E-Mail der Person falls im Verlauf genannt, sonst null","reply":"Sinans nächste Nachricht – EINE kurze LinkedIn-Nachricht, passend zur aktuellen Phase","zusammenfassung":"1-2 Sätze: worum geht es, was will die Person","strategie":"2-3 Sätze: in welcher Phase ihr seid, welcher intent und wie Sinan konkret weitermacht"}
+{"intent":"meeting|chance|positive|absage|einwand|neutral","contact":"Telefonnummer oder E-Mail der Person falls im Verlauf genannt, sonst null","reply":"Sinans nächste Nachricht – EINE kurze LinkedIn-Nachricht, passend zur aktuellen Phase","zusammenfassung":"1-2 Sätze: worum geht es, was will die Person","strategie":"2-3 Sätze: in welcher Phase ihr seid, welcher intent und wie Sinan konkret weitermacht","goalAlignment":"on_goal|different_goal|unclear","suggestedGoal":"B1|P1|AEC|null"}
 Regeln für intent:
 - "meeting": Person sagt Ja zu Telefonat/Termin ODER nennt ihre Nummer.
 - "chance": DIE TÜR GEHT AUF. Unsicherheit ("weiß noch nicht", "keinen Plan", "mal schauen"),
@@ -229,6 +247,9 @@ Wiederholung des intents.`;
     parsed.zusammenfassung = (parsed.zusammenfassung || "").trim();
     parsed.strategie = (parsed.strategie || "").trim();
     if (!["meeting", "chance", "positive", "absage", "einwand", "neutral"].includes(parsed.intent)) parsed.intent = "neutral";
+    if (!["on_goal", "different_goal", "unclear"].includes(parsed.goalAlignment)) parsed.goalAlignment = goal ? "unclear" : "on_goal";
+    if (!parsed.suggestedGoal || !["B1", "P1", "AEC"].includes(parsed.suggestedGoal)) parsed.suggestedGoal = null;
+    if (!goal || parsed.suggestedGoal === goal.code) parsed.goalAlignment = "on_goal";
     parsed.contact = parsed.contact && String(parsed.contact).toLowerCase() !== "null" ? String(parsed.contact) : null;
     return parsed;
   } catch {

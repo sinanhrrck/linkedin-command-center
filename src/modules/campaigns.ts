@@ -21,6 +21,11 @@ export type CampaignInput = {
   filters?: { keywords?: string; region?: string; minScore?: number };
   messageTemplate?: string;
   dailyLimit?: number;
+  /** Optionaler neuer Auftragsrahmen. Alte Kampagnen haben beides nicht und laufen unverändert. */
+  goalCode?: "B1" | "P1" | "AEC";
+  searchBrief?: string;
+  /** Neue Such-Aufträge starten leer und nehmen nur künftig über ihre Quellen gefundene Kontakte auf. */
+  seedExisting?: boolean;
 };
 
 export type CampaignRow = {
@@ -42,6 +47,8 @@ export type CampaignRow = {
   filters_json: string | null;
   message_template: string | null;
   daily_limit: number;
+  goal_code: string | null;
+  search_brief: string | null;
   targets: number;
   target_network: number;
   target_external: number;
@@ -195,14 +202,16 @@ export function createCampaign(input: CampaignInput): number {
   if (kind(input.kind) === "event" && !/^https?:\/\//i.test(eventUrl)) throw new Error("Bitte hinterlege eine gültige Event-URL.");
   const result = db.prepare(
     `INSERT INTO campaigns(name,audience,value_prop,goal,kind,event_url,event_date,event_time,location,briefing,
-        audience_scope,filters_json,message_template,daily_limit)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        audience_scope,filters_json,message_template,daily_limit,goal_code,search_brief)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(name, text(input.audience, 180) || null, text(input.valueProp, 280) || null, text(input.goal, 120) || null,
     kind(input.kind), eventUrl || null, text(input.eventDate, 30) || null, text(input.eventTime, 40) || null,
     text(input.location, 160) || null, text(input.briefing, 2000) || null, scope(input.audienceScope), filtersJson(input),
-    text(input.messageTemplate, 1200) || null, limit(input.dailyLimit));
+    text(input.messageTemplate, 1200) || null, limit(input.dailyLimit),
+    input.goalCode === "B1" || input.goalCode === "P1" || input.goalCode === "AEC" ? input.goalCode : null,
+    text(input.searchBrief, 600) || null);
   const id = Number(result.lastInsertRowid);
-  seedCampaignTargets(id, input);
+  if (input.seedExisting !== false) seedCampaignTargets(id, input);
   return id;
 }
 
@@ -300,6 +309,7 @@ export function setCampaignActive(id: number, active: boolean) {
 export function listCampaigns(): CampaignRow[] {
   const rows = db.prepare(
     `SELECT c.id, c.name, c.audience, c.value_prop, c.goal, c.kind, c.event_url, c.event_date,
+            c.goal_code,c.search_brief,
       c.event_time, c.location, c.briefing,
       c.audience_scope,c.filters_json,c.message_template,c.daily_limit,c.active,c.created_at,c.archived_at,
       (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id) AS targets,

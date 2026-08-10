@@ -118,7 +118,10 @@ export async function campaignTick(): Promise<number> {
   ).run().changes;
   if (zurueckgeholt) console.info(`[kampagnen] ${zurueckgeholt} Kontakt(e) ohne Entwurf zurück in die Warteschlange.`);
 
-  const campaigns = db.prepare("SELECT id,daily_limit FROM campaigns WHERE active=1").all() as Array<{ id: number; daily_limit: number }>;
+  // B1/P1/AEC-Aufträge nutzen die normale Erstnachrichten- und Gesprächslogik. Nur klassische
+  // Kampagnen erzeugen hier zusätzliche Kampagnennachrichten; neue Ziele würden sonst doppelt
+  // anschreiben. Legacy-Outreach ohne goal_code bleibt aus Kompatibilitätsgründen erhalten.
+  const campaigns = db.prepare("SELECT id,daily_limit FROM campaigns WHERE active=1 AND (goal_code IS NULL OR kind='event')").all() as Array<{ id: number; daily_limit: number }>;
   let created = 0;
   for (const campaign of campaigns) {
     refreshCampaignTargets(campaign.id);

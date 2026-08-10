@@ -26,10 +26,30 @@ CREATE TABLE IF NOT EXISTS campaigns (
   event_time    TEXT,   -- z.B. "18:30 - 21:00"
   location      TEXT,   -- Ort / "Online"
   briefing      TEXT,   -- Ablauf, Referenten, Nutzen: Sachkontext für Menschen UND für die KI
+  goal_code     TEXT,   -- B1 | P1 | AEC : verbindlicher Gesprächsweg dieses Auftrags
+  search_brief  TEXT,   -- Freitext des Nutzers; daraus entstehen die LinkedIn-Suchquellen
   active        INTEGER NOT NULL DEFAULT 1,
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at   TEXT
 );
+
+-- Wenn ein Gespräch erkennbar von seinem gewählten Ziel wegführt, hält der Bot an und meldet
+-- die neue Richtung. Der Nutzer entscheidet; der Bot wechselt Ziele niemals still im Hintergrund.
+CREATE TABLE IF NOT EXISTS goal_alerts (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id    INTEGER,
+  contact_id     INTEGER,
+  thread_url     TEXT NOT NULL,
+  participant    TEXT,
+  current_goal   TEXT NOT NULL,
+  suggested_goal TEXT,
+  summary        TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'open', -- open | accepted | dismissed
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at    TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_goal_alert_open_thread
+  ON goal_alerts(thread_url) WHERE status='open';
 
 -- Material einer Kampagne (Flyer, Agenda, Bild) plus die vom Nutzer gepflegten Kernaussagen.
 -- Die Datei liegt lokal unter config.paths.uploadDir; nur der Dateiname steht in der DB.
@@ -84,6 +104,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   lead_score    INTEGER, -- 0-100: ICP-Passung aus Name+Headline (Priorisierung); NULL = noch nicht bewertet
   score_grund   TEXT,    -- kurze Begruendung des Scores (nachvollziehbar im Dashboard)
   campaign_id   INTEGER, -- Kampagne, aus der der Lead kam (optional für Altbestand)
+  goal_code_override TEXT, -- bewusster B1/P1/AEC-Wechsel nur für diesen Kontakt
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

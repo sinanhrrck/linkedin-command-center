@@ -125,6 +125,11 @@ try {
   /* Spalte existiert bereits */
 }
 try {
+  db.exec("ALTER TABLE contacts ADD COLUMN goal_code_override TEXT");
+} catch {
+  /* Spalte existiert bereits */
+}
+try {
   db.exec("ALTER TABLE contacts ADD COLUMN normalized_url TEXT");
 } catch {
   /* Spalte existiert bereits */
@@ -143,6 +148,8 @@ for (const [column, definition] of [
   ["event_time", "TEXT"],
   ["location", "TEXT"],
   ["briefing", "TEXT"],
+  ["goal_code", "TEXT"],
+  ["search_brief", "TEXT"],
 ] as const) {
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
 }

@@ -21,6 +21,8 @@ import { createExperiment, setExperimentStatus, EXPERIMENT_METRICS, type Experim
 import { getConversationWorkspace } from "../modules/conversationWorkspace.js";
 import { db, getState, setState, setMode, setFocus, getFocus, setAgentMode, type Mode, type Focus, type AgentMode } from "../db/index.js";
 import { LIVE_SHOT_PATH } from "../core/session.js";
+import { createMission } from "../modules/missions.js";
+import { resolveGoalAlert } from "../modules/goals.js";
 
 /**
  * Lokales CRM-Cockpit. Nutzung: npm run crm
@@ -547,6 +549,42 @@ const server = createServer((req, res) => {
         }
       } catch (e) {
         res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
+  // EINFACHER AUFTRAG: Nutzer beschreibt nur die Menschen und wählt B1/P1/AEC. Suchbegriffe,
+  // LinkedIn-URLs, Quellen und Kampagnenzuordnung entstehen automatisch. Bestehende manuelle
+  // Quellen und Event-Kampagnen bleiben davon vollständig unberührt.
+  if (url.pathname === "/api/mission" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      void (async () => {
+        try {
+          const result = await createMission(JSON.parse(body || "{}"));
+          res.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...result, running: engineAlive() }));
+        } catch (e) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+        }
+      })();
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/goal-alert" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const input = JSON.parse(body || "{}");
+        const action = input.action === "accepted" ? "accepted" : input.action === "dismissed" ? "dismissed" : null;
+        if (!action) throw new Error("Ungültige Entscheidung.");
+        const ok = resolveGoalAlert(Number(input.id), action);
+        res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
       }
     });
     return;

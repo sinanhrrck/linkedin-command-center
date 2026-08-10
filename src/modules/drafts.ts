@@ -10,6 +10,7 @@ import { promptKontext, saubern } from "../context.js";
 import { events } from "../core/events.js";
 import { directionOptions, feedbackInstruction, type DraftDirection, type RejectionReason } from "./draftDirections.js";
 import { campaignContext } from "./campaigns.js";
+import { goalForContact, goalForConversation, recordGoalAlert } from "./goals.js";
 
 /**
  * DM-Entwürfe: Inbox lesen → Gemini-Draft → als 'pending' speichern.
@@ -64,7 +65,7 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
     )
     .get(c.profile_url);
   if (exists) return false;
-  const text = await firstMessage(c).catch((e: Error) => {
+  const text = await firstMessage(c, undefined, goalForContact(c.id)).catch((e: Error) => {
     console.error(`[first] ⚠ KI-Fehler (Entwurf) fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
     return "";
   });
@@ -218,7 +219,7 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
   // KI-Ausfall NICHT verschlucken: sonst sieht es fuer den Nutzer so aus, als tue der Bot
   // nichts. Real passiert 2026-07-16: Gemini lieferte 503, der Bot ging wortlos weiter.
   // Der Kontakt bleibt 'accepted' und wird beim naechsten stuendlichen Lauf neu versucht.
-  const text = await firstMessage(c).catch((e: Error) => {
+  const text = await firstMessage(c, undefined, goalForContact(c.id)).catch((e: Error) => {
     console.error(`[first] ⚠ KI konnte keinen Text schreiben fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
     return "";
   });
@@ -452,7 +453,7 @@ async function regenerateText(d: Draft, instruction: string, rejectedTexts: stri
     // Für den richtigen Winkel den Kontakt holen; sonst generischer Fallback.
     const c = db.prepare("SELECT * FROM contacts WHERE profile_url=?").get(d.thread_url) as Contact | undefined;
     if (c) return d.kind === "first"
-      ? firstMessage(c, { instruction, rejectedTexts: rejected })
+      ? firstMessage(c, { instruction, rejectedTexts: rejected }, goalForContact(c.id))
       : followupMessage(c, 1, { instruction, rejectedTexts: rejected });
   }
   if (d.kind === "comment") {
@@ -625,11 +626,34 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
      * er das Gespräch klar geschlossen hatte. Die Intelligenz dafür lag ungenutzt im
      * Autopilot herum. Kostet keinen Aufruf extra.
      */
-    const step = await converseStep(t.messages, t.participant).catch((e) => {
+    const conversationGoal = goalForConversation(t.threadUrl, t.participant);
+    const step = await converseStep(t.messages, t.participant, conversationGoal).catch((e) => {
       console.error(`[drafts] ⚠ KI-Fehler bei ${t.participant}: ${String(e?.message ?? e).slice(0, 80)}`);
       return null;
     });
     if (!step || !step.reply) continue;
+
+    // Ein anderer sinnvoller Weg ist eine Entscheidung, kein stiller Prompt-Wechsel. Antwort als
+    // Entwurf sichern, Abweichung separat melden und diesen Thread für den Lauf beenden.
+    if (conversationGoal && step.goalAlignment === "different_goal") {
+      const info = db.prepare(
+        "INSERT INTO drafts(kind,thread_url,participant,incoming,draft,ki_original,intent) VALUES('message',?,?,?,?,?,'goal_deviation')",
+      ).run(t.threadUrl, t.participant, t.lastIncoming, step.reply, step.reply);
+      const alertId = recordGoalAlert({
+        threadUrl: t.threadUrl,
+        participant: t.participant,
+        currentGoal: conversationGoal.code,
+        suggestedGoal: step.suggestedGoal,
+        summary: step.zusammenfassung || step.strategie || "Das Gespräch entwickelt sich in eine andere Richtung.",
+        campaignId: conversationGoal.campaignId,
+      });
+      const d = getDraft(Number(info.lastInsertRowid));
+      events.emit("draft:new", d);
+      events.emit("goal:deviation", { alertId, draft: d, participant: t.participant, currentGoal: conversationGoal.code,
+        suggestedGoal: step.suggestedGoal, summary: step.zusammenfassung, threadUrl: t.threadUrl });
+      created++;
+      continue;
+    }
 
     // Hot Lead NUR bei echtem Interesse. Ein höfliches Abwinken ist KEIN heißer Lead –
     // sonst verfälscht es die Pipeline und Sinan ruft die Falschen an.

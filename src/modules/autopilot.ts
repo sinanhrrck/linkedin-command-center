@@ -7,6 +7,7 @@ import { queueReplyDraft, getDraft } from "./drafts.js";
 import { markRepliedByName, markDeclinedByName } from "./crm.js";
 import { governor, GovernorBlocked } from "../core/safetyGovernor.js";
 import { events } from "../core/events.js";
+import { goalForConversation, recordGoalAlert } from "./goals.js";
 
 /**
  * AUTOPILOT: voll-autonome Gespräche. Liest Threads, beantwortet Routine selbst
@@ -42,7 +43,22 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
 
     markRepliedByName(t.participant); // Hot Lead
 
-    const step = await converseStep(t.messages, t.participant).catch(() => null);
+    const conversationGoal = goalForConversation(t.threadUrl, t.participant);
+    const step = await converseStep(t.messages, t.participant, conversationGoal).catch(() => null);
+
+    if (step && conversationGoal && step.goalAlignment === "different_goal") {
+      queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step.reply, "goal_deviation");
+      const alertId = recordGoalAlert({
+        threadUrl: t.threadUrl, participant: t.participant, currentGoal: conversationGoal.code,
+        suggestedGoal: step.suggestedGoal, summary: step.zusammenfassung || step.strategie,
+        campaignId: conversationGoal.campaignId,
+      });
+      events.emit("goal:deviation", { alertId, participant: t.participant, currentGoal: conversationGoal.code,
+        suggestedGoal: step.suggestedGoal, summary: step.zusammenfassung, threadUrl: t.threadUrl });
+      db.prepare("UPDATE conversations SET status='escalated', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
+      res.escalated++;
+      continue;
+    }
 
     /**
      * ABSAGE = ein Abschied. Da gibt es nichts zu retten und nichts zu entscheiden – der

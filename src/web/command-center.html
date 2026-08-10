@@ -29,6 +29,7 @@
     <section class="view active" id="view-today">
       <div class="status-strip" id="status-strip"></div>
       <section id="blockaden" class="blockaden hidden"></section>
+      <section id="goal-alerts" class="goal-alerts hidden" aria-live="polite"></section>
       <section class="today-hero">
         <div><span class="eyebrow">Was braucht dich jetzt?</span><h2 id="attention-title">Deine Arbeit wird sortiert.</h2><p id="attention-copy">Antworten zuerst, dann Freigaben. NextLead erledigt den Rest im Hintergrund.</p></div>
         <div class="hero-done"><b id="today-auto">–</b><span>heute automatisch erledigt</span></div>
@@ -49,7 +50,18 @@
     </section>
 
     <section class="view" id="view-campaigns">
-      <section class="page-intro"><div><span class="eyebrow">Gezielte Aufträge</span><h2>Wen soll NextLead wofür erreichen?</h2><p>Eine Kampagne bündelt Zielgruppe, Event und Vorgehen. Bestehendes Netzwerk und neue Kontakte laufen gemeinsam, aber nachvollziehbar.</p></div><button id="new-campaign" class="primary">Event-Kampagne anlegen</button></section>
+      <section class="page-intro"><div><span class="eyebrow">Gezielte Aufträge</span><h2>Wen soll NextLead finden?</h2><p>Beschreibe die Menschen in deinen Worten. NextLead erstellt die LinkedIn-Suchen selbst und führt neue Gespräche auf den gewählten Weg.</p></div><button id="new-campaign" class="primary">Neuen Auftrag starten</button></section>
+      <section id="mission-form" class="mission-form hidden">
+        <div class="mission-copy"><span class="eyebrow">Neuer Auftrag</span><h3>Ein Satz. Ein Weg.</h3><p>Keine Such-URLs und keine Filterpflege. Schreib einfach, wen du erreichen willst.</p></div>
+        <label class="mission-search"><span>Wen suchst du?</span><textarea id="mission-search" rows="3" placeholder="z. B. Bankkaufleute und Azubis bei Sparkassen im Raum Heidelberg"></textarea></label>
+        <fieldset class="goal-picker"><legend>Wohin soll das Gespräch führen?</legend>
+          <button type="button" data-mission-goal="B1"><i>B1</i><b>Kunde</b><span>Zur passenden Kundenberatung</span></button>
+          <button type="button" data-mission-goal="P1"><i>P1</i><b>Vertriebspartner</b><span>Zum Austausch über eine Zusammenarbeit</span></button>
+          <button type="button" data-mission-goal="AEC"><i>AEC</i><b>AEC</b><span>Zum eigenständigen AEC-Ziel</span></button>
+        </fieldset>
+        <div class="mission-rail" aria-label="Ablauf"><span>Du beschreibst</span><i></i><span>NextLead sucht</span><i></i><span>vernetzt</span><i></i><strong id="mission-rail-goal">Ziel wählen</strong></div>
+        <div class="mission-actions"><button id="mission-advanced" type="button">Erweiterter Auftrag / Event</button><span id="mission-note" class="form-note"></span><button id="mission-start" class="primary">Auftrag starten</button></div>
+      </section>
       <section id="campaign-form" class="campaign-form hidden">
         <div class="form-head"><div><span class="eyebrow" id="campaign-form-eyebrow">Neue Event-Kampagne</span><h3 id="campaign-form-title">Ziel und Zielgruppe festlegen</h3></div><button id="close-campaign" class="icon-btn" aria-label="Schließen">×</button></div>
         <div class="form-grid">
