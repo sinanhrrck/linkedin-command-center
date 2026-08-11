@@ -5,12 +5,18 @@ import { sendThreadReply, sendMessage, sendComment, VersandNichtVersucht } from 
 import { firstMessage, followupMessage , converseStep, pitchIdeen, messageAusIdee } from "./personalize.js";
 import { GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
-import { markRepliedByName, markDeclinedByName, messagedAwaitingFollowup, type Contact } from "./crm.js";
+import { markInboundReply, messagedAwaitingFollowup, type Contact } from "./crm.js";
+import { contactForConversation, recordCrmStage } from "./crmStages.js";
 import { promptKontext, saubern } from "../context.js";
 import { events } from "../core/events.js";
 import { directionOptions, feedbackInstruction, type DraftDirection, type RejectionReason } from "./draftDirections.js";
 import { campaignContext } from "./campaigns.js";
 import { goalForContact, goalForConversation, recordGoalAlert } from "./goals.js";
+import { learnFromDraft, learnFromReply } from "./learning.js";
+import { blockDraftForRelationship, observeRelationshipMessage, proactiveDecisionForTarget } from "./relationshipPolicy.js";
+import { syncCampaignTargetForDraft } from "./campaignWorkflow.js";
+import { leseStand } from "../core/leseBudget.js";
+import { attachDraftContext, getConversationMemory, validateProactiveContext } from "./conversationMemory.js";
 
 /**
  * DM-Entwürfe: Inbox lesen → Gemini-Draft → als 'pending' speichern.
@@ -20,6 +26,7 @@ import { goalForContact, goalForConversation, recordGoalAlert } from "./goals.js
  */
 export type Draft = {
   id: number;
+  contact_id: number | null;
   kind: string;
   thread_url: string;
   participant: string;
@@ -34,6 +41,10 @@ export type Draft = {
   parent_draft_id: number | null;
   approach_key: string | null;
   rejection_reason: string | null;
+  blockiert_grund: string | null;
+  context_evidence_json: string | null;
+  context_validation: string | null;
+  context_memory_version: number | null;
 };
 
 /** Gemini erzeugt Sinans nächste Antwort aus dem Thread-Verlauf. */
@@ -58,6 +69,7 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
   // Bestehendes Netzwerk ist ein bewusster Zusatzbereich. Es darf niemals in die normale
   // Erstnachrichten-Automatik rutschen; dort entstehen ausschließlich Reaktivierungsentwürfe.
   if (c.aus_netzwerk) return false;
+  if (!proactiveDecisionForTarget(c.profile_url, c.full_name ?? "", "first").ok) return false;
   const exists = db
     .prepare(
       // 'discarded' zählt mit: hat der Nutzer den Erstnachricht-Entwurf gelöscht, NICHT neu erzeugen.
@@ -76,9 +88,11 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
     return false;
   }
   const info = db
-    .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('first',?,?,?,?,?,'first')")
-    .run(c.profile_url, c.full_name ?? null, "", text, text);
-  events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
+    .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES(?,'first',?,?,?,?,?,'first')")
+    .run(c.id, c.profile_url, c.full_name ?? null, "", text, text);
+  const draftId = Number(info.lastInsertRowid);
+  attachDraftContext(draftId, c.id);
+  events.emit("draft:new", getDraft(draftId));
   return true;
 }
 
@@ -92,6 +106,7 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
  * antwortet, will nicht. Das schützt Sinans Ruf und das Konto (Report-Risiko).
  */
 export async function createFollowupDraft(c: Contact): Promise<boolean> {
+  if (!proactiveDecisionForTarget(c.profile_url, c.full_name ?? "", "followup").ok) return false;
   const bisher = (
     db
       .prepare(
@@ -114,9 +129,11 @@ export async function createFollowupDraft(c: Contact): Promise<boolean> {
     return false;
   }
   const info = db
-    .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('followup',?,?,?,?)")
-    .run(c.profile_url, c.full_name ?? null, "", text);
-  events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
+    .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft) VALUES(?,'followup',?,?,?,?)")
+    .run(c.id, c.profile_url, c.full_name ?? null, "", text);
+  const draftId = Number(info.lastInsertRowid);
+  attachDraftContext(draftId, c.id);
+  events.emit("draft:new", getDraft(draftId));
   return true;
 }
 
@@ -298,6 +315,7 @@ export function getDraft(id: number): Draft | undefined {
 
 export function setDraftStatus(id: number, status: string) {
   db.prepare("UPDATE drafts SET status=? WHERE id=?").run(status, id);
+  syncCampaignTargetForDraft(id, status);
 }
 
 /**
@@ -340,7 +358,9 @@ export function retryBlockierte(): { entwuerfe: number; verworfen: number } {
  * Anders als "ablehnen" wird KEIN Ersatz erzeugt. Gesendetes bleibt unangetastet.
  */
 export function deleteDraft(id: number): boolean {
-  return db.prepare("UPDATE drafts SET status='discarded' WHERE id=? AND status != 'sent'").run(id).changes > 0;
+  const changed = db.prepare("UPDATE drafts SET status='discarded' WHERE id=? AND status != 'sent'").run(id).changes > 0;
+  if (changed) syncCampaignTargetForDraft(id, "discarded", "Entwurf wurde gelöscht");
+  return changed;
 }
 
 /**
@@ -354,8 +374,19 @@ export function deleteDraft(id: number): boolean {
 export function approveDraft(id: number, text?: string): boolean {
   const d = getDraft(id);
   if (!d || d.status === "sent" || d.phase === "approach") return false;
+  if (["first", "followup", "reaktivierung", "event"].includes(d.kind) && d.contact_id) {
+    const context = validateProactiveContext(d.contact_id);
+    if (!context.ok) {
+      db.prepare("UPDATE drafts SET status='blockiert',blockiert_grund=?,context_validation='blocked' WHERE id=?")
+        .run(context.reason, id);
+      syncCampaignTargetForDraft(id, "blockiert", context.reason);
+      return false;
+    }
+    attachDraftContext(id, d.contact_id);
+  }
   if (typeof text === "string" && text.trim()) db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), id);
   setDraftStatus(id, "approved");
+  learnFromDraft(id, "approved");
   return true;
 }
 
@@ -385,16 +416,20 @@ export async function rejectDraft(
     ).run(id, d.thread_url, d.kind, reason, cleanInstruction || null, d.draft, d.approach_key ?? null);
   });
   tx();
+  syncCampaignTargetForDraft(id, "discarded", "Entwurf wurde abgelehnt");
+  learnFromDraft(id, "rejected", reason);
 
   const history = feedbackHistory(d.thread_url, d.kind);
   if (reason === "different_approach") {
     const options = directionOptions(d.kind, history.map((item) => item.approach_key || ""));
     const info = db
       .prepare(
-        `INSERT INTO drafts(kind,thread_url,participant,incoming,draft,ki_original,intent,phase,parent_draft_id)
-         VALUES(?,?,?,?,?,?,?,'approach',?)`,
+        `INSERT INTO drafts(contact_id,kind,thread_url,participant,incoming,draft,ki_original,intent,phase,parent_draft_id)
+         VALUES(?,?,?,?,?,?,?,?,'approach',?)`,
       )
-      .run(d.kind, d.thread_url, d.participant, d.incoming, JSON.stringify(options), JSON.stringify(options), d.intent ?? null, d.id);
+      .run(d.contact_id, d.kind, d.thread_url, d.participant, d.incoming, JSON.stringify(options), JSON.stringify(options), d.intent ?? null, d.id);
+    syncCampaignTargetForDraft(Number(info.lastInsertRowid), "pending", "Neue Gesprächsrichtung wird ausgewählt");
+    if (d.contact_id) attachDraftContext(Number(info.lastInsertRowid), d.contact_id);
     // Die Richtungswahl ist nur ein Zwischenschritt im geöffneten Dashboard und keine
     // sendbare Nachricht. Deshalb kein Telegram-Push; erst der fertige Text wird gemeldet.
     return { ok: true, regenerated: true, choosingApproach: true };
@@ -406,8 +441,10 @@ export async function rejectDraft(
   });
   if (!neu) return { ok: true, regenerated: false };
   const info = db
-    .prepare("INSERT INTO drafts(kind,thread_url,participant,incoming,draft,ki_original,intent,parent_draft_id) VALUES(?,?,?,?,?,?,?,?)")
-    .run(d.kind, d.thread_url, d.participant, d.incoming, neu, neu, d.intent ?? null, d.id);
+    .prepare("INSERT INTO drafts(contact_id,kind,thread_url,participant,incoming,draft,ki_original,intent,parent_draft_id) VALUES(?,?,?,?,?,?,?,?,?)")
+    .run(d.contact_id, d.kind, d.thread_url, d.participant, d.incoming, neu, neu, d.intent ?? null, d.id);
+  syncCampaignTargetForDraft(Number(info.lastInsertRowid), "pending", "Ersatzentwurf wurde vorbereitet");
+  if (d.contact_id) attachDraftContext(Number(info.lastInsertRowid), d.contact_id);
   events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
   return { ok: true, regenerated: true };
 }
@@ -433,12 +470,14 @@ export async function chooseDraftApproach(id: number, approachKey: string): Prom
     db.prepare("UPDATE drafts SET status='discarded' WHERE id=? AND status='pending'").run(id);
     return db
       .prepare(
-        `INSERT INTO drafts(kind,thread_url,participant,incoming,draft,ki_original,intent,phase,parent_draft_id,approach_key)
-         VALUES(?,?,?,?,?,?,?,'message',?,?)`,
+        `INSERT INTO drafts(contact_id,kind,thread_url,participant,incoming,draft,ki_original,intent,phase,parent_draft_id,approach_key)
+         VALUES(?,?,?,?,?,?,?,?,'message',?,?)`,
       )
-      .run(d.kind, d.thread_url, d.participant, d.incoming, text, text, d.intent ?? null, d.id, selected.key);
+      .run(d.contact_id, d.kind, d.thread_url, d.participant, d.incoming, text, text, d.intent ?? null, d.id, selected.key);
   });
   const info = tx();
+  syncCampaignTargetForDraft(Number(info.lastInsertRowid), "pending", "Gewählte Gesprächsrichtung wurde ausgearbeitet");
+  if (d.contact_id) attachDraftContext(Number(info.lastInsertRowid), d.contact_id);
   events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
   return true;
 }
@@ -494,6 +533,10 @@ async function regenerateText(d: Draft, instruction: string, rejectedTexts: stri
  * Wochenende (message ist werktags-gated), arbeitet die Freigaben aber verlässlich ab.
  */
 export async function sendApprovedDrafts(limit = 10): Promise<number> {
+  // Ohne Lesebudget kann der Browser den Zielthread nicht sicher öffnen. Das ist eine geplante
+  // Vertagung bis zum nächsten Tag und darf weder als Versandfehler erscheinen noch jeden
+  // freigegebenen Entwurf einzeln gegen dasselbe Limit laufen lassen.
+  if (leseStand().erschoepft) return 0;
   const rows = db.prepare("SELECT id FROM drafts WHERE status='approved' ORDER BY created_at LIMIT ?").all(limit) as { id: number }[];
   let sent = 0;
   for (const { id } of rows) {
@@ -530,7 +573,41 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
   const vorherigerStatus = d.status;
   const claim = db.prepare("UPDATE drafts SET status='sending' WHERE id=? AND status=?").run(id, vorherigerStatus);
   if (claim.changes === 0) return { ok: false, reason: "Entwurf wird bereits verarbeitet" };
-  const zurueckstellen = () => db.prepare("UPDATE drafts SET status=? WHERE id=? AND status='sending'").run(vorherigerStatus, id);
+  syncCampaignTargetForDraft(id, "sending", "Versand wurde atomar reserviert");
+  const zurueckstellen = () => {
+    const changed = db.prepare("UPDATE drafts SET status=? WHERE id=? AND status='sending'").run(vorherigerStatus, id).changes;
+    if (changed) syncCampaignTargetForDraft(id, vorherigerStatus, "Versand wurde sicher vertagt");
+  };
+  // Letzte, atomare Beziehungskontrolle direkt vor dem Browserversand. Selbst ein bereits
+  // freigegebener alter Entwurf darf eine inzwischen erkannte Wiedervorlage nicht übergehen.
+  if (["first", "followup", "reaktivierung", "event"].includes(d.kind)) {
+    if (d.contact_id) {
+      const memory = getConversationMemory(d.contact_id);
+      const context = validateProactiveContext(d.contact_id);
+      if (!context.ok) {
+        db.prepare("UPDATE drafts SET status='blockiert',blockiert_grund=?,context_validation='blocked' WHERE id=? AND status='sending'")
+          .run(context.reason, id);
+        syncCampaignTargetForDraft(id, "blockiert", context.reason);
+        return { ok: false, reason: context.reason };
+      }
+      if (memory && d.context_memory_version && memory.version !== d.context_memory_version) {
+        const reason = "Das Gespräch hat sich seit diesem Entwurf verändert – bitte Nachricht neu prüfen";
+        db.prepare("UPDATE drafts SET status='blockiert',blockiert_grund=?,context_validation='stale' WHERE id=? AND status='sending'")
+          .run(reason, id);
+        syncCampaignTargetForDraft(id, "blockiert", reason);
+        return { ok: false, reason };
+      }
+    }
+    const kind = d.kind === "event" ? "campaign" : d.kind as "first" | "followup" | "reaktivierung";
+    const policy = proactiveDecisionForTarget(d.thread_url, d.participant ?? "", kind);
+    if (!policy.ok) {
+      blockDraftForRelationship(id, policy.reason);
+      syncCampaignTargetForDraft(id, "blockiert", policy.reason);
+      console.info(`[beziehungsschutz] Entwurf #${id} nicht gesendet – ${policy.reason}`);
+      events.emit("draft:blockiert", { id, grund: policy.reason, participant: d.participant });
+      return { ok: false, reason: policy.reason };
+    }
+  }
   // DUPLIKAT-SPERRE für Erstnachrichten: wenn der Kontakt schon angeschrieben wurde, NICHT
   // erneut senden (auch wenn der Entwurf freigegeben ist). Entwurf aus der Warteschlange nehmen.
   if (d.kind === "first") {
@@ -549,6 +626,7 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
     const st = db.prepare("SELECT status, replied_at FROM contacts WHERE profile_url=?").get(d.thread_url) as { status?: string; replied_at?: string } | undefined;
     if (st && (st.replied_at || ["replied", "closed"].includes(st.status ?? ""))) {
       db.prepare("UPDATE drafts SET status='discarded' WHERE id=? AND status='sending'").run(id);
+      syncCampaignTargetForDraft(id, "discarded", "Person hat inzwischen geantwortet");
       console.info(`[sicherheit] Follow-up #${id} verworfen – ${d.participant ?? "Kontakt"} hat inzwischen geantwortet (kein Reminder an Antwortende).`);
       return { ok: false, reason: "Person hat geantwortet – Follow-up hinfällig" };
     }
@@ -563,10 +641,17 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
       await sendMessage(d.thread_url, d.draft, d.kind === "event" ? "campaign" : "message");
     else await sendThreadReply(d.thread_url, d.draft, d.participant ?? "");
     db.prepare("UPDATE drafts SET status='sent', sent_at=datetime('now') WHERE id=? AND status='sending'").run(id);
+    syncCampaignTargetForDraft(id, "sent", "Nachricht nachweislich gesendet");
+    if (["first", "reaktivierung", "event"].includes(d.kind)) {
+      const contact = contactForConversation(d.thread_url, d.participant ?? "");
+      if (contact) recordCrmStage(contact.id, "messaged", "bot");
+    }
+    learnFromDraft(id, "sent");
     return { ok: true };
   } catch (e) {
     if (e instanceof DuplikatBlockiert) {
       db.prepare("UPDATE drafts SET status='discarded' WHERE id=? AND status='sending'").run(id);
+      syncCampaignTargetForDraft(id, "discarded", e.message);
       return { ok: false, reason: e.message };
     }
     if (e instanceof GovernorBlocked) {
@@ -588,6 +673,7 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
      */
     if (e instanceof UnsichereNachricht) {
       db.prepare("UPDATE drafts SET status='blockiert', blockiert_grund=? WHERE id=? AND status='sending'").run(e.grund, id);
+      syncCampaignTargetForDraft(id, "blockiert", e.grund);
       console.error(`[sicherheit] Entwurf #${id} blockiert – ${e.grund}. Nicht gesendet.`);
       events.emit("draft:blockiert", { id, grund: e.grund, participant: d.participant });
       return { ok: false, reason: `Blockiert: ${e.grund}` };
@@ -597,6 +683,7 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
     // Status bleibt sichtbar und der Mensch prüft den Verlauf, bevor etwas erneut rausgeht.
     db.prepare("UPDATE drafts SET status='unknown', blockiert_grund=? WHERE id=? AND status='sending'")
       .run(`Versand unklar nach technischem Fehler: ${String((e as Error)?.message ?? e).slice(0, 120)}`, id);
+    syncCampaignTargetForDraft(id, "unknown", "Versandstatus unklar – LinkedIn-Verlauf prüfen");
     console.error(`[send] Entwurf #${id}: Versandstatus unklar – kein automatischer Retry: ${(e as Error)?.message?.slice(0, 120)}`);
     events.emit("draft:blockiert", { id, grund: "Versandstatus unklar – LinkedIn-Verlauf prüfen", participant: d.participant });
     return { ok: false, reason: "Versandstatus unklar – nicht automatisch erneut gesendet" };
@@ -632,6 +719,7 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
       return null;
     });
     if (!step || !step.reply) continue;
+    learnFromReply(t.threadUrl, t.participant, t.lastIncoming, step.intent);
 
     // Ein anderer sinnvoller Weg ist eine Entscheidung, kein stiller Prompt-Wechsel. Antwort als
     // Entwurf sichern, Abweichung separat melden und diesen Thread für den Lauf beenden.
@@ -657,9 +745,15 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
 
     // Hot Lead NUR bei echtem Interesse. Ein höfliches Abwinken ist KEIN heißer Lead –
     // sonst verfälscht es die Pipeline und Sinan ruft die Falschen an.
-    const echtesInteresse = ["meeting", "chance", "positive"].includes(step.intent);
-    if (echtesInteresse && markRepliedByName(t.participant)) replies++;
-    if (step.intent === "absage") markDeclinedByName(t.participant);
+    const contactId = markInboundReply(t.threadUrl, t.participant, step.intent === "absage");
+    if (contactId) {
+      observeRelationshipMessage(contactId, t.lastIncoming);
+      recordCrmStage(contactId, "replied", "bot");
+      if (["chance", "positive", "meeting"].includes(step.intent)) recordCrmStage(contactId, "qualified", "bot");
+      if (step.intent === "meeting" || step.contact) recordCrmStage(contactId, "meeting", "bot");
+      if (step.intent === "absage") recordCrmStage(contactId, "lost", "bot");
+      replies++;
+    }
 
     // PITCHBEREIT (chance): Sinan will hier ERST Pitch-IDEEN statt einer fertigen Nachricht
     // (2026-07-28). Der Bot legt einen 'pitchidee'-Entwurf mit mehreren Ansätzen ab; Sinan wählt

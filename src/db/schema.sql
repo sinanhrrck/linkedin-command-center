@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS campaigns (
   briefing      TEXT,   -- Ablauf, Referenten, Nutzen: Sachkontext für Menschen UND für die KI
   goal_code     TEXT,   -- B1 | P1 | AEC : verbindlicher Gesprächsweg dieses Auftrags
   search_brief  TEXT,   -- Freitext des Nutzers; daraus entstehen die LinkedIn-Suchquellen
+  workflow_version INTEGER NOT NULL DEFAULT 1,
+  entry_rules_json TEXT,
+  exit_rules_json  TEXT,
+  activated_at  TEXT,
   active        INTEGER NOT NULL DEFAULT 1,
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at   TEXT
@@ -50,6 +54,56 @@ CREATE TABLE IF NOT EXISTS goal_alerts (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_goal_alert_open_thread
   ON goal_alerts(thread_url) WHERE status='open';
+
+-- Datenschutzfreundliche Lernspur. Sie enthält bewusst KEINE Namen, URLs oder Nachrichtentexte,
+-- sondern nur abstrahierte Merkmale und Ergebnisse. Daraus entstehen lokale Prompt-Regeln und
+-- optional anonyme, ausreichend große Aggregate für eine gemeinsame Wissensbasis.
+CREATE TABLE IF NOT EXISTS learning_events (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key    TEXT UNIQUE NOT NULL,
+  event_type    TEXT NOT NULL, -- approved | rejected | sent | reply | outcome
+  goal_code     TEXT,          -- B1 | P1 | AEC | NULL (Altbestand)
+  draft_kind    TEXT,
+  intent        TEXT,
+  change_key    TEXT,          -- unchanged | shorter | longer | question_removed | rewritten | ...
+  reason_key    TEXT,          -- Ablehnungsgrund, niemals Freitext
+  length_bucket TEXT,          -- short | medium | long
+  has_question  INTEGER,
+  has_cta       INTEGER,
+  outcome       TEXT,          -- positive | negative | qualified | meeting | won | ...
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  synced_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_learning_goal_event ON learning_events(goal_code,event_type,created_at);
+
+-- Kompakter, strukturierter Gesprächskontext pro Person. Anders als die Timeline ist dies der
+-- aktuelle Arbeitsstand, den jede neue Ansprache vor Entwurf und Versand verbindlich prüft.
+CREATE TABLE IF NOT EXISTS conversation_memories (
+  contact_id        INTEGER PRIMARY KEY,
+  intent            TEXT NOT NULL DEFAULT 'neutral', -- later | busy | not_interested | do_not_contact | interested | meeting | question | neutral
+  last_statement    TEXT,
+  commitment        TEXT,
+  open_point        TEXT,
+  next_contact_at   TEXT,
+  source            TEXT NOT NULL,
+  source_message_at TEXT NOT NULL,
+  version           INTEGER NOT NULL DEFAULT 1,
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS conversation_memory_events (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key        TEXT UNIQUE NOT NULL,
+  contact_id        INTEGER NOT NULL,
+  intent            TEXT NOT NULL,
+  statement         TEXT,
+  commitment        TEXT,
+  open_point        TEXT,
+  next_contact_at   TEXT,
+  source            TEXT NOT NULL,
+  source_message_at TEXT NOT NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_memory_events_contact ON conversation_memory_events(contact_id,source_message_at);
 
 -- Material einer Kampagne (Flyer, Agenda, Bild) plus die vom Nutzer gepflegten Kernaussagen.
 -- Die Datei liegt lokal unter config.paths.uploadDir; nur der Dateiname steht in der DB.
@@ -105,7 +159,99 @@ CREATE TABLE IF NOT EXISTS contacts (
   score_grund   TEXT,    -- kurze Begruendung des Scores (nachvollziehbar im Dashboard)
   campaign_id   INTEGER, -- Kampagne, aus der der Lead kam (optional für Altbestand)
   goal_code_override TEXT, -- bewusster B1/P1/AEC-Wechsel nur für diesen Kontakt
+  retry_after    TEXT,   -- nach erfolglosem Profilversuch nicht bei jedem Tick erneut öffnen
+  retry_reason   TEXT,
+  automation_status TEXT NOT NULL DEFAULT 'active', -- active | paused | manual | excluded
+  snoozed_until TEXT,    -- bis dahin keine proaktive Ansprache
+  snooze_label  TEXT,    -- verständliches Zeitfenster, z.B. "Winter 2026"
+  snooze_reason TEXT,    -- warum NextLead wartet
+  do_not_contact INTEGER NOT NULL DEFAULT 0,
+  last_meaningful_contact_at TEXT,
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Unveränderliche Beziehungssignale: was wurde erkannt und welche Schutzregel entstand daraus?
+-- Der Nachrichtentext selbst bleibt in den bestehenden lokalen Gesprächsdaten; hier steht nur
+-- die für die Steuerung notwendige, kurze Zusammenfassung.
+CREATE TABLE IF NOT EXISTS relationship_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key  TEXT UNIQUE NOT NULL,
+  contact_id  INTEGER NOT NULL,
+  kind        TEXT NOT NULL, -- snoozed | do_not_contact | resumed | manual
+  reason      TEXT,
+  valid_until TEXT,
+  source      TEXT NOT NULL DEFAULT 'conversation',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_relationship_events_contact ON relationship_events(contact_id,created_at);
+
+-- Eine Person kann ueber mehrere technische Schluessel auftauchen: Profil-URL, LinkedIn-Thread
+-- oder spaeter externe CRM-IDs. Alle Komponenten loesen diese Schluessel ueber dieselbe Tabelle
+-- auf, statt Namen oder URL-Arten jeweils anders zu interpretieren.
+CREATE TABLE IF NOT EXISTS contact_identities (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id       INTEGER NOT NULL,
+  identity_type    TEXT NOT NULL, -- profile_url | thread_url | external_url
+  identity_value   TEXT NOT NULL,
+  normalized_value TEXT NOT NULL,
+  confidence       TEXT NOT NULL DEFAULT 'confirmed', -- confirmed | inferred
+  source           TEXT NOT NULL DEFAULT 'system',
+  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(identity_type, normalized_value)
+);
+CREATE INDEX IF NOT EXISTS idx_contact_identities_contact ON contact_identities(contact_id,identity_type);
+
+-- Wenn ein Name nicht eindeutig ist, wird nicht geraten. Die offene Zuordnung erscheint als
+-- Datenhinweis und kann spaeter bewusst aufgeloest werden.
+CREATE TABLE IF NOT EXISTS contact_identity_conflicts (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  identity_type         TEXT NOT NULL,
+  identity_value        TEXT NOT NULL,
+  normalized_value      TEXT NOT NULL,
+  participant           TEXT,
+  candidate_contact_ids TEXT,
+  reason                TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'open', -- open | resolved | ignored
+  created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_identity_conflicts_open
+  ON contact_identity_conflicts(identity_type,normalized_value) WHERE status='open';
+
+-- Kurze, unveraenderliche Kontaktspur. Nachrichtentexte bleiben in ihren Quelltabellen; hier
+-- werden Status-, Kampagnen- und Beziehungsschritte fuer eine verlaessliche Timeline verbunden.
+CREATE TABLE IF NOT EXISTS contact_timeline_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key  TEXT UNIQUE NOT NULL,
+  contact_id  INTEGER NOT NULL,
+  event_type  TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  detail      TEXT,
+  source      TEXT NOT NULL,
+  source_id   TEXT,
+  occurred_at TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_contact_timeline_contact ON contact_timeline_events(contact_id,occurred_at);
+
+-- Low-Read-Modus: nur anonyme Fingerabdrücke der sichtbaren Inbox-Vorschau. Dadurch muss ein
+-- unveränderter Chat nicht alle 15 Minuten erneut geöffnet werden.
+CREATE TABLE IF NOT EXISTS inbox_scan_cache (
+  participant_key TEXT PRIMARY KEY,
+  snippet_hash    TEXT NOT NULL,
+  thread_url      TEXT,
+  their_turn      INTEGER,
+  last_opened_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Messbar machen, welche Navigationen der Low-Read-Modus vermieden hat.
+CREATE TABLE IF NOT EXISTS read_savings (
+  day   TEXT NOT NULL,
+  kind  TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(day,kind)
 );
 
 -- Content-Queue fürs Posting
@@ -121,6 +267,7 @@ CREATE TABLE IF NOT EXISTS posts (
 -- Entwürfe für DMs/Kommentare (Gemini generiert, Mensch gibt frei, Versand über Governor)
 CREATE TABLE IF NOT EXISTS drafts (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id   INTEGER,
   kind         TEXT NOT NULL DEFAULT 'message', -- message | comment
   thread_url   TEXT,                            -- Konversations-/Ziel-URL (Idempotenz-Key)
   participant  TEXT,                            -- Name des Gegenübers
@@ -165,6 +312,30 @@ CREATE TABLE IF NOT EXISTS bot_activity (
 );
 CREATE INDEX IF NOT EXISTS idx_bot_activity_time ON bot_activity(started_at DESC);
 
+-- Bewusst vom Nutzer abgesendete Fehlerberichte und Feedback. Gespeichert werden ausschließlich
+-- bereinigte Diagnosedaten; die lokale Warteschlange überlebt Offline-Zeiten und App-Neustarts.
+CREATE TABLE IF NOT EXISTS user_reports (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  report_id      TEXT UNIQUE NOT NULL,
+  kind           TEXT NOT NULL, -- error | feedback
+  message        TEXT,
+  reply_email    TEXT,
+  activity_job   TEXT,
+  activity_detail TEXT,
+  activity_at    TEXT,
+  screenshot_base64 TEXT,
+  screenshot_mime TEXT,
+  screenshot_width INTEGER,
+  screenshot_height INTEGER,
+  status         TEXT NOT NULL DEFAULT 'pending', -- pending | sent
+  attempts       INTEGER NOT NULL DEFAULT 0,
+  next_attempt   TEXT,
+  last_error     TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  sent_at        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_user_reports_pending ON user_reports(status,next_attempt,created_at);
+
 -- Lead-Quellen: gespeicherte LinkedIn-Such-URLs, die der Loop automatisch abgrast.
 -- cursor_page blättert seitenweise durch, damit stetig neue Leads reinkommen.
 CREATE TABLE IF NOT EXISTS lead_sources (
@@ -184,6 +355,7 @@ CREATE TABLE IF NOT EXISTS lead_sources (
 -- Autopilot: Zustand je Gespräch (voll-autonomer Modus)
 CREATE TABLE IF NOT EXISTS conversations (
   thread_url  TEXT PRIMARY KEY,
+  contact_id  INTEGER,
   participant TEXT,
   auto_count  INTEGER NOT NULL DEFAULT 0,          -- wie viele KI-Antworten schon raus
   status      TEXT NOT NULL DEFAULT 'active',      -- active | booked | escalated
@@ -204,6 +376,20 @@ CREATE TABLE IF NOT EXISTS sales_outcomes (
 );
 CREATE INDEX IF NOT EXISTS idx_sales_outcomes_campaign ON sales_outcomes(campaign_id, stage);
 
+-- Revisionssichere CRM-Historie: pro Kontakt und Stufe genau ein belegbares Ereignis.
+-- Keine Nachrichtentexte, Namen oder URLs: Analytics braucht nur Zielweg, Stufe und Herkunft.
+CREATE TABLE IF NOT EXISTS crm_stage_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key  TEXT UNIQUE NOT NULL,
+  contact_id  INTEGER NOT NULL,
+  goal_code   TEXT,
+  stage       TEXT NOT NULL, -- messaged | replied | qualified | meeting | won | lost | not_fit
+  source      TEXT NOT NULL, -- backfill | bot | agent | manual
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_crm_stage_goal ON crm_stage_events(goal_code,stage,created_at);
+CREATE INDEX IF NOT EXISTS idx_crm_stage_contact ON crm_stage_events(contact_id,stage);
+
 -- Persönliche nächste Schritte: Der Bot erkennt Signale, aber die Entscheidung und Beziehung
 -- bleiben beim Menschen. Aufgaben machen diese Übergabe verbindlich und terminierbar.
 CREATE TABLE IF NOT EXISTS sales_tasks (
@@ -223,13 +409,35 @@ CREATE TABLE IF NOT EXISTS campaign_targets (
   campaign_id INTEGER NOT NULL,
   contact_id  INTEGER NOT NULL,
   route       TEXT NOT NULL DEFAULT 'network', -- network | external
-  status      TEXT NOT NULL DEFAULT 'queued',  -- queued | awaiting_connection | drafted | sent | excluded
+  status      TEXT NOT NULL DEFAULT 'queued',  -- awaiting_connection | queued | generating | drafted | approved | sending | sent | completed | snoozed | excluded | failed
   reason      TEXT,
+  draft_id    INTEGER,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  last_error  TEXT,
+  next_attempt_at TEXT,
+  completed_at TEXT,
+  version     INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY(campaign_id, contact_id)
 );
 CREATE INDEX IF NOT EXISTS idx_campaign_targets_status ON campaign_targets(campaign_id,status);
+
+-- Jeder Schrittwechsel bleibt nachvollziehbar. `dedupe_key` macht Reconciliation und Neustarts
+-- idempotent, selbst wenn Server und Engine denselben Zustand kurz nacheinander sehen.
+CREATE TABLE IF NOT EXISTS campaign_target_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key  TEXT UNIQUE NOT NULL,
+  campaign_id INTEGER NOT NULL,
+  contact_id  INTEGER NOT NULL,
+  from_status TEXT,
+  to_status   TEXT NOT NULL,
+  reason      TEXT,
+  source      TEXT NOT NULL,
+  draft_id    INTEGER,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_target_events_target ON campaign_target_events(campaign_id,contact_id,created_at);
 
 -- Einfacher Key/Value-State (z.B. globaler Pause-Schalter, Startdatum)
 CREATE TABLE IF NOT EXISTS state (

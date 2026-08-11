@@ -2,6 +2,9 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { db } from "../db/index.js";
 import { config } from "../config.js";
+import { learnFromOutcome } from "./learning.js";
+import { recordCrmStage } from "./crmStages.js";
+import { proactiveDecision } from "./relationshipPolicy.js";
 
 export const OUTCOME_STAGES = ["qualified", "meeting", "won", "lost", "not_fit"] as const;
 export type OutcomeStage = (typeof OUTCOME_STAGES)[number];
@@ -54,6 +57,13 @@ export type CampaignRow = {
   target_external: number;
   target_drafted: number;
   target_sent: number;
+  target_snoozed: number;
+  target_waiting: number;
+  target_ready: number;
+  target_generating: number;
+  target_approved: number;
+  target_failed: number;
+  target_completed: number;
   sources: number;
   leads: number;
   invited: number;
@@ -142,7 +152,16 @@ const LETZTE_AKTIVITAET_SQL =
   `COALESCE((SELECT MAX(d.sent_at) FROM drafts d WHERE d.thread_url=c.profile_url AND d.status='sent'),
             c.replied_at, c.messaged_at)`;
 
-function seedCampaignTargets(campaignId: number, input: CampaignInput): number {
+export type CampaignPreview = {
+  total: number;
+  network: number;
+  external: number;
+  exclusions: { criteria: number; activeConversation: number; protected: number; closed: number; scope: number };
+};
+
+type EligibleTarget = { id: number; route: "network" | "external"; status: "queued" | "awaiting_connection" };
+
+function evaluateCampaignCandidates(input: CampaignInput): { selected: EligibleTarget[]; preview: CampaignPreview } {
   const filters = JSON.parse(filtersJson(input)) as { keywords: string; region: string; minScore: number };
   const terms = filters.keywords.toLowerCase().split(BEGRIFF_TRENNER).map((term) => term.trim()).filter(Boolean);
   const region = filters.region.toLowerCase();
@@ -151,22 +170,43 @@ function seedCampaignTargets(campaignId: number, input: CampaignInput): number {
   const contacts = db.prepare(
     `SELECT c.id,c.full_name,c.headline,c.status,c.lead_score,c.aus_netzwerk,c.accepted_at,
             ${LETZTE_AKTIVITAET_SQL} letzte_aktivitaet
-       FROM contacts c WHERE c.status NOT IN ('closed','skipped')`,
+       FROM contacts c`,
   ).all() as Array<{ id: number; full_name: string | null; headline: string | null; status: string; lead_score: number | null; aus_netzwerk: number; accepted_at: string | null; letzte_aktivitaet: string | null }>;
-  const add = db.prepare("INSERT OR IGNORE INTO campaign_targets(campaign_id,contact_id,route,status) VALUES(?,?,?,?)");
-  let count = 0;
+  const selected: EligibleTarget[] = [];
+  const exclusions = { criteria: 0, activeConversation: 0, protected: 0, closed: 0, scope: 0 };
   for (const contact of contacts) {
+    if (["closed", "skipped"].includes(contact.status)) { exclusions.closed++; continue; }
     const haystack = `${contact.full_name ?? ""} ${contact.headline ?? ""}`.toLowerCase();
-    if (terms.length && !terms.some((term) => haystack.includes(term))) continue;
-    if (region && !haystack.includes(region)) continue;
-    if ((contact.lead_score ?? 0) < filters.minScore) continue;
-    if (!kampagnenReif(contact, grenze)) continue;
+    if ((terms.length && !terms.some((term) => haystack.includes(term))) || (region && !haystack.includes(region)) || (contact.lead_score ?? 0) < filters.minScore) {
+      exclusions.criteria++; continue;
+    }
+    if (!kampagnenReif(contact, grenze)) { exclusions.activeConversation++; continue; }
     const connected = !!contact.aus_netzwerk || !!contact.accepted_at || ["accepted", "messaged", "replied"].includes(contact.status);
     const route = connected ? "network" : "external";
-    if (selectedScope !== "both" && selectedScope !== route) continue;
-    const status = connected ? "queued" : "awaiting_connection";
-    count += add.run(campaignId, contact.id, route, status).changes;
+    if (selectedScope !== "both" && selectedScope !== route) { exclusions.scope++; continue; }
+    if (!proactiveDecision(contact.id, connected ? "campaign" : "connect").ok) { exclusions.protected++; continue; }
+    selected.push({ id: contact.id, route, status: connected ? "queued" : "awaiting_connection" });
   }
+  return {
+    selected,
+    preview: {
+      total: selected.length,
+      network: selected.filter((row) => row.route === "network").length,
+      external: selected.filter((row) => row.route === "external").length,
+      exclusions,
+    },
+  };
+}
+
+export function previewCampaign(input: CampaignInput): CampaignPreview {
+  return evaluateCampaignCandidates(input).preview;
+}
+
+function seedCampaignTargets(campaignId: number, input: CampaignInput): number {
+  const { selected } = evaluateCampaignCandidates(input);
+  const add = db.prepare("INSERT OR IGNORE INTO campaign_targets(campaign_id,contact_id,route,status) VALUES(?,?,?,?)");
+  let count = 0;
+  for (const target of selected) count += add.run(campaignId, target.id, target.route, target.status).changes;
   db.prepare("UPDATE contacts SET campaign_id=COALESCE(campaign_id,?) WHERE id IN (SELECT contact_id FROM campaign_targets WHERE campaign_id=?)").run(campaignId, campaignId);
   return count;
 }
@@ -211,6 +251,9 @@ export function createCampaign(input: CampaignInput): number {
     input.goalCode === "B1" || input.goalCode === "P1" || input.goalCode === "AEC" ? input.goalCode : null,
     text(input.searchBrief, 600) || null);
   const id = Number(result.lastInsertRowid);
+  db.prepare(
+    `UPDATE campaigns SET activated_at=datetime('now'),entry_rules_json=?,exit_rules_json=? WHERE id=?`,
+  ).run(filtersJson(input), JSON.stringify({ stopOnReply: true, maxDraftAttempts: 2, relationshipPolicy: true }), id);
   if (input.seedExisting !== false) seedCampaignTargets(id, input);
   return id;
 }
@@ -263,7 +306,8 @@ export function pruneCampaignTargets(campaignId: number): number {
       && (target.lead_score ?? 0) >= (Number(filters.minScore) || 0)
       && (selectedScope === "both" || selectedScope === route)
       && kampagnenReif(target, grenze);
-    if (matches) continue;
+    const policy = proactiveDecision(target.contact_id, route === "network" ? "campaign" : "connect");
+    if (matches && policy.ok) continue;
     removed += remove.run(campaignId, target.contact_id).changes;
   }
   return removed;
@@ -286,6 +330,7 @@ export function deleteCampaign(id: number): { ok: boolean; drafts: number; targe
   try { rmSync(assetDir(id), { recursive: true, force: true }); } catch { /* Ordner schon weg */ }
   const remove = db.transaction(() => {
     const drafts = db.prepare("DELETE FROM drafts WHERE incoming=?").run(`campaign:${id}`).changes;
+    db.prepare("DELETE FROM campaign_target_events WHERE campaign_id=?").run(id);
     const targets = db.prepare("DELETE FROM campaign_targets WHERE campaign_id=?").run(id).changes;
     db.prepare("DELETE FROM campaign_assets WHERE campaign_id=?").run(id);
     db.prepare("DELETE FROM experiment_arms WHERE campaign_id=?").run(id);
@@ -301,8 +346,9 @@ export function deleteCampaign(id: number): { ok: boolean; drafts: number; targe
 
 export function setCampaignActive(id: number, active: boolean) {
   return db.prepare(
-    "UPDATE campaigns SET active=?, archived_at=CASE WHEN ? THEN NULL ELSE datetime('now') END WHERE id=?",
-  ).run(active ? 1 : 0, active ? 1 : 0, id).changes > 0;
+    `UPDATE campaigns SET active=?,archived_at=CASE WHEN ? THEN NULL ELSE datetime('now') END,
+       activated_at=CASE WHEN ? THEN COALESCE(activated_at,datetime('now')) ELSE activated_at END WHERE id=?`,
+  ).run(active ? 1 : 0, active ? 1 : 0, active ? 1 : 0, id).changes > 0;
 }
 
 /** Kampagnen mit einem fokussierten Funnel. Korrelierte Zählungen vermeiden Join-Multiplikate. */
@@ -315,15 +361,19 @@ export function listCampaigns(): CampaignRow[] {
       (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id) AS targets,
       (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.route='network') AS target_network,
       (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.route='external') AS target_external,
-      -- ENTWÜRFE + GESENDET kommen aus den Entwürfen selbst, NICHT aus campaign_targets
-      -- (Fix 2026-08-05): Der Ziel-Status ist ein abgeleiteter Zustand, der nur beim
-      -- campaign-Tick nachgezogen wird. Stand die Engine still oder fiel ein Ziel aus der
-      -- Zielgruppe, zeigte die Karte dauerhaft "0 gesendet", obwohl Nachrichten nachweislich
-      -- rausgegangen waren. Die drafts-Tabelle ist die Wahrheit über den Versand.
-      (SELECT COUNT(*) FROM drafts d WHERE d.incoming='campaign:'||c.id AND d.kind='event'
-                                      AND d.status IN ('pending','approved','sending')) AS target_drafted,
-      (SELECT COUNT(*) FROM drafts d WHERE d.incoming='campaign:'||c.id AND d.kind='event'
-                                      AND d.status='sent') AS target_sent,
+      (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status IN ('snoozed','excluded')) AS target_snoozed,
+      (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status='awaiting_connection') AS target_waiting,
+      (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status='queued') AS target_ready,
+      (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status='generating') AS target_generating,
+      (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status='approved') AS target_approved,
+      (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status='failed') AS target_failed,
+      (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status='completed') AS target_completed,
+      -- Seit Workflow v1 ist campaign_targets die pro Kontakt reconciliierte Wahrheit. Die
+      -- drafts-Tabelle kann mehrere historische Entwürfe pro Person enthalten und würde hier
+      -- Nachrichten statt Menschen zählen (real: 26 statt 22 gesendete Kontakte).
+      (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id
+                                      AND t.status IN ('drafted','approved','sending')) AS target_drafted,
+      (SELECT COUNT(*) FROM campaign_targets t WHERE t.campaign_id=c.id AND t.status='sent') AS target_sent,
       (SELECT COUNT(*) FROM lead_sources s WHERE s.campaign_id=c.id) AS sources,
       (SELECT COUNT(*) FROM contacts l WHERE l.campaign_id=c.id) AS leads,
       (SELECT COUNT(*) FROM contacts l WHERE l.campaign_id=c.id AND l.invited_at IS NOT NULL) AS invited,
@@ -474,4 +524,6 @@ export function recordOutcome(contactId: number, stage: OutcomeStage, note?: str
        campaign_id=excluded.campaign_id, stage=excluded.stage, note=excluded.note,
        value_cents=excluded.value_cents, updated_at=datetime('now')`,
   ).run(contactId, contact.campaign_id, stage, cleanNote, value);
+  recordCrmStage(contactId, stage, "manual", `manual:${contactId}:${stage}:${Date.now()}`);
+  learnFromOutcome(contactId, stage);
 }

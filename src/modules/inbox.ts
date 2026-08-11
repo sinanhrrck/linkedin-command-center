@@ -1,5 +1,6 @@
 import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { humanScroll, humanDelay } from "../core/humanize.js";
+import { rememberConversationPreview, shouldOpenConversation } from "./lowRead.js";
 
 /**
  * Liest die LinkedIn-Inbox – REIN LESEND, kein Governor, kein Senden.
@@ -110,6 +111,11 @@ export async function fetchThreads(max = 8, onlyUnread = false): Promise<ThreadC
       })),
     SEL,
   )) as { participant: string; unread: boolean; snippet: string }[];
+  const nameCounts = new Map<string, number>();
+  for (const item of meta) {
+    const key = item.participant.trim().toLowerCase();
+    nameCounts.set(key, (nameCounts.get(key) || 0) + 1);
+  }
 
   // Aus der Vorschau ableiten, ob die Person am Zug ist. "Sie:"/"Du:"/"You:" am Anfang = DU zuletzt.
   const personAmZug = (snippet: string) => {
@@ -122,6 +128,13 @@ export async function fetchThreads(max = 8, onlyUnread = false): Promise<ThreadC
     // Nur Threads öffnen, bei denen die Person am Zug ist ODER ungelesen ODER unklar – spart Zeit
     // und verhindert, dass der Agent auf die eigene letzte Nachricht "antwortet".
     .filter((m) => (onlyUnread ? m.unread : m.amZug !== false))
+    // Gleiche Namen können zu unterschiedlichen Menschen gehören. In diesem seltenen Fall
+    // niemals anhand des Namens-Caches überspringen – Genauigkeit geht vor Einsparung.
+    .map((m) => ({ ...m, cache: shouldOpenConversation(
+      m.participant, m.snippet, m.unread, m.amZug,
+      (nameCounts.get(m.participant.trim().toLowerCase()) || 0) === 1,
+    ) }))
+    .filter((m) => m.cache.open)
     .slice(0, max);
 
   const out: ThreadContext[] = [];
@@ -177,6 +190,8 @@ export async function fetchThreads(max = 8, onlyUnread = false): Promise<ThreadC
       t.amZug !== null ? t.amZug               // Vorschau vorhanden → sie ist maßgeblich
       : letzte?.other === true ? true          // letzte Nachricht klar vom Gegenüber
       : !!(letzte?.sender && letzte.sender === participant); // Absender klar = Person; sonst false
+
+    rememberConversationPreview(t.cache.participantKey, t.cache.snippetHash, threadUrl, theirTurn);
 
     // 'other' vor der Rückgabe entfernen (ThreadContext.messages = {sender,text}).
     const ausgabe = clean.slice(-12).map((m) => ({ sender: m.sender, text: m.text }));

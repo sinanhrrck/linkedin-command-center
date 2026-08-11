@@ -10,6 +10,7 @@ const dir = mkdtempSync(join(tmpdir(), "nextlead-metrics-"));
 process.env.DB_PATH = join(dir, "metrics.sqlite");
 const { db } = await import("../db/index.js");
 const { getDashboardData } = await import("../modules/dashboard.js");
+const { recordCrmStage } = await import("../modules/crmStages.js");
 const { getAnalytics } = await import("../modules/analytics.js");
 
 test("trennt Funnel, aktive Antworten und Aktionsereignisse", () => {
@@ -52,6 +53,25 @@ test("trennt Funnel, aktive Antworten und Aktionsereignisse", () => {
   assert.equal(analytics.projektion.anschreibRate, 75);
   assert.equal(analytics.projektion.szenarien.at(-1)?.hotLeads, 40, "Forecast enthält den Schritt Annahme → Nachricht");
   assert.equal(dashboard.drafts[0]?.profile?.profileUrl, "https://example.test/a", "Entwurf enthält die passende Profilvorschau");
+
+  const campaignId = Number(db.prepare("INSERT INTO campaigns(name,goal_code) VALUES('B1-Rechner','B1')").run().lastInsertRowid);
+  const first = Number(db.prepare(
+    "INSERT INTO contacts(profile_url,full_name,status,campaign_id,messaged_at) VALUES('https://example.test/b1-a','B1 A','closed',?,?)",
+  ).run(campaignId, old).lastInsertRowid);
+  db.prepare(
+    "INSERT INTO contacts(profile_url,full_name,status,campaign_id,messaged_at) VALUES('https://example.test/b1-b','B1 B','messaged',?,?)",
+  ).run(campaignId, old);
+  db.prepare("INSERT INTO sales_outcomes(contact_id,campaign_id,stage,value_cents) VALUES(?,?,?,?)")
+    .run(first, campaignId, "won", 150_000);
+  recordCrmStage(first, "messaged", "backfill");
+  recordCrmStage(first, "won", "manual");
+  const second = db.prepare("SELECT id FROM contacts WHERE profile_url='https://example.test/b1-b'").get() as { id: number };
+  recordCrmStage(second.id, "messaged", "backfill");
+  const economics = getDashboardData().goalEconomics.find((item) => item.goal === "B1");
+  assert.deepEqual(economics, {
+    goal: "B1", messaged: 2, replied: 0, qualified: 0, meeting: 0, won: 1, won_value_cents: 150_000,
+    rates: { reply: 0, qualified: null, meeting: null, won: null }, conversionPct: 50, averageValueEur: 1500,
+  });
 });
 
 test.after(() => {

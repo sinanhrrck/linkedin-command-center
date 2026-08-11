@@ -1,5 +1,7 @@
 import { db } from "../db/index.js";
 import { canonicalProfileUrl } from "../core/profileUrl.js";
+import { proactiveDecision } from "./relationshipPolicy.js";
+import { linkContactIdentity, resolveContactIdentity } from "./contactIdentity.js";
 
 export type Contact = {
   id: number;
@@ -11,6 +13,11 @@ export type Contact = {
   aus_netzwerk?: number | null;
   /** azubi | student – steuert den Winkel der Erstnachricht. Sinan hat NICHT studiert. */
   zielgruppe?: string | null;
+  automation_status?: string | null;
+  snoozed_until?: string | null;
+  snooze_label?: string | null;
+  snooze_reason?: string | null;
+  do_not_contact?: number | null;
 };
 
 /** Kontakt anlegen oder ergänzen (kein Duplikat pro Profil-URL). */
@@ -29,7 +36,11 @@ export function upsertContact(c: { profileUrl: string; fullName?: string; headli
   db.prepare(
     `INSERT INTO contacts(profile_url, normalized_url, full_name, headline, zielgruppe, lead_score, score_grund, source_id, campaign_id)
      VALUES(?,?,?,?,?,?,?,?,?)
-     ON CONFLICT(normalized_url) DO UPDATE SET
+     -- Ohne Konfliktziel: Die produktive DB hat für normalized_url bewusst einen partiellen
+     -- Unique-Index. SQLite akzeptiert dort ON CONFLICT(normalized_url) ohne dessen WHERE-Klausel
+     -- nicht und brach dadurch den gesamten Lead-Import ab. Ziel-los greift der Upsert sowohl
+     -- für die kanonische URL als auch für den älteren profile_url-Unique-Key korrekt.
+     ON CONFLICT DO UPDATE SET
        full_name   = COALESCE(excluded.full_name, contacts.full_name),
        headline    = COALESCE(excluded.headline,  contacts.headline),
        zielgruppe  = COALESCE(excluded.zielgruppe, contacts.zielgruppe),
@@ -41,14 +52,17 @@ export function upsertContact(c: { profileUrl: string; fullName?: string; headli
   // Quellengebundene Aufträge nehmen ausschließlich die Kontakte auf, die über genau diese
   // Quelle gefunden wurden. Bestehende Kontakte werden beim Anlegen eines neuen Auftrags nicht
   // rückwirkend vereinnahmt; Duplikate bleiben durch INSERT OR IGNORE sicher.
+  const row = db.prepare("SELECT id,status,accepted_at,aus_netzwerk,full_name FROM contacts WHERE normalized_url=?").get(profileUrl) as
+    | { id: number; status: string; accepted_at: string | null; aus_netzwerk: number | null; full_name: string | null }
+    | undefined;
+  if (row) linkContactIdentity({ contactId: row.id, value: profileUrl, type: "profile_url", confidence: "confirmed", source: "contact_upsert", participant: row.full_name || "" });
   if (campaignId) {
-    const row = db.prepare("SELECT id,status,accepted_at,aus_netzwerk FROM contacts WHERE normalized_url=?").get(profileUrl) as
-      | { id: number; status: string; accepted_at: string | null; aus_netzwerk: number | null }
-      | undefined;
     if (row) {
       const connected = !!row.aus_netzwerk || !!row.accepted_at || ["accepted", "messaged", "replied"].includes(row.status);
-      db.prepare("INSERT OR IGNORE INTO campaign_targets(campaign_id,contact_id,route,status) VALUES(?,?,?,?)")
-        .run(campaignId, row.id, connected ? "network" : "external", connected ? "queued" : "awaiting_connection");
+      if (proactiveDecision(row.id, connected ? "campaign" : "connect").ok) {
+        db.prepare("INSERT OR IGNORE INTO campaign_targets(campaign_id,contact_id,route,status) VALUES(?,?,?,?)")
+          .run(campaignId, row.id, connected ? "network" : "external", connected ? "queued" : "awaiting_connection");
+      }
     }
   }
 }
@@ -69,6 +83,10 @@ export function nextNewContacts(limit: number): Contact[] {
       `SELECT *
        FROM contacts
        WHERE status = 'new'
+         AND COALESCE(do_not_contact,0)=0
+         AND COALESCE(automation_status,'active')='active'
+         AND (snoozed_until IS NULL OR snoozed_until<=datetime('now'))
+         AND (retry_after IS NULL OR retry_after <= datetime('now'))
        ORDER BY
          CASE WHEN EXISTS (
            SELECT 1
@@ -244,6 +262,21 @@ export function markRepliedByName(fullName: string): boolean {
   return res.changes > 0;
 }
 
+/**
+ * Inbox-Antwort mit stabiler URL-Zuordnung; Namen dienen nur als eindeutiger Altbestands-Fallback.
+ * Jede echte eingehende Nachricht zählt als Antwort – unabhängig davon, ob sie positiv ist.
+ */
+export function markInboundReply(threadUrl: string, fullName: string, declined = false): number | null {
+  const contact = resolveContactIdentity(threadUrl, fullName, "inbound_reply");
+  if (!contact) return null;
+  db.prepare(
+    `UPDATE contacts SET status=?, replied_at=COALESCE(replied_at,datetime('now')),
+                         last_meaningful_contact_at=datetime('now')
+      WHERE id=? AND status IN ('messaged','replied')`,
+  ).run(declined ? "closed" : "replied", contact.id);
+  return contact.id;
+}
+
 /** Hot Leads: haben auf unsere Nachricht geantwortet. */
 export function hotLeads(): Contact[] {
   return db
@@ -269,6 +302,9 @@ export function messagedAwaitingFollowup(days: number, limit: number, days2 = 7)
     .prepare(
       `SELECT c.* FROM contacts c
        WHERE c.status='messaged' AND c.messaged_at IS NOT NULL
+         AND COALESCE(c.do_not_contact,0)=0
+         AND COALESCE(c.automation_status,'active')='active'
+         AND (c.snoozed_until IS NULL OR c.snoozed_until<=datetime('now'))
          AND NOT EXISTS (
            SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url
              AND d.kind='followup' AND d.status IN ('pending','approved','discarded')

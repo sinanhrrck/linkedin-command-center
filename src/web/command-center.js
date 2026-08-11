@@ -4,14 +4,25 @@ let reviewKinds = null;
 let reviewCampaign = null;
 let reviewIndex = 0;
 let missionGoal = null;
+let planningInitialized = false;
+let relationshipContact = null;
+let relationshipExcludeArmed = false;
+let contactWorkspaceId = null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
-const post = async (url, payload = {}) => {
-  const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || result.error) throw new Error(result.error || result.reason || `HTTP ${response.status}`);
-  return result;
+const post = async (url, payload = {}, timeoutMs = 45000) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: controller.signal });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.error) throw new Error(result.error || result.reason || `HTTP ${response.status}`);
+    return result;
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error("Der Vorgang dauert zu lange. Bitte erneut versuchen.");
+    throw error;
+  } finally { clearTimeout(timeout); }
 };
 const toast = (message) => { const el = $("toast"); el.textContent = message; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 2600); };
 const pct = (a, b) => b > 0 ? Math.round(a / b * 100) : null;
@@ -79,12 +90,15 @@ $("scan-offene")?.addEventListener("click", async (event) => {
 
 function renderStatus() {
   const alive = !!state.engine?.alive, stopped = !!state.governor?.notAus, health = state.systemHealth?.sendeWeg;
-  const okay = alive && !stopped && health !== "broken";
-  $("side-dot").style.background = okay ? "#58d19b" : stopped || health === "broken" ? "#ef7482" : "#e4ae54";
+  const okay = alive && !stopped && health === "ok";
+  const critical = stopped || health === "broken";
+  $("side-dot").style.background = okay ? "#58d19b" : critical ? "#ef7482" : "#e4ae54";
   $("side-state").textContent = stopped ? "Not-Aus aktiv" : alive ? "Arbeitet" : "Engine aus";
   $("side-detail").textContent = state.engine?.activeJob ? `Jetzt: ${state.engine.activeJob}` : alive ? "Aufgaben werden priorisiert" : "Keine Hintergrundarbeit";
-  const strip = $("status-strip"); strip.className = `status-strip ${okay ? "ok" : stopped || health === "broken" ? "bad" : "warn"}`;
-  const title = stopped ? "Jeder Versand ist gestoppt." : health === "broken" ? "Der Sendeweg braucht Aufmerksamkeit." : alive ? "NextLead arbeitet im Hintergrund." : "NextLead ist gerade nicht gestartet.";
+  const strip = $("status-strip"); strip.className = `status-strip ${okay ? "ok" : critical ? "bad" : "warn"}`;
+  const title = stopped ? "Jeder Versand ist gestoppt." : health === "broken" ? "Der Sendeweg braucht Aufmerksamkeit."
+    : health !== "ok" ? "Der Sendeweg wird vor dem nächsten Versand geprüft."
+    : alive ? "NextLead arbeitet im Hintergrund." : "NextLead ist gerade nicht gestartet.";
   const detail = state.engine?.activeJob ? `Aktuell: ${state.engine.activeJob}${state.engine.queuedJobs ? ` · ${state.engine.queuedJobs} weitere Aufgaben warten` : ""}` : alive ? "Nächster Lauf automatisch nach Zeitplan." : "In Einstellungen kannst du die Engine starten.";
   strip.innerHTML = `<strong>${esc(title)}</strong><span>${esc(detail)}</span>`;
   /**
@@ -207,8 +221,108 @@ function renderActivity() {
     : `<div class="activity-empty">${activity.paused ? "Keine Aktion geplant, solange der Not-Aus aktiv ist." : "Keine Aufgabe wartet."}</div>`;
   let recent = activity.recent || [];
   if (!recent.length) recent = (state.recentActions || []).slice(0, 6).map((item) => ({ job: item.type, detail: item.full_name || "LinkedIn-Aktion", finished_at: item.created_at, status: "done" }));
-  $("activity-recent").innerHTML = recent.slice(0, 6).map((item) => { const label = jobText(item.job); return `<div class="activity-row compact ${item.status === "failed" ? "failed" : ""}"><span class="done-mark">${item.status === "failed" ? "!" : "✓"}</span><div><b>${esc(label[0])}</b><span>${esc(item.detail || label[1])}</span></div><small>${relativeTime(item.finished_at || item.started_at)}</small></div>`; }).join("") || `<div class="activity-empty">Noch keine Aktivität protokolliert.</div>`;
+  $("activity-recent").innerHTML = recent.slice(0, 6).map((item) => { const label = jobText(item.job); return `<div class="activity-row compact ${item.status === "failed" ? "failed" : ""}"><span class="done-mark">${item.status === "failed" ? "!" : "✓"}</span><div><b>${esc(label[0])}</b><span>${esc(item.detail || label[1])}</span>${item.status === "failed" && item.id ? `<button class="report-error" data-report-error="${Number(item.id)}">Fehler melden</button>` : ""}</div><small>${relativeTime(item.finished_at || item.started_at)}</small></div>`; }).join("") || `<div class="activity-empty">Noch keine Aktivität protokolliert.</div>`;
+  $("activity-recent").querySelectorAll("[data-report-error]").forEach((button) => button.addEventListener("click", () => openReport("error", Number(button.dataset.reportError))));
 }
+
+let reportKind = "feedback";
+let reportActivityId = null;
+let reportScreenshot = null;
+let captureStart = null;
+const plainPrivacy = "Dein Text, App-Version und Betriebssystem. Keine LinkedIn-Namen, Nachrichten, Links oder Zugangsdaten.";
+const screenshotPrivacy = "Zusätzlich wird nur dein markierter Bildausschnitt angehängt. Prüfe die Vorschau: Sichtbare Namen oder Nachrichten können darin enthalten sein.";
+function renderReportScreenshot() {
+  const preview = $("report-shot-preview");
+  preview.classList.toggle("hidden", !reportScreenshot);
+  $("report-privacy-copy").textContent = reportScreenshot ? screenshotPrivacy : plainPrivacy;
+  if (!reportScreenshot) { $("report-shot-image").removeAttribute("src"); return; }
+  $("report-shot-image").src = `data:${reportScreenshot.mimeType};base64,${reportScreenshot.base64}`;
+  $("report-shot-meta").textContent = `${reportScreenshot.width} × ${reportScreenshot.height} Pixel · ${Math.max(1, Math.round(reportScreenshot.bytes / 1024))} KB`;
+}
+function openReport(kind = "feedback", activityId = null) {
+  reportKind = kind === "error" ? "error" : "feedback";
+  reportActivityId = reportKind === "error" ? Number(activityId) : null;
+  $("report-title").textContent = reportKind === "error" ? "Fehler melden" : "Feedback senden";
+  $("report-copy").textContent = reportKind === "error"
+    ? "Der technische Fehler wird automatisch ergänzt. Wenn du möchtest, beschreibe kurz, was du gerade tun wolltest."
+    : "Was können wir verständlicher oder zuverlässiger machen?";
+  $("report-message-label").textContent = reportKind === "error" ? "Deine Ergänzung (optional)" : "Dein Feedback";
+  $("report-message").placeholder = reportKind === "error" ? "z. B. Der Fehler kam direkt nach dem Start der Kontaktsuche." : "Beschreibe kurz, was dir aufgefallen ist.";
+  $("report-send").textContent = reportKind === "error" ? "Fehler melden" : "Feedback senden";
+  $("report-message").value = "";
+  $("report-note").textContent = "";
+  reportScreenshot = null;
+  renderReportScreenshot();
+  $("report-modal").classList.remove("hidden");
+  setTimeout(() => $("report-message").focus(), 20);
+}
+function closeReport() { $("report-modal").classList.add("hidden"); reportScreenshot = null; renderReportScreenshot(); }
+function finishCapture(cancelled = false) {
+  $("capture-overlay").classList.add("hidden");
+  $("capture-overlay").classList.remove("selecting");
+  captureStart = null;
+  $("report-modal").classList.remove("hidden");
+  if (cancelled) setTimeout(() => $("report-capture").focus(), 20);
+}
+function beginCapture() {
+  if (!window.nextlead?.captureFeedbackRegion) { $("report-note").textContent = "Bereiche lassen sich nur in der installierten NextLead-App markieren."; return; }
+  $("report-note").textContent = "";
+  $("report-modal").classList.add("hidden");
+  $("capture-overlay").classList.remove("hidden");
+}
+
+$("feedback-open").onclick = () => openReport("feedback");
+$("report-close").onclick = closeReport;
+$("report-cancel").onclick = closeReport;
+$("report-backdrop").onclick = closeReport;
+$("report-capture").onclick = beginCapture;
+$("report-shot-remove").onclick = () => { reportScreenshot = null; renderReportScreenshot(); };
+$("capture-overlay").addEventListener("pointerdown", (event) => {
+  captureStart = { x: event.clientX, y: event.clientY };
+  const selection = $("capture-selection");
+  selection.style.cssText = `left:${event.clientX}px;top:${event.clientY}px;width:0;height:0`;
+  $("capture-overlay").classList.add("selecting");
+  $("capture-overlay").setPointerCapture?.(event.pointerId);
+});
+$("capture-overlay").addEventListener("pointermove", (event) => {
+  if (!captureStart) return;
+  const x = Math.min(captureStart.x, event.clientX), y = Math.min(captureStart.y, event.clientY);
+  const width = Math.abs(event.clientX - captureStart.x), height = Math.abs(event.clientY - captureStart.y);
+  Object.assign($("capture-selection").style, { left: `${x}px`, top: `${y}px`, width: `${width}px`, height: `${height}px` });
+});
+$("capture-overlay").addEventListener("pointerup", async (event) => {
+  if (!captureStart) return;
+  const rect = { x: Math.min(captureStart.x, event.clientX), y: Math.min(captureStart.y, event.clientY), width: Math.abs(event.clientX - captureStart.x), height: Math.abs(event.clientY - captureStart.y) };
+  if (rect.width < 24 || rect.height < 24) { finishCapture(true); $("report-note").textContent = "Der markierte Bereich war zu klein."; return; }
+  $("capture-overlay").classList.add("hidden");
+  $("capture-overlay").classList.remove("selecting");
+  captureStart = null;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  try {
+    reportScreenshot = await window.nextlead.captureFeedbackRegion(rect);
+    renderReportScreenshot();
+  } catch (error) { $("report-note").textContent = `Screenshot fehlgeschlagen: ${error.message}`; }
+  $("report-modal").classList.remove("hidden");
+});
+$("report-send").onclick = async () => {
+  const button = $("report-send"); const note = $("report-note");
+  const message = $("report-message").value.trim();
+  if (reportKind === "feedback" && message.length < 3) { note.textContent = "Bitte beschreibe dein Feedback kurz."; $("report-message").focus(); return; }
+  button.disabled = true; note.textContent = "";
+  try {
+    const result = await post("/api/report", { kind: reportKind, activityId: reportActivityId, message, replyEmail: $("report-email").value.trim(), screenshot: reportScreenshot }, 20000);
+    closeReport();
+    toast(result.sent ? "Danke – die Meldung wurde gesendet." : "Meldung gespeichert. NextLead sendet sie, sobald der Dienst erreichbar ist.");
+  } catch (error) { note.textContent = `Nicht gespeichert: ${error.message}`; }
+  finally { button.disabled = false; }
+};
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!$("capture-overlay").classList.contains("hidden")) finishCapture(true);
+  else if (!$("report-modal").classList.contains("hidden")) closeReport();
+  else if (!$("relationship-modal").classList.contains("hidden")) closeRelationshipModal();
+  else if (!$("contact-workspace-modal").classList.contains("hidden")) closeContactWorkspace();
+});
 
 // Der Prüf-Bereich wird von zwei Stellen genutzt: "Heute" (nach Entwurfsart) und der Kampagne
 // (alle Einladungen genau dieser Kampagne). reviewCampaign entscheidet, welcher Container zeichnet.
@@ -228,6 +342,21 @@ function profileCard(draft) {
   const headline = profile.headline && !/^[-–—\s]+$/.test(profile.headline) ? profile.headline : "Noch keine Profil-Headline gespeichert.";
   return `<aside class="profile-preview"><span class="eyebrow">Profil zum Entwurf</span><div class="profile-avatar">${esc(initials)}</div><h4>${esc(name)}</h4><p>${esc(headline)}</p><div class="profile-facts"><div><span>Status</span><b>${esc(status)}</b></div>${profile.leadScore != null ? `<div><span>Lead-Score</span><b>${Number(profile.leadScore)} / 100</b></div>` : ""}${profile.campaignName ? `<div><span>Kampagne</span><b>${esc(profile.campaignName)}</b></div>` : ""}<div><span>Herkunft</span><b>${profile.networkContact ? "Bestehendes Netzwerk" : "Outreach"}</b></div></div>${directProfileUrl ? `<a class="profile-link" href="${esc(directProfileUrl)}" target="_blank" rel="noopener">LinkedIn-Profil öffnen ↗</a>` : `<small class="profile-missing">Für diesen Chat ist noch keine Profil-URL zugeordnet.</small>`}</aside>`;
 }
+function contextEvidenceCard(draft) {
+  if (!["first", "followup", "reaktivierung", "event"].includes(draft.kind)) return "";
+  let evidence = null;
+  try { evidence = JSON.parse(draft.context_evidence_json || "null"); } catch { evidence = null; }
+  const intentLabels = { later: "Später", busy: "Aktuell beschäftigt", not_interested: "Kein Interesse", do_not_contact: "Nicht mehr anschreiben", interested: "Interessiert", meeting: "Terminwunsch", question: "Offene Frage", neutral: "Neutral" };
+  if (!evidence) return `<section class="context-evidence empty"><div class="context-evidence-head"><span>Gesprächsbeleg</span><b>Kein früherer Gesprächskontext</b></div><p>Die Nachricht stützt sich auf Profil, Kampagnenziel und hinterlegte Fakten.</p></section>`;
+  const blocked = draft.context_validation === "blocked" || draft.context_validation === "stale";
+  const facts = [
+    evidence.lastStatement ? ["Letzte Aussage", `„${evidence.lastStatement}“`] : null,
+    ["Erkannte Absicht", intentLabels[evidence.intent] || evidence.intent],
+    evidence.commitment ? ["Zusage", evidence.commitment] : null,
+    evidence.openPoint ? ["Offener Punkt", evidence.openPoint] : null,
+  ].filter(Boolean);
+  return `<section class="context-evidence ${blocked ? "conflict" : ""}"><div class="context-evidence-head"><span>${blocked ? "Konflikt im Gespräch" : "Warum passt diese Nachricht?"}</span><b>${blocked ? "Nicht freigeben" : "Kontext geprüft"}</b></div><div class="context-evidence-grid">${facts.map(([label, value]) => `<div><span>${esc(label)}</span><p>${esc(value)}</p></div>`).join("")}</div>${evidence.nextContactAt ? `<small>Nächste Ansprache frühestens: ${esc(new Date(evidence.nextContactAt.replace(" ", "T")).toLocaleDateString("de-DE"))}</small>` : ""}</section>`;
+}
 function bindDraftDelete(draft) {
   const button = $("review-delete");
   if (!button) return;
@@ -240,11 +369,12 @@ function bindDraftDelete(draft) {
       button.title = "Der Entwurf wird als erledigt markiert und für diese Nachricht nicht erneut erzeugt.";
       return;
     }
-    button.disabled = true;
-    await post("/api/draft", { id: draft.id, action: "delete" });
-    toast("Entwurf gelöscht. Er wird nicht erneut erstellt.");
-    await load();
-    renderReviewer();
+    button.disabled = true; button.textContent = "Wird gelöscht…";
+    try {
+      await post("/api/draft", { id: draft.id, action: "delete" }, 10000);
+      toast("Entwurf gelöscht. Er wird nicht erneut erstellt.");
+      await load(); renderReviewer();
+    } catch (error) { toast(`Löschen fehlgeschlagen: ${error.message}`); renderReviewer(); }
   };
 }
 function renderReviewer() {
@@ -260,7 +390,7 @@ function renderReviewer() {
     bindDraftDelete(draft);
   } else if (draft.kind === "pitchidee") {
     let ideas = []; try { ideas = JSON.parse(draft.draft || "[]"); } catch {}
-    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Pitch-Richtung wählen</span><h3>${esc(draft.participant || "Kontakt")}</h3></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose"><div class="incoming">${esc(draft.incoming || "Kein Eingangstext gespeichert.")}</div><div class="work-groups">${ideas.map((idea, index) => `<button class="work-item" data-pitch="${index}"><span class="work-icon">${index + 1}</span><span class="work-copy"><b>Ansatz ${index + 1}</b><span>${esc(idea)}</span></span></button>`).join("")}</div><div class="review-actions"><button id="review-delete" class="delete-draft">Entwurf löschen</button></div></div></div>`;
+    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Pitch-Richtung wählen</span><h3>${esc(draft.participant || "Kontakt")}</h3></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose"><div class="incoming">${esc(draft.incoming || "Kein Eingangstext gespeichert.")}</div><div class="work-groups">${ideas.map((idea, index) => `<button class="work-item${index === 0 ? " recommended" : ""}" data-pitch="${index}"><span class="work-icon">${index + 1}</span><span class="work-copy"><b>Ansatz ${index + 1}${index === 0 ? ' <em class="recommended-label">(Empfohlen)</em>' : ""}</b><span>${esc(idea)}</span></span></button>`).join("")}</div><div class="review-actions"><button id="review-delete" class="delete-draft">Entwurf löschen</button></div></div></div>`;
     reviewer.querySelectorAll("[data-pitch]").forEach((button) => button.addEventListener("click", async () => { button.disabled = true; await post("/api/pitch", { id: draft.id, idee: ideas[Number(button.dataset.pitch)] }); toast("Nachricht wird vorbereitet."); await load(); renderReviewer(); }));
     bindDraftDelete(draft);
   } else {
@@ -268,10 +398,27 @@ function renderReviewer() {
     const reviewHint = draft.kind === "reaktivierung"
       ? "Zusätzlicher Kontakt – wird nur nach deiner Genehmigung gesendet."
       : draft.approach_key ? `Ansatz: ${draft.approach_key.replaceAll("_", " ")}` : draft.intent || "bereit zur Prüfung";
-    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">${label}</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>${esc(reviewHint)}</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}<textarea id="review-text">${esc(draft.draft)}</textarea><div id="reject-feedback" class="reject-feedback hidden"><span class="eyebrow">Was soll sich ändern?</span><div class="feedback-options"><button data-feedback="different_approach">Komplett anderer Ansatz</button><button data-feedback="artificial">Klingt künstlich</button><button data-feedback="too_personal">Zu persönlich</button><button data-feedback="too_salesy">Zu verkäuferisch</button></div><div class="custom-feedback"><input id="custom-feedback-text" placeholder="Oder beschreibe kurz deine gewünschte Richtung…"/><button id="custom-feedback-send">Neu schreiben</button></div></div><div class="review-actions"><button id="review-delete" class="delete-draft">Entwurf löschen</button><button id="review-reject">Ablehnen</button><button id="review-approve" class="primary">Genehmigen</button></div></div></div>`;
-    $("review-approve").onclick = async () => { await post("/api/draft", { id: draft.id, action: "approve", text: $("review-text").value }); toast("Genehmigt – NextLead stellt sicher zu."); await load(); renderReviewer(); };
+    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">${label}</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>${esc(reviewHint)}</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}${contextEvidenceCard(draft)}<textarea id="review-text">${esc(draft.draft)}</textarea><div id="reject-feedback" class="reject-feedback hidden"><span class="eyebrow">Was soll sich ändern?</span><div class="feedback-options"><button data-feedback="different_approach">Komplett anderer Ansatz</button><button data-feedback="artificial">Klingt künstlich</button><button data-feedback="too_personal">Zu persönlich</button><button data-feedback="too_salesy">Zu verkäuferisch</button></div><div class="custom-feedback"><input id="custom-feedback-text" placeholder="Oder beschreibe kurz deine gewünschte Richtung…"/><button id="custom-feedback-send">Neu schreiben</button></div></div><div class="review-actions"><button id="review-delete" class="delete-draft">Entwurf löschen</button><button id="review-reject">Ablehnen</button><button id="review-approve" class="primary">Genehmigen</button></div></div></div>`;
+    $("review-approve").onclick = async () => {
+      const button = $("review-approve"), reject = $("review-reject");
+      button.disabled = true; reject.disabled = true; button.textContent = "Wird gespeichert…";
+      try {
+        await post("/api/draft", { id: draft.id, action: "approve", text: $("review-text").value }, 10000);
+        toast("Genehmigt – NextLead stellt sicher zu."); await load(); renderReviewer();
+      } catch (error) { toast(`Genehmigen fehlgeschlagen: ${error.message}`); renderReviewer(); }
+    };
     $("review-reject").onclick = () => { $("reject-feedback").classList.toggle("hidden"); $("reject-feedback").scrollIntoView({ behavior: "smooth", block: "nearest" }); };
-    const rejectWith = async (reason, instruction = "") => { reviewer.querySelectorAll("[data-feedback],#custom-feedback-send").forEach((button) => { button.disabled = true; }); await post("/api/draft", { id: draft.id, action: "reject", text: { reason, instruction } }); toast(reason === "different_approach" ? "Wähle jetzt eine neue Gesprächsrichtung." : "Feedback gespeichert. Nachricht wurde neu geschrieben."); await load(); renderReviewer(); };
+    const rejectWith = async (reason, instruction = "") => {
+      const buttons = reviewer.querySelectorAll("button");
+      buttons.forEach((button) => { button.disabled = true; });
+      const selected = reviewer.querySelector(`[data-feedback="${reason}"]`) || $("custom-feedback-send");
+      if (selected) selected.textContent = reason === "different_approach" ? "Richtungen werden geladen…" : "Wird neu geschrieben…";
+      try {
+        await post("/api/draft", { id: draft.id, action: "reject", text: { reason, instruction } }, 90000);
+        toast(reason === "different_approach" ? "Wähle jetzt eine neue Gesprächsrichtung." : "Feedback gespeichert. Nachricht wurde neu geschrieben.");
+        await load(); renderReviewer();
+      } catch (error) { toast(`Ablehnen fehlgeschlagen: ${error.message}`); renderReviewer(); }
+    };
     reviewer.querySelectorAll("[data-feedback]").forEach((button) => button.addEventListener("click", () => rejectWith(button.dataset.feedback)));
     $("custom-feedback-send").onclick = () => { const instruction = $("custom-feedback-text").value.trim(); if (!instruction) return $("custom-feedback-text").focus(); rejectWith("custom", instruction); };
     bindDraftDelete(draft);
@@ -298,7 +445,13 @@ function campaignCandidates() {
     const connected = !!contact.aus_netzwerk || !!contact.accepted_at || ["accepted", "messaged", "replied"].includes(contact.status); return scope === "both" || (scope === "network" ? connected : !connected);
   });
 }
-function updateCampaignPreview() { const list = campaignCandidates(); const network = list.filter((contact) => !!contact.aus_netzwerk || !!contact.accepted_at || ["accepted", "messaged", "replied"].includes(contact.status)).length; $("preview-total").textContent = list.length; $("preview-network").textContent = network; $("preview-external").textContent = list.length - network; }
+let confirmedCampaignPreview = null;
+function updateCampaignPreview() {
+  confirmedCampaignPreview = null;
+  const list = campaignCandidates(); const network = list.filter((contact) => !!contact.aus_netzwerk || !!contact.accepted_at || ["accepted", "messaged", "replied"].includes(contact.status)).length;
+  $("preview-total").textContent = list.length; $("preview-network").textContent = network; $("preview-external").textContent = list.length - network;
+  $("save-campaign").textContent = editingCampaign ? "Vorschau prüfen" : "Zielgruppe sicher prüfen";
+}
 
 // Kampagnen-Formular: dasselbe Formular legt an UND bearbeitet. editingCampaign hält die ID,
 // solange eine bestehende Kampagne offen ist – nur dann ist auch das Material bearbeitbar,
@@ -315,6 +468,7 @@ function campaignFormValues() {
 }
 function openCampaignForm(campaign) {
   editingCampaign = campaign ? campaign.id : null;
+  confirmedCampaignPreview = null;
   let filters = {}; try { filters = JSON.parse(campaign?.filters_json || "{}"); } catch { filters = {}; }
   $("campaign-name").value = campaign?.name || "";
   $("campaign-url").value = campaign?.event_url || "";
@@ -372,8 +526,15 @@ let crmFilter = "all";
 const CRM_STUFEN = {
   awaiting_connection: ["Wartet auf Vernetzung", "wait"],
   queued: ["Eingeplant", "wait"],
+  generating: ["Entwurf wird erstellt", "draft"],
   drafted: ["Entwurf liegt bereit", "draft"],
+  approved: ["Freigegeben", "draft"],
+  sending: ["Wird gesendet", "draft"],
   sent: ["Eingeladen", "sent"],
+  completed: ["Hat geantwortet", "reply"],
+  snoozed: ["Wiedervorlage", "wait"],
+  excluded: ["Ausgeschlossen", "wait"],
+  failed: ["Prüfung nötig", "error"],
 };
 const OUTCOMES = [["", "– offen –"], ["qualified", "Qualifiziert"], ["meeting", "Termin"], ["won", "Gewonnen"], ["lost", "Verloren"], ["not_fit", "Passt nicht"]];
 
@@ -408,25 +569,30 @@ function renderCampaignCrm() {
   const zaehler = {
     all: alle.length,
     sent: alle.filter((row) => row.target.status === "sent").length,
-    drafted: alle.filter((row) => row.target.status === "drafted").length,
+    drafted: alle.filter((row) => ["generating", "drafted", "approved", "sending"].includes(row.target.status)).length,
+    failed: alle.filter((row) => row.target.status === "failed").length,
     offen: alle.filter((row) => ["queued", "awaiting_connection"].includes(row.target.status)).length,
+    protected: alle.filter((row) => ["snoozed", "excluded"].includes(row.target.status)).length,
     reply: alle.filter((row) => hatAufKampagneGeantwortet(row.target, row.contact)).length,
   };
   const suche = ($("campaign-crm-search")?.value || "").toLowerCase().trim();
   let zeilen = alle;
   if (crmFilter === "sent") zeilen = zeilen.filter((row) => row.target.status === "sent");
-  else if (crmFilter === "drafted") zeilen = zeilen.filter((row) => row.target.status === "drafted");
+  else if (crmFilter === "drafted") zeilen = zeilen.filter((row) => ["generating", "drafted", "approved", "sending"].includes(row.target.status));
+  else if (crmFilter === "failed") zeilen = zeilen.filter((row) => row.target.status === "failed");
   else if (crmFilter === "offen") zeilen = zeilen.filter((row) => ["queued", "awaiting_connection"].includes(row.target.status));
+  else if (crmFilter === "protected") zeilen = zeilen.filter((row) => ["snoozed", "excluded"].includes(row.target.status));
   else if (crmFilter === "reply") zeilen = zeilen.filter((row) => hatAufKampagneGeantwortet(row.target, row.contact));
   if (suche) zeilen = zeilen.filter((row) => `${row.contact.full_name || ""} ${row.contact.headline || ""}`.toLowerCase().includes(suche));
-  const chips = [["all", "Alle"], ["offen", "Eingeplant"], ["drafted", "Entwurf"], ["sent", "Eingeladen"], ["reply", "Geantwortet"]]
+  const chips = [["all", "Alle"], ["offen", "Eingeplant"], ["protected", "Geschützt"], ["drafted", "Entwurf"], ["failed", "Prüfen"], ["sent", "Eingeladen"], ["reply", "Geantwortet"]]
     .map(([key, label]) => `<button class="crm-chip ${crmFilter === key ? "active" : ""}" data-crm-filter="${key}">${label} ${zaehler[key] ?? 0}</button>`).join("");
   box.innerHTML = `
     <div class="review-head"><div class="review-person"><span class="eyebrow">Kampagnen-CRM</span><h3>${esc(campaign.name)}</h3><p>Nur die Kontakte dieser Kampagne. Das Ergebnis pflegst du direkt hier.</p></div><button class="icon-btn" data-crm-close>×</button></div>
     <div class="crm-toolbar">${chips}<input id="campaign-crm-search" placeholder="Name oder Position suchen" value="${esc(suche)}"/></div>
     <div class="crm-rows">${zeilen.length ? zeilen.slice(0, 200).map(({ target, contact }) => {
       const [stufe, cls] = crmStufe(target, contact);
-      return `<div class="crm-row"><div class="contact-person"><b>${esc(contact.full_name || "Unbekannt")}</b><span>${esc(contact.headline || "Keine Headline")}</span></div><span class="crm-stufe ${cls}">${esc(stufe)}</span><span class="muted">${target.route === "network" ? "Netzwerk" : "Außerhalb"}</span><select data-crm-outcome="${contact.id}">${OUTCOMES.map(([value, label]) => `<option value="${value}" ${((contact.outcome_stage || "") === value) ? "selected" : ""}>${label}</option>`).join("")}</select><a href="${esc(contact.profile_url)}" target="_blank" rel="noopener">Profil ↗</a></div>`;
+      const grund = target.lastError || target.reason || "";
+      return `<div class="crm-row"><div class="contact-person"><b>${esc(contact.full_name || "Unbekannt")}</b><span>${esc(grund || contact.headline || "Keine Headline")}</span></div><span class="crm-stufe ${cls}">${esc(stufe)}</span><span class="muted">${target.route === "network" ? "Netzwerk" : "Außerhalb"}</span><select data-crm-outcome="${contact.id}">${OUTCOMES.map(([value, label]) => `<option value="${value}" ${((contact.outcome_stage || "") === value) ? "selected" : ""}>${label}</option>`).join("")}</select><a href="${esc(contact.profile_url)}" target="_blank" rel="noopener">Profil ↗</a></div>`;
     }).join("") : `<div class="empty-work">Kein Kontakt in diesem Filter.</div>`}</div>
     ${zeilen.length > 200 ? `<p class="muted">Erste 200 von ${zeilen.length} angezeigt – nutze die Suche.</p>` : ""}`;
   box.querySelector("[data-crm-close]").addEventListener("click", () => { crmCampaign = null; renderCampaignCrm(); });
@@ -449,9 +615,15 @@ function renderCampaigns() {
     const facts = [campaign.event_date, campaign.event_time, campaign.location].filter(Boolean).join(" · ");
     const assets = (campaign.assets || []).length;
     const offen = (state.drafts || []).filter((draft) => String(draft.incoming) === `campaign:${campaign.id}`).length;
-    return `<article class="campaign-card ${campaign.goal_code ? "mission-card" : ""}"><div><div class="campaign-meta"><span class="pill ${campaign.active ? "live" : ""}">${campaign.active ? "Läuft" : "Pausiert"}</span>${campaign.goal_code ? `<span class="pill goal-code goal-${esc(String(campaign.goal_code).toLowerCase())}">${esc(campaign.goal_code)}</span>` : ""}<span class="pill">${campaign.kind === "event" ? "Event" : "Outreach"}</span><span class="pill">${campaign.audience_scope === "both" ? "Netzwerk + außerhalb" : campaign.audience_scope === "network" ? "Netzwerk" : "Außerhalb"}</span>${assets ? `<span class="pill">${assets} Material${assets === 1 ? "" : "ien"}</span>` : ""}</div><h3>${esc(campaign.name)}</h3><span class="muted">${esc(campaign.search_brief || facts || campaign.goal || "")}${campaign.event_url ? ` · <a href="${esc(campaign.event_url)}" target="_blank" rel="noopener">Event öffnen ↗</a>` : ""}</span>${campaign.briefing ? `<p class="campaign-briefing">${esc(String(campaign.briefing).slice(0, 220))}${String(campaign.briefing).length > 220 ? "…" : ""}</p>` : ""}<div class="campaign-stats"><div><b>${campaign.targets || campaign.leads || 0}</b><span>Zielgruppe</span></div><div><b>${campaign.sources || 0}</b><span>Suchen</span></div><div><b>${campaign.target_external || 0}</b><span>Zu vernetzen</span></div><div><b>${campaign.target_drafted || 0}</b><span>Entwürfe</span></div><div><b>${campaign.replied || 0}</b><span>Antworten</span></div><div><b>${campaign.meetings || 0}</b><span>Termine</span></div></div></div><div class="campaign-actions">${offen ? `<button class="primary" data-campaign-review="${campaign.id}">${offen} Nachricht${offen === 1 ? "" : "en"} prüfen</button>` : `<span class="campaign-clear">Keine Nachricht offen</span>`}<button data-campaign-crm="${campaign.id}">Kontakte ansehen</button>${campaign.goal_code ? "" : `<button data-campaign-edit="${campaign.id}">Bearbeiten</button>`}<button data-campaign-toggle="${campaign.id}" data-active="${campaign.active ? 1 : 0}">${campaign.active ? "Pausieren" : "Fortsetzen"}</button><button class="delete-draft" data-campaign-delete="${campaign.id}" data-name="${esc(campaign.name)}" data-offen="${offen}">Löschen</button></div></article>`;
+    const rail = [["Zielgruppe", campaign.targets || campaign.leads || 0], ["Vernetzen", campaign.target_waiting || 0], ["Bereit", (campaign.target_ready || 0) + (campaign.target_generating || 0)], ["Entwurf", campaign.target_drafted || 0], ["Gesendet", campaign.target_sent || 0], ["Antwort", campaign.target_completed || 0]];
+    return `<article class="campaign-card ${campaign.goal_code ? "mission-card" : ""}"><div><div class="campaign-meta"><span class="pill ${campaign.active ? "live" : ""}">${campaign.active ? "Läuft" : "Pausiert"}</span>${campaign.goal_code ? `<span class="pill goal-code goal-${esc(String(campaign.goal_code).toLowerCase())}">${esc(campaign.goal_code)}</span>` : ""}<span class="pill">${campaign.kind === "event" ? "Event" : "Outreach"}</span><span class="pill">${campaign.audience_scope === "both" ? "Netzwerk + außerhalb" : campaign.audience_scope === "network" ? "Netzwerk" : "Außerhalb"}</span>${assets ? `<span class="pill">${assets} Material${assets === 1 ? "" : "ien"}</span>` : ""}</div><h3>${esc(campaign.name)}</h3><span class="muted">${esc(campaign.search_brief || facts || campaign.goal || "")}${campaign.event_url ? ` · <a href="${esc(campaign.event_url)}" target="_blank" rel="noopener">Event öffnen ↗</a>` : ""}</span>${campaign.briefing ? `<p class="campaign-briefing">${esc(String(campaign.briefing).slice(0, 220))}${String(campaign.briefing).length > 220 ? "…" : ""}</p>` : ""}<div class="workflow-rail">${rail.map(([label, count], index) => `<div class="workflow-step ${count ? "has-work" : ""}"><span>${index + 1}</span><b>${count}</b><small>${label}</small></div>`).join("")}</div>${campaign.target_snoozed ? `<p class="workflow-note">${campaign.target_snoozed} Kontakt${campaign.target_snoozed === 1 ? " ist" : "e sind"} durch Beziehungsschutz pausiert.</p>` : ""}${campaign.target_failed ? `<p class="workflow-error">${campaign.target_failed} Kontakt${campaign.target_failed === 1 ? " braucht" : "e brauchen"} eine Prüfung – kein stilles Festhängen mehr.</p>` : ""}</div><div class="campaign-actions">${offen ? `<button class="primary" data-campaign-review="${campaign.id}">${offen} Nachricht${offen === 1 ? "" : "en"} prüfen</button>` : `<span class="campaign-clear">Keine Nachricht offen</span>`}${campaign.target_failed ? `<button class="workflow-retry" data-campaign-retry-failed="${campaign.id}">Fehler erneut prüfen (${campaign.target_failed})</button>` : ""}<button data-campaign-crm="${campaign.id}">Kontakte ansehen</button>${campaign.goal_code ? "" : `<button data-campaign-edit="${campaign.id}">Bearbeiten</button>`}<button data-campaign-toggle="${campaign.id}" data-active="${campaign.active ? 1 : 0}">${campaign.active ? "Pausieren" : "Fortsetzen"}</button><button class="delete-draft" data-campaign-delete="${campaign.id}" data-name="${esc(campaign.name)}" data-offen="${offen}">Löschen</button></div></article>`;
   }).join("") : `<div class="empty-work"><b>Noch kein Auftrag.</b><br/>Beschreibe, wen NextLead finden soll, und wähle B1, P1 oder AEC.</div>`;
   document.querySelectorAll("[data-campaign-toggle]").forEach((button) => button.addEventListener("click", async () => { await post("/api/campaign", { action: button.dataset.active === "1" ? "pause" : "resume", id: Number(button.dataset.campaignToggle) }); await load(); toast("Kampagne aktualisiert."); }));
+  document.querySelectorAll("[data-campaign-retry-failed]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try { const result = await post("/api/campaign", { action: "retry_failed", id: Number(button.dataset.campaignRetryFailed) }); await load(); toast(`${result.retried} Kontakt${result.retried === 1 ? " wird" : "e werden"} kontrolliert erneut versucht.`); }
+    catch (error) { toast(`Wiederholung fehlgeschlagen: ${error.message}`); button.disabled = false; }
+  }));
   document.querySelectorAll("[data-campaign-edit]").forEach((button) => button.addEventListener("click", () => {
     openCampaignForm((state.campaigns || []).find((campaign) => campaign.id === Number(button.dataset.campaignEdit)));
   }));
@@ -491,12 +663,148 @@ function renderCampaigns() {
 }
 
 const STATUS = { new: "Neu", inviting: "Wird angefragt", invited: "Anfrage offen", accepted: "Angenommen", messaged: "Angeschrieben", replied: "Antwort erhalten", closed: "Abgeschlossen", skipped: "Ausgeschlossen" };
-function nextStep(contact) { if (contact.open_draft_kind === "message") return "Antwort prüfen"; if (contact.open_draft_kind === "event") return "Event-Einladung prüfen"; if (contact.open_draft_kind === "reaktivierung") return "Netzwerk-Zusatz freigeben"; if (contact.open_draft_id) return "Entwurf prüfen"; if (contact.status === "replied") return "Ergebnis festhalten"; if (contact.status === "accepted" && contact.aus_netzwerk) return "Nur manuell im Netzwerk-Zusatz"; if (contact.status === "accepted") return "Erstkontakt vorbereiten"; if (contact.status === "invited") return "Wartet auf Annahme"; if (contact.status === "new") return "Wird automatisch priorisiert"; return "Kein Schritt offen"; }
+function relationshipLabel(contact) {
+  if (contact.do_not_contact || contact.automation_status === "excluded") return "Nicht mehr anschreiben";
+  if (contact.automation_status === "manual") return "Nur manuell";
+  if (contact.automation_status === "paused") return contact.snooze_label ? `Pausiert bis ${contact.snooze_label}` : "Pausiert";
+  return "";
+}
+function nextStep(contact) { const relationship = relationshipLabel(contact); if (relationship) return `${relationship}${contact.snooze_reason ? ` · ${contact.snooze_reason}` : ""}`; if (contact.open_draft_kind === "message") return "Antwort prüfen"; if (contact.open_draft_kind === "event") return "Event-Einladung prüfen"; if (contact.open_draft_kind === "reaktivierung") return "Netzwerk-Zusatz freigeben"; if (contact.open_draft_id) return "Entwurf prüfen"; if (contact.status === "replied") return "Ergebnis festhalten"; if (contact.status === "accepted" && contact.aus_netzwerk) return "Nur manuell im Netzwerk-Zusatz"; if (contact.status === "accepted") return "Erstkontakt vorbereiten"; if (contact.status === "invited") return "Wartet auf Annahme"; if (contact.status === "new") return "Wird automatisch priorisiert"; return "Kein Schritt offen"; }
+function closeRelationshipModal() { relationshipContact = null; relationshipExcludeArmed = false; $("relationship-modal").classList.add("hidden"); $("relationship-note").textContent = ""; $("relationship-exclude").textContent = "Nicht mehr anschreiben"; }
+function openRelationshipModal(contact) {
+  relationshipContact = contact; relationshipExcludeArmed = false;
+  const date = new Date(); date.setDate(date.getDate() + 30);
+  $("relationship-name").textContent = contact.full_name || "Dieser Kontakt";
+  $("relationship-until").value = date.toISOString().slice(0, 10);
+  $("relationship-reason").value = contact.snooze_reason || "";
+  $("relationship-note").textContent = ""; $("relationship-exclude").textContent = "Nicht mehr anschreiben";
+  $("relationship-modal").classList.remove("hidden"); $("relationship-reason").focus();
+}
+function closeContactWorkspace() { contactWorkspaceId = null; $("contact-workspace-modal").classList.add("hidden"); }
+const timelineDate = (value) => localDate(value).toLocaleString("de-DE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+async function openContactWorkspace(contact) {
+  contactWorkspaceId = contact.id;
+  $("contact-workspace-title").textContent = contact.full_name || "Kontaktverlauf";
+  $("contact-workspace-subtitle").textContent = contact.headline || "Gespräch und Kontaktstatus an einem Ort";
+  $("contact-identity-state").innerHTML = `<span class="identity-pulse"></span><div><b>Kontakt wird geladen…</b><span>Profil und Nachrichten werden zusammengeführt.</span></div>`;
+  $("contact-timeline").innerHTML = `<div class="timeline-empty">Kontaktspur wird aufgebaut…</div>`;
+  $("contact-workspace-modal").classList.remove("hidden");
+  try {
+    const response = await fetch(`/api/conversation?contactId=${contact.id}`);
+    const workspace = await response.json();
+    if (!response.ok || workspace.error) throw new Error(workspace.error || `HTTP ${response.status}`);
+    if (contactWorkspaceId !== contact.id) return;
+    const identityCopy = workspace.conflicts?.length
+      ? `<b>${workspace.conflicts.length} Zuordnung${workspace.conflicts.length === 1 ? "" : "en"} prüfen</b><span>NextLead hat bei einem Nachrichten-Thread nicht geraten. Ordne ihn nur zu, wenn dieser Kontakt wirklich gemeint ist.</span><div class="identity-decisions">${workspace.conflicts.map((conflict) => `<button data-identity-resolve="${conflict.id}">Thread „${esc(conflict.participant || "ohne Namen")}“ diesem Kontakt zuordnen</button>`).join("")}</div>`
+      : workspace.threadCount
+        ? `<b>Profil und ${workspace.threadCount} Gespräch${workspace.threadCount === 1 ? "" : "e"} verbunden</b><span>Alle neuen Nachrichten dieses Threads landen sicher bei diesem Kontakt.</span>`
+        : `<b>Profil eindeutig gespeichert</b><span>Noch kein Nachrichten-Thread mit diesem Kontakt verbunden.</span>`;
+    $("contact-identity-state").className = `contact-identity-state ${workspace.conflicts?.length ? "needs-review" : "linked"}`;
+    $("contact-identity-state").innerHTML = `<span class="identity-pulse"></span><div>${identityCopy}</div>`;
+    $("contact-identity-state").querySelectorAll("[data-identity-resolve]").forEach((button) => {
+      let armed = false;
+      button.addEventListener("click", async () => {
+        if (!armed) { armed = true; button.textContent = "Wirklich diesem Kontakt zuordnen?"; return; }
+        button.disabled = true;
+        try {
+          await post("/api/contact-identity", { conflictId: Number(button.dataset.identityResolve), contactId: contact.id });
+          await load(); await openContactWorkspace(contact); toast("Nachrichten-Thread wurde eindeutig zugeordnet.");
+        } catch (error) { button.disabled = false; toast(`Zuordnung nicht möglich: ${error.message}`); }
+      });
+    });
+    const timeline = [...(workspace.timeline || [])].reverse();
+    $("contact-timeline").innerHTML = timeline.length ? timeline.map((item) => `<article class="timeline-item ${esc(item.kind)}"><span class="timeline-mark"></span><div class="timeline-body"><div><b>${esc(item.title)}</b><time>${esc(timelineDate(item.ts))}</time></div>${item.text ? `<p>${esc(item.text)}</p>` : ""}<small>${esc(item.source || "NextLead")}</small></div></article>`).join("") : `<div class="timeline-empty"><b>Noch keine Aktivität gespeichert.</b><span>Sobald NextLead eine Aktion oder Nachricht zuordnet, erscheint sie hier.</span></div>`;
+  } catch (error) {
+    $("contact-timeline").innerHTML = `<div class="timeline-empty"><b>Kontaktspur konnte nicht geladen werden.</b><span>${esc(error.message)}</span></div>`;
+  }
+}
 function renderContacts() {
   const query = $("contact-search").value.toLowerCase().trim(), filter = $("contact-filter").value;
-  let rows = state.contacts || []; if (query) rows = rows.filter((contact) => `${contact.full_name || ""} ${contact.headline || ""}`.toLowerCase().includes(query)); if (filter === "attention") rows = rows.filter((contact) => contact.open_draft_id || contact.status === "replied"); else if (filter !== "all") rows = rows.filter((contact) => contact.status === filter);
+  let rows = state.contacts || []; if (query) rows = rows.filter((contact) => `${contact.full_name || ""} ${contact.headline || ""}`.toLowerCase().includes(query)); if (filter === "attention") rows = rows.filter((contact) => contact.open_draft_id || contact.status === "replied" || contact.automation_status === "paused"); else if (filter === "paused" || filter === "excluded") rows = rows.filter((contact) => contact.automation_status === filter); else if (filter !== "all") rows = rows.filter((contact) => contact.status === filter);
   $("contact-count").textContent = `${rows.length} Kontakte`;
-  $("contact-rows").innerHTML = rows.slice(0, 300).map((contact) => `<div class="contact-row"><div class="contact-person"><b>${esc(contact.full_name || "Unbekannt")}</b><span>${esc(contact.headline || "Keine Headline")}</span></div><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span><span class="next-step">${esc(nextStep(contact))}</span><a href="${esc(contact.profile_url)}" target="_blank" rel="noopener">Profil ↗</a></div>`).join("") || `<div class="empty-work">Keine Kontakte in diesem Filter.</div>`;
+  const quality = state.identityQuality || {};
+  $("identity-quality").className = `identity-quality ${quality.ambiguous ? "needs-review" : ""}`;
+  $("identity-quality").textContent = quality.ambiguous
+    ? `${quality.ambiguous} Zuordnung${quality.ambiguous === 1 ? "" : "en"} prüfen · ${quality.threads_linked || 0} verbunden`
+    : quality.orphaned
+      ? `${quality.threads_linked || 0} verbunden · ${quality.orphaned} alte Chats getrennt`
+      : `${quality.threads_linked || 0} Gespräche sicher verbunden`;
+  $("contact-rows").innerHTML = rows.slice(0, 300).map((contact) => { const protectedState = relationshipLabel(contact); return `<div class="contact-row"><div class="contact-person"><b>${esc(contact.full_name || "Unbekannt")}</b><span>${esc(contact.headline || "Keine Headline")}</span>${protectedState ? `<i class="relationship-state ${contact.automation_status === "excluded" ? "excluded" : ""}">${esc(protectedState)}</i>` : ""}</div><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span><span class="next-step">${esc(nextStep(contact))}</span><span class="contact-actions"><button class="contact-history" data-contact-history="${contact.id}">Verlauf</button><button class="contact-policy ${protectedState ? "resume" : ""}" data-contact-policy="${contact.id}">${protectedState ? "Freigeben" : "Pausieren"}</button><a href="${esc(contact.profile_url)}" target="_blank" rel="noopener">Profil ↗</a></span></div>`; }).join("") || `<div class="empty-work">Keine Kontakte in diesem Filter.</div>`;
+  $("contact-rows").querySelectorAll("[data-contact-history]").forEach((button) => button.addEventListener("click", () => {
+    const contact = (state.contacts || []).find((item) => item.id === Number(button.dataset.contactHistory));
+    if (contact) openContactWorkspace(contact);
+  }));
+  $("contact-rows").querySelectorAll("[data-contact-policy]").forEach((button) => button.addEventListener("click", async () => {
+    const contact = (state.contacts || []).find((item) => item.id === Number(button.dataset.contactPolicy)); if (!contact) return;
+    if (relationshipLabel(contact)) { button.disabled = true; try { await post("/api/contact-policy", { contactId: contact.id, action: "resume" }); await load(); toast(`${contact.full_name || "Kontakt"} ist wieder freigegeben.`); } catch (error) { toast(`Nicht möglich: ${error.message}`); button.disabled = false; } }
+    else openRelationshipModal(contact);
+  }));
+}
+
+const plannerFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 });
+function plannerPrefs() { try { return JSON.parse(localStorage.getItem("nextlead-planner") || "{}"); } catch { return {}; } }
+function savePlannerPrefs() {
+  const prefs = plannerPrefs(), goal = $("planning-goal").value;
+  prefs.goal = goal; prefs.results = $("planning-results").value; prefs.revenue = $("planning-revenue").value;
+  prefs.goals = prefs.goals || {}; prefs.goals[goal] = {
+    value: $("planning-value").value,
+    rates: Object.fromEntries(["reply", "qualified", "meeting", "won"].map((key) => [key, $("rate-" + key).value])),
+  };
+  localStorage.setItem("nextlead-planner", JSON.stringify(prefs));
+}
+function calculatePlanner() {
+  const goal = $("planning-goal").value;
+  const rates = ["reply", "qualified", "meeting", "won"].map((key) => Math.max(0, Math.min(100, Number($("rate-" + key).value) || 0)));
+  const rate = rates.reduce((total, value) => total * (value / 100), 1) * 100;
+  const target = Math.max(0, Math.ceil(Number($("planning-results").value) || 0));
+  const value = Number($("planning-value").value), revenue = Number($("planning-revenue").value);
+  const messagesA = rate > 0 && target > 0 ? Math.ceil((target * 100) / rate) : null;
+  const resultsB = value > 0 && revenue > 0 ? Math.ceil(revenue / value) : null;
+  const messagesB = rate > 0 && resultsB ? Math.ceil((resultsB * 100) / rate) : null;
+  $("planning-a-results").textContent = `${plannerFormat.format(target)} ${goal}`;
+  $("planning-a-messages").textContent = messagesA ? plannerFormat.format(messagesA) : "–";
+  $("planning-b-results").textContent = resultsB ? `${plannerFormat.format(resultsB)} ${goal}` : "Wert eintragen";
+  $("planning-b-messages").textContent = messagesB ? plannerFormat.format(messagesB) : "–";
+  $("planning-total-rate").textContent = `${rate.toLocaleString("de-DE", { maximumFractionDigits: 2 })}%`;
+}
+function applyPlannerGoal() {
+  const goal = $("planning-goal").value, prefs = plannerPrefs(), saved = prefs.goals?.[goal] || {};
+  const stats = (state.goalEconomics || []).find((item) => item.goal === goal) || {};
+  $("planning-value").value = saved.value || stats.averageValueEur || 1500;
+  const steps = [
+    ["reply", "messaged", 25], ["qualified", "replied", 50], ["meeting", "qualified", 50], ["won", "meeting", 80],
+  ];
+  for (const [key, denominator, fallback] of steps) {
+    const measured = Number(stats[denominator] || 0) >= 5 && stats.rates?.[key] != null;
+    $("rate-" + key).value = saved.rates?.[key] || (measured ? stats.rates[key] : fallback);
+  }
+}
+function renderPlanner() {
+  const prefs = plannerPrefs();
+  if (!planningInitialized) {
+    $("planning-goal").value = ["B1", "P1", "AEC"].includes(prefs.goal) ? prefs.goal : "B1";
+    $("planning-results").value = prefs.results || 10; $("planning-revenue").value = prefs.revenue || 10000;
+    applyPlannerGoal();
+    $("planning-goal").addEventListener("change", () => { applyPlannerGoal(); savePlannerPrefs(); renderPlanner(); });
+    ["rate-reply", "rate-qualified", "rate-meeting", "rate-won", "planning-results", "planning-value", "planning-revenue"].forEach((id) => $(id).addEventListener("input", () => { savePlannerPrefs(); calculatePlanner(); }));
+    planningInitialized = true;
+  }
+  const goal = $("planning-goal").value;
+  const stats = (state.goalEconomics || []).find((item) => item.goal === goal) || { messaged: 0, replied: 0, qualified: 0, meeting: 0, won: 0, rates: {} };
+  $("planning-evidence").textContent = stats.messaged
+    ? `${stats.messaged} Kontakte im Zielweg ${goal}; jede Stufe zeigt ihre eigene Stichprobe.`
+    : `Für ${goal} fehlen noch zugeordnete Versanddaten. Der Rechner kennzeichnet deshalb Annahmen.`;
+  for (const key of ["messaged", "replied", "qualified", "meeting", "won"]) $("rail-" + key).textContent = plannerFormat.format(stats[key] || 0);
+  const steps = [["reply", "messaged"], ["qualified", "replied"], ["meeting", "qualified"], ["won", "meeting"]];
+  const saved = plannerPrefs().goals?.[goal]?.rates || {};
+  for (const [key, denominator] of steps) {
+    const source = $("source-" + key), sample = Number(stats[denominator] || 0), measured = sample >= 5 && stats.rates?.[key] != null && !saved[key];
+    source.textContent = saved[key] ? "Eigene Planung" : measured ? `Gemessen · n=${sample}` : `Annahme · n=${sample}`;
+    source.classList.toggle("measured", measured);
+  }
+  const q = state.crmDataQuality || {};
+  $("planning-data-quality").textContent = `${q.assigned || 0} von ${q.messaged || 0} Versandkontakten einem Zielweg zugeordnet · CRM-Abdeckung ${q.coveragePct || 0}%`;
+  calculatePlanner();
 }
 
 function renderInsights() {
@@ -505,6 +813,12 @@ function renderInsights() {
   $("insight-kpis").innerHTML = kpis.map(([label, value, note]) => `<div class="kpi-card"><span>${label}</span><b>${value}</b><small>${note}</small></div>`).join("");
   const funnel = state.funnel || [], max = Math.max(1, ...funnel.map((item) => item.count)); $("funnel-bars").innerHTML = funnel.map((item, index) => { const previous = funnel[index - 1]; const conversion = previous?.count ? pct(item.count, previous.count) : null; return `<div class="funnel-row"><span>${esc(item.label)}</span><div class="funnel-track"><div class="funnel-fill" style="width:${Math.round(item.count / max * 100)}%"></div></div><span class="funnel-count">${item.count}</span><span class="funnel-conv">${conversion == null ? "Start" : `${conversion}%`}</span></div>`; }).join("");
   const actions = Object.entries(state.actionsToday || {}); $("today-actions").innerHTML = actions.length ? actions.map(([key, value]) => `<span><b>${value}</b> ${esc({ connect: "Anfragen", message: "Nachrichten", reply: "Antworten", like: "Likes", comment: "Kommentare" }[key] || key)}</span>`).join("") : `<span>Noch keine Aktionen heute.</span>`;
+  const learning = state.learning || {}, rules = learning.rules || [], byGoal = learning.byGoal || [];
+  $("learning-privacy").textContent = learning.privacy?.localOnly ? "Nur auf diesem PC" : "Anonym geteilt";
+  $("learning-summary").innerHTML = `<div class="learning-stats"><span><b>${learning.total || 0}</b>Lernsignale</span><span><b>${learning.decisions || 0}</b>Entscheidungen</span>${byGoal.map((item) => `<span><b>${item.events}</b>${esc(item.goal)}</span>`).join("")}</div>`
+    + (rules.length ? `<div class="learning-rules">${rules.map((rule) => `<div><b>${esc(rule.title)}</b><span>${esc(rule.instruction)}</span><small>${rule.evidence} Signale${rule.goalCode ? ` · ${esc(rule.goalCode)}` : ""}</small></div>`).join("")}</div>` : `<div class="empty-work">Noch keine belastbare Regel. Ab zwei gleichen Signalen passt NextLead seine Nachrichten automatisch an.</div>`)
+    + `<p class="learning-note">Gespeichert werden nur Merkmale wie Länge, Zielweg und Ergebnis. Keine Namen, URLs oder Nachrichtentexte.</p>`;
+  renderPlanner();
 }
 
 function automationLevel() { if (state.agentMode === "live") return "agent_live"; if (state.agentMode === "shadow") return "agent_test"; return state.mode === "semi" ? "halb" : "vorschlaege"; }
@@ -519,16 +833,18 @@ function renderSettings() {
    * Sendezahlen waren nie das Problem – sichtbar war aber jahrelang nur die Sendeseite.
    */
   const lese = state.leseBudget || {};
+  const lowRead = state.lowRead || { total: 0, byKind: {} };
   const quote = (teil) => (teil?.cap ? Math.round((teil.heute / teil.cap) * 100) : 0);
   const farbe = (teil) => quote(teil) >= 90 ? "var(--red)" : quote(teil) >= 70 ? "var(--amber)" : "var(--ink)";
   $("safety-summary").innerHTML =
     `<div class="safety-line"><span>Profile heute abgerufen</span><b style="color:${farbe(lese.profile)}">${lese.profile?.heute ?? 0} / ${lese.profile?.cap ?? "–"}</b></div>`
     + `<div class="safety-line"><span>Seiten heute abgerufen</span><b style="color:${farbe(lese.seiten)}">${lese.seiten?.heute ?? 0} / ${lese.seiten?.cap ?? "–"}</b></div>`
+    + `<div class="safety-line"><span>Low-Read eingespart</span><b style="color:var(--green)">${lowRead.total || 0} Aufrufe heute</b></div>`
     + (lese.erschoepft ? `<div class="safety-line"><span>Lesen pausiert</span><b style="color:var(--red)">${esc(lese.grund || "Budget erreicht")}</b></div>` : "")
     + `<div class="safety-line"><span>Anfragen heute</span><b>${connect.today || 0} / ${connect.effectiveCap || connect.hardCap || "–"}</b></div>`
     + `<div class="safety-line"><span>Diese Woche</span><b>${connect.week || 0} / ${connect.weeklyCap || "–"}</b></div>`
     + `<div class="safety-line"><span>Geschäftszeiten</span><b>${g.zeitfenster === false ? "Aus" : "Aktiv"}</b></div>`
-    + `<div class="safety-line"><span>Sendeweg</span><b>${esc(state.systemHealth?.sendeWeg || "unbekannt")}</b></div>`;
+    + `<div class="safety-line"><span>Sendeweg</span><b>${esc(({ ok: "Geprüft", broken: "Defekt", stale: "Prüfung fällig", unknown: "Noch nicht geprüft" })[state.systemHealth?.sendeWeg] || "Unbekannt")}</b></div>`;
   $("source-list").innerHTML = (state.leadSources || []).map((source) => `<div class="source-item"><b>${esc(source.label || "Quelle")}</b><span>${source.active ? "aktiv" : "pausiert"} · zuletzt ${source.last_added || 0} Leads</span></div>`).join("") || `<p>Noch keine Quellen hinterlegt.</p>`;
   renderTechnischeFaelle();
 }
@@ -561,7 +877,7 @@ $("faelle-retry")?.addEventListener("click", async (event) => {
 
 function renderTechnischeFaelle() {
   const faelle = state.technischeFaelle || [];
-  $("faelle-title").textContent = faelle.length ? `${faelle.length} nicht zugestellt` : "Nichts offen";
+  $("faelle-title").textContent = faelle.length ? `${faelle.length} vom Schutz gestoppt` : "Nichts offen";
   $("faelle-liste").innerHTML = faelle.length
     ? faelle.map((f) => `<div class="fall"><div><b>${esc(f.participant || "Unbekannt")}</b><span class="fall-status">${esc(f.blockiert_grund || (f.status === "unknown" ? "Versand unklar – im LinkedIn-Verlauf prüfen" : "Von der Sicherheitsprüfung gestoppt"))}</span><p>${esc(String(f.draft || "").slice(0, 140))}${String(f.draft || "").length > 140 ? "…" : ""}</p></div><div class="fall-actions"><button data-fall-neu="${f.id}">Neu schreiben</button><button class="delete-draft" data-fall-weg="${f.id}">Verwerfen</button></div></div>`).join("")
     : `<p>Alles erledigt. Hier landen Nachrichten, bei denen eine Sicherung eingegriffen hat.</p>`;
@@ -622,7 +938,19 @@ $("save-campaign").onclick = async () => {
   const button = $("save-campaign"); button.disabled = true; $("campaign-note").textContent = "";
   try {
     const editing = editingCampaign;
-    const result = await post("/api/campaign", { ...campaignFormValues(), action: editing ? "update" : "create", id: editing });
+    const values = campaignFormValues();
+    const signature = JSON.stringify(values);
+    if (confirmedCampaignPreview !== signature) {
+      const result = await post("/api/campaign", { ...values, action: "preview" });
+      const preview = result.preview; const excluded = preview.exclusions || {};
+      $("preview-total").textContent = preview.total; $("preview-network").textContent = preview.network; $("preview-external").textContent = preview.external;
+      $("campaign-note").classList.add("preview-confirmation");
+      $("campaign-note").textContent = `${preview.total} Kontakte werden aufgenommen. Geschützt: ${excluded.protected || 0}, laufendes Gespräch: ${excluded.activeConversation || 0}, abgeschlossen: ${excluded.closed || 0}. Bitte noch einmal bestätigen.`;
+      confirmedCampaignPreview = signature;
+      button.textContent = editing ? `Änderungen für ${preview.total} Kontakte bestätigen` : `Mit ${preview.total} Kontakten starten`;
+      return;
+    }
+    const result = await post("/api/campaign", { ...values, action: editing ? "update" : "create", id: editing });
     await load();
     if (editing) {
       renderAssets();
@@ -651,6 +979,28 @@ $("asset-add").onclick = async () => {
   } catch (error) { note.textContent = error.message; } finally { button.disabled = false; }
 };
 $("contact-search").addEventListener("input", renderContacts); $("contact-filter").addEventListener("change", renderContacts);
+$("contact-workspace-close").onclick = closeContactWorkspace; $("contact-workspace-backdrop").onclick = closeContactWorkspace;
+$("relationship-close").onclick = closeRelationshipModal; $("relationship-cancel").onclick = closeRelationshipModal; $("relationship-backdrop").onclick = closeRelationshipModal;
+$("relationship-save").onclick = async () => {
+  if (!relationshipContact) return;
+  const button = $("relationship-save"); button.disabled = true; $("relationship-note").textContent = "";
+  try {
+    await post("/api/contact-policy", { contactId: relationshipContact.id, action: "pause", until: $("relationship-until").value, reason: $("relationship-reason").value });
+    const name = relationshipContact.full_name || "Kontakt"; closeRelationshipModal(); await load(); toast(`${name} wurde zurückgestellt.`);
+  } catch (error) { $("relationship-note").textContent = error.message; }
+  finally { button.disabled = false; }
+};
+$("relationship-exclude").onclick = async () => {
+  if (!relationshipContact) return;
+  const button = $("relationship-exclude");
+  if (!relationshipExcludeArmed) { relationshipExcludeArmed = true; button.textContent = "Wirklich dauerhaft ausschließen?"; return; }
+  button.disabled = true; $("relationship-note").textContent = "";
+  try {
+    await post("/api/contact-policy", { contactId: relationshipContact.id, action: "exclude", reason: $("relationship-reason").value || "Manuell dauerhaft ausgeschlossen" });
+    const name = relationshipContact.full_name || "Kontakt"; closeRelationshipModal(); await load(); toast(`${name} wird nicht mehr automatisch angeschrieben.`);
+  } catch (error) { $("relationship-note").textContent = error.message; }
+  finally { button.disabled = false; }
+};
 $("engine-toggle").onclick = async () => { await post("/api/engine", { action: state.engine?.alive ? "stop" : "start" }); toast(state.engine?.alive ? "Engine wird gestoppt." : "Engine startet."); setTimeout(load, 1800); };
 $("backup-now").onclick = async () => { await post("/api/backup"); toast("Sicherung erstellt."); };
 document.querySelectorAll("[data-level]").forEach((button) => button.addEventListener("click", async () => { await post("/api/automatik", { level: button.dataset.level }); await load(); toast("Automatik aktualisiert."); }));

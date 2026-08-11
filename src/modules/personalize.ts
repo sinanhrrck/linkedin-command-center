@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import type { Contact } from "./crm.js";
 import { promptKontext, saubern, erstnachrichtAngle, type Zielgruppe } from "../context.js";
 import type { ConversationGoal, GoalCode } from "./goals.js";
+import { learningGuidance } from "./learning.js";
 
 /**
  * Router für den Autopilot-Text: bezahltes Claude (Standard im Voll-Modus, Qualität +
@@ -94,6 +95,7 @@ INPUT für diese Person (nutze nur, was da ist; erfinde nichts dazu):
 Name: ${c.full_name ?? "Unbekannt"}
 Profil-Headline (enthält oft Bank, Ausbildungsjahr, Studiengang, Standort): ${c.headline ?? "unbekannt"}
 ${goal ? `\nLANGFRISTIGER GESPRÄCHSAUFTRAG: ${goal.code} – ${goal.label}. ${goal.instruction}\nDie Erstnachricht bleibt trotzdem ein echter Icebreaker ohne Pitch. Wähle nur eine Anknüpfung, die später natürlich zu diesem Ziel passen kann.` : ""}
+${learningGuidance(goal?.code ?? null)}
 
 OUTPUT-REGEL: Generiere GENAU EINE Nachricht nach obigem Aufbau. Nichts drumherum, keine Erklärungen davor oder danach, kein "Hier ist die Nachricht:". Gib ausschließlich den Text der Nachricht aus.`;
   return saubern(await generateText(prompt));
@@ -175,6 +177,7 @@ export async function converseStep(messages: { sender: string; text: string }[],
   const prompt = `Du bist Sinan und führst einen LinkedIn-Chat mit ${participant}.
 ${promptKontext()}
 ${goalBlock(goal)}
+${learningGuidance(goal?.code ?? null)}
 
 DEINE ROLLE IN DIESEM CHAT:
 Du chattest mit Bankkaufmann-Azubis und Berufseinsteigern. Ziel ist NICHT ein Verkauf im Chat,
@@ -269,6 +272,8 @@ ${promptKontext()}
 
 Deine Aufgabe: Schlage 3 VERSCHIEDENE Ansätze vor, WIE Sinan das Gespräch jetzt behutsam Richtung Angebot bzw. kurzes Telefonat drehen könnte. Nur die Ansätze als kurze Beschreibung in Klartext (je EIN Satz), KEINE fertige Nachricht. Nutze verschiedene Winkel, z.B.: über den genannten Pain anknüpfen, über eine ehrliche Zahl/Rechnung, über Sinans eigene Geschichte, über eine lockere offene Frage. Kein Druck, kein Verhör.
 
+Ordne die Ansätze nach ihrer Eignung für genau diesen Gesprächsverlauf: Der passendste und natürlichste Ansatz MUSS an erster Stelle stehen. Er wird dem Nutzer als „Empfohlen“ angezeigt.
+
 Bisheriger Verlauf:
 ${transcript}
 
@@ -277,7 +282,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Array aus genau 3 Strings, z.B. ["Ansatz
     const raw = await generateAutopilot(prompt);
     const json = raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1);
     const arr = JSON.parse(json) as unknown[];
-    return Array.isArray(arr) ? arr.map((x) => saubern(String(x)).trim()).filter(Boolean).slice(0, 4) : [];
+    return Array.isArray(arr) ? arr.map((x) => saubern(String(x)).trim()).filter(Boolean).slice(0, 3) : [];
   } catch {
     return [];
   }
@@ -288,6 +293,7 @@ export async function messageAusIdee(messages: { sender: string; text: string }[
   const transcript = messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
   const prompt = `Du bist Sinan und führst einen LinkedIn-Chat mit ${participant}.
 ${promptKontext()}
+${learningGuidance(null)}
 Schreibe Sinans nächste Nachricht, die GENAU diesen gewählten Ansatz umsetzt: "${idee}".
 Strenge Stil-Regeln: Du, keine Emojis, keine Gedankenstriche, kurze gesprochene Sätze, max 4-5 Zeilen,
 EIN Gedanke, kein Verhör, kein Druck. Kein Pitch-Overkill – ein leichter, echter nächster Schritt, der
@@ -321,6 +327,7 @@ mehr, die Tür bleibt aber offen, falls sie sich später doch melden möchte. Ke
   const prompt = `Schreibe ein kurzes, freundliches Follow-up auf LinkedIn (${stufe === 1 ? "2-3 Sätze" : "1-2 Sätze"}).
 ${promptKontext()}
 ${personZeile(c)}
+${learningGuidance(null)}
 ${stufenText}
 ${variationBlock(variation)}
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
@@ -336,6 +343,7 @@ export async function reaktivierungMessage(c: Contact): Promise<string> {
   const prompt = `Schreibe eine kurze, natürliche LinkedIn-Nachricht (2-3 Sätze).
 ${promptKontext()}
 ${personZeile(c)}
+${learningGuidance(null)}
 Kontext: Ihr seid auf LinkedIn schon vernetzt, aber ihr habt nie miteinander geschrieben.
 Die Person erinnert sich vielleicht nicht mehr an die Vernetzung.
 Regeln:

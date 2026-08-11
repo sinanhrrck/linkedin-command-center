@@ -3,6 +3,9 @@ import { events } from "../core/events.js";
 import { getDraft } from "./drafts.js";
 import { refreshCampaignTargets, campaignContext } from "./campaigns.js";
 import { eventInvitation } from "./personalize.js";
+import { proactiveDecision } from "./relationshipPolicy.js";
+import { claimCampaignTargets, reconcileCampaignWorkflows, transitionCampaignTarget } from "./campaignWorkflow.js";
+import { attachDraftContext, type DraftContextEvidence, validateProactiveContext } from "./conversationMemory.js";
 
 type Target = {
   campaign_id: number;
@@ -71,52 +74,27 @@ async function inviteText(target: Target, kontext: string): Promise<string> {
   return vorlage;
 }
 
+function conversationContext(evidence: DraftContextEvidence | null): string {
+  if (!evidence) return "";
+  const facts = [
+    evidence.lastStatement ? `Letzte echte Aussage des Kontakts: „${evidence.lastStatement}“` : "",
+    evidence.commitment ? `Vereinbarte Wiedervorlage: ${evidence.commitment}` : "",
+    evidence.openPoint ? `Offener Punkt: ${evidence.openPoint}` : "",
+  ].filter(Boolean);
+  if (!facts.length) return "";
+  return [
+    "", "Bisheriger Gesprächskontext (verbindliche Fakten):", ...facts,
+    "Beziehe dich nur darauf, wenn es natürlich zur Einladung passt. Erfinde weder Interesse noch eine Zusage.",
+  ].join("\n");
+}
+
 /**
  * Event-Kampagnen laufen in derselben Nachrichten-Pipeline wie der übrige Bot. Externe Kontakte
  * warten zunächst auf die Annahme; bestehende Verbindungen bekommen einen prüfbaren Entwurf.
  */
 export async function campaignTick(): Promise<number> {
-  // Zugestellte Kampagnen-Entwürfe in den Zielstatus spiegeln.
-  db.prepare(
-    `UPDATE campaign_targets SET status='sent',updated_at=datetime('now')
-      WHERE status='drafted' AND EXISTS (
-        SELECT 1 FROM drafts d WHERE d.thread_url=(SELECT profile_url FROM contacts WHERE id=campaign_targets.contact_id)
-          AND d.kind='event' AND d.incoming='campaign:'||campaign_targets.campaign_id AND d.status='sent'
-      )`,
-  ).run();
-  // Inzwischen angenommene externe Kontakte sind nun bereit.
-  db.prepare(
-    `UPDATE campaign_targets SET status='queued',updated_at=datetime('now')
-      WHERE status='awaiting_connection' AND EXISTS (
-        SELECT 1 FROM contacts c WHERE c.id=campaign_targets.contact_id AND c.accepted_at IS NOT NULL
-      )`,
-  ).run();
-
-  /**
-   * VERWAISTE ZIELE ZURÜCKHOLEN (Fix 2026-08-06). Ein Ziel wird auf 'drafted' gesetzt, sobald
-   * ein Entwurf entsteht. Wird dieser Entwurf später verworfen – vom Nutzer oder beim Aufräumen
-   * der Zielgruppe –, blieb das Ziel trotzdem für immer auf 'drafted' und wurde nie wieder
-   * angefasst. Real waren 18 von 19 Zielen so festgenagelt: Kontakte, die nie eine Einladung
-   * bekommen haben und trotzdem als erledigt galten. Die Kampagne stand still, obwohl 138
-   * Leute in der Zielgruppe waren.
-   *
-   * Solche Ziele kommen zurück in die Warteschlange – aber höchstens einmal (max. 2 Entwürfe
-   * pro Kontakt und Kampagne). Sonst entstünde eine Endlosschleife, wenn jemand denselben
-   * Vorschlag wiederholt ablehnt.
-   */
-  const zurueckgeholt = db.prepare(
-    `UPDATE campaign_targets SET status='queued', updated_at=datetime('now')
-      WHERE status='drafted'
-        AND NOT EXISTS (
-          SELECT 1 FROM drafts d
-           WHERE d.thread_url=(SELECT profile_url FROM contacts WHERE id=campaign_targets.contact_id)
-             AND d.kind='event' AND d.incoming='campaign:'||campaign_targets.campaign_id
-             AND d.status IN ('pending','approved','sending','sent'))
-        AND (SELECT COUNT(*) FROM drafts d2
-              WHERE d2.thread_url=(SELECT profile_url FROM contacts WHERE id=campaign_targets.contact_id)
-                AND d2.kind='event' AND d2.incoming='campaign:'||campaign_targets.campaign_id) < 2`,
-  ).run().changes;
-  if (zurueckgeholt) console.info(`[kampagnen] ${zurueckgeholt} Kontakt(e) ohne Entwurf zurück in die Warteschlange.`);
+  const workflow = reconcileCampaignWorkflows();
+  if (workflow.failed) console.info(`[kampagnen] ${workflow.failed} Ziel(e) brauchen nach zwei Versuchen eine manuelle Prüfung.`);
 
   // B1/P1/AEC-Aufträge nutzen die normale Erstnachrichten- und Gesprächslogik. Nur klassische
   // Kampagnen erzeugen hier zusätzliche Kampagnennachrichten; neue Ziele würden sonst doppelt
@@ -125,6 +103,7 @@ export async function campaignTick(): Promise<number> {
   let created = 0;
   for (const campaign of campaigns) {
     refreshCampaignTargets(campaign.id);
+    reconcileCampaignWorkflows(campaign.id);
     /**
      * TAGESZIEL = GESENDETE NACHRICHTEN, nicht erzeugte Entwürfe (Sinans Vorgabe 2026-08-05).
      *
@@ -149,54 +128,72 @@ export async function campaignTick(): Promise<number> {
     ).get(key) as { n: number }).n;
     const remaining = Math.max(0, campaign.daily_limit - gesendetHeute - nochOffen);
     if (!remaining) continue;
+    const claimed = claimCampaignTargets(campaign.id, remaining);
+    if (!claimed.length) continue;
+    const claimedIds = claimed.map((row) => row.contact_id);
     const targets = db.prepare(
       `SELECT t.campaign_id,t.contact_id,c.full_name name,c.headline,c.profile_url,c.status contact_status,c.accepted_at,
               ca.name title,ca.kind,ca.audience,ca.value_prop,ca.goal,
               ca.event_url,ca.event_date,ca.event_time,ca.location,ca.briefing,ca.message_template,ca.daily_limit
         FROM campaign_targets t JOIN contacts c ON c.id=t.contact_id JOIN campaigns ca ON ca.id=t.campaign_id
-        WHERE t.campaign_id=? AND t.status='queued'
-          /**
-           * VORFAHRT DER KAMPAGNE VOR DER REAKTIVIERUNG (Sinans Vorgabe 2026-08-05).
-           * Ein offener Entwurf sperrt den Kontakt weiterhin – niemand soll zwei Nachrichten
-           * gleichzeitig bekommen. AUSNAHME: ein noch nicht freigegebener Reaktivierungs-
-           * Entwurf. Der will dasselbe wie die Einladung (einen stillen Kontakt ansprechen),
-           * hat aber keinen konkreten Anlass. Real blockierten 25 solcher Entwürfe die gesamte
-           * Kampagne. Er wird unten beim Anlegen der Einladung verworfen, damit trotzdem nie
-           * zwei offene Nachrichten für dieselbe Person existieren.
-           * BEREITS FREIGEGEBENE ('approved'/'sending') Reaktivierungen sperren weiter: die
-           * sind unterwegs, da darf die Kampagne nicht mehr dazwischenfunken.
-           */
-          AND NOT EXISTS (
-            SELECT 1 FROM drafts open_draft
-             WHERE open_draft.thread_url=c.profile_url
-               AND NOT (open_draft.kind='reaktivierung' AND open_draft.status='pending')
-               AND open_draft.status IN ('pending','approved','sending')
-          )
-        ORDER BY COALESCE(c.lead_score,0) DESC,t.created_at LIMIT ?`,
-    ).all(campaign.id, remaining) as Target[];
+        WHERE t.campaign_id=? AND t.status='generating' AND t.contact_id IN (${claimedIds.map(() => "?").join(",")})
+        ORDER BY COALESCE(c.lead_score,0) DESC,t.created_at`,
+    ).all(campaign.id, ...claimedIds) as Target[];
     // Einmal je Kampagne holen: die Fakten sind für alle Zielkontakte identisch.
     const kontext = targets.length ? campaignContext(campaign.id) : "";
     for (const target of targets) {
-      const incoming = `campaign:${target.campaign_id}`;
-      const exists = db.prepare("SELECT 1 FROM drafts WHERE thread_url=? AND kind='event' AND incoming=? AND status IN ('pending','approved','sending','sent')").get(target.profile_url, incoming);
-      if (exists) {
-        db.prepare("UPDATE campaign_targets SET status='drafted',updated_at=datetime('now') WHERE campaign_id=? AND contact_id=?").run(target.campaign_id, target.contact_id);
-        continue;
+      try {
+        const policy = proactiveDecision(target.contact_id, "campaign");
+        if (!policy.ok) {
+          const contact = db.prepare("SELECT automation_status,do_not_contact FROM contacts WHERE id=?").get(target.contact_id) as { automation_status: string | null; do_not_contact: number | null };
+          transitionCampaignTarget({ campaignId: target.campaign_id, contactId: target.contact_id,
+            to: contact.do_not_contact || contact.automation_status === "excluded" ? "excluded" : "snoozed",
+            reason: policy.reason, source: "campaign_tick" });
+          console.info(`[beziehungsschutz] ${target.name ?? target.profile_url}: Kampagne wartet – ${policy.reason}`);
+          continue;
+        }
+        const contextCheck = validateProactiveContext(target.contact_id);
+        if (!contextCheck.ok) {
+          transitionCampaignTarget({ campaignId: target.campaign_id, contactId: target.contact_id,
+            to: "snoozed", reason: contextCheck.reason, source: "conversation_memory", force: true });
+          console.info(`[gesprächskontext] ${target.name ?? target.profile_url}: Kampagne blockiert – ${contextCheck.reason}`);
+          continue;
+        }
+        const incoming = `campaign:${target.campaign_id}`;
+        const exists = db.prepare("SELECT id,status FROM drafts WHERE contact_id=? AND kind='event' AND incoming=? AND status IN ('pending','approved','sending','sent') ORDER BY id DESC LIMIT 1")
+          .get(target.contact_id, incoming) as { id: number; status: string } | undefined;
+        if (exists) {
+          const to = exists.status === "sent" ? "sent" : exists.status === "sending" ? "sending" : exists.status === "approved" ? "approved" : "drafted";
+          transitionCampaignTarget({ campaignId: target.campaign_id, contactId: target.contact_id, to, reason: "Vorhandener Entwurf übernommen", source: "campaign_tick", draftId: exists.id, force: true });
+          continue;
+        }
+        const message = await inviteText(target, `${kontext}${conversationContext(contextCheck.evidence)}`);
+        const ersetzt = db.prepare(
+          "UPDATE drafts SET status='discarded' WHERE contact_id=? AND kind='reaktivierung' AND status='pending'",
+        ).run(target.contact_id).changes;
+        if (ersetzt) console.info(`[kampagnen] Reaktivierungs-Entwurf für ${target.name ?? target.profile_url} durch die Event-Einladung ersetzt.`);
+        const result = db.prepare(
+          "INSERT INTO drafts(contact_id,kind,thread_url,participant,incoming,draft,ki_original,intent) VALUES(?,'event',?,?,?,?,?,'event')",
+        ).run(target.contact_id, target.profile_url, target.name, incoming, message, message);
+        const draftId = Number(result.lastInsertRowid);
+        const attached = attachDraftContext(draftId, target.contact_id);
+        if (!attached.ok) {
+          db.prepare("UPDATE drafts SET status='blockiert',blockiert_grund=? WHERE id=?").run(attached.reason, draftId);
+          transitionCampaignTarget({ campaignId: target.campaign_id, contactId: target.contact_id, to: "snoozed",
+            reason: attached.reason, source: "conversation_memory", draftId, force: true });
+          continue;
+        }
+        transitionCampaignTarget({ campaignId: target.campaign_id, contactId: target.contact_id, to: "drafted", reason: "Entwurf vorbereitet", source: "campaign_tick", draftId });
+        events.emit("draft:new", getDraft(draftId));
+        created++;
+      } catch (error) {
+        const row = db.prepare("SELECT attempt_count FROM campaign_targets WHERE campaign_id=? AND contact_id=?")
+          .get(target.campaign_id, target.contact_id) as { attempt_count: number } | undefined;
+        const reason = `Entwurf konnte nicht erstellt werden: ${String((error as Error)?.message ?? error).slice(0, 180)}`;
+        transitionCampaignTarget({ campaignId: target.campaign_id, contactId: target.contact_id,
+          to: (row?.attempt_count || 0) >= 2 ? "failed" : "queued", reason, source: "campaign_tick" });
+        console.error(`[kampagnen] ${target.name ?? target.profile_url}: ${reason}`);
       }
-      const message = await inviteText(target, kontext);
-      // Die Einladung ERSETZT einen noch nicht freigegebenen Reaktivierungs-Entwurf (siehe
-      // Vorfahrt-Regel oben). Beides offen zu lassen würde bedeuten, dass eine Freigabe von
-      // beidem zwei Nachrichten an dieselbe Person schickt.
-      const ersetzt = db.prepare(
-        "UPDATE drafts SET status='discarded' WHERE thread_url=? AND kind='reaktivierung' AND status='pending'",
-      ).run(target.profile_url).changes;
-      if (ersetzt) console.info(`[kampagnen] Reaktivierungs-Entwurf für ${target.name ?? target.profile_url} durch die Event-Einladung ersetzt.`);
-      const result = db.prepare(
-        "INSERT INTO drafts(kind,thread_url,participant,incoming,draft,ki_original,intent) VALUES('event',?,?,?,?,?,'event')",
-      ).run(target.profile_url, target.name, incoming, message, message);
-      db.prepare("UPDATE campaign_targets SET status='drafted',updated_at=datetime('now') WHERE campaign_id=? AND contact_id=?").run(target.campaign_id, target.contact_id);
-      events.emit("draft:new", getDraft(Number(result.lastInsertRowid)));
-      created++;
     }
   }
   if (created) console.info(`[kampagnen] ${created} Event-Einladung(en) als Entwurf vorbereitet.`);

@@ -16,3 +16,4 @@ dist/
 
 # Persönliches Nutzer-Profil (bleibt lokal, wie .env)
 profil.local.json
+services/report-relay-site/

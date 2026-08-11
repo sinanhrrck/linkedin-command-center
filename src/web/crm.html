@@ -358,7 +358,9 @@
   .pitch-ideas { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
   .pitch-pick { text-align: left; display: flex; flex-direction: column; gap: 3px; border: 1px solid var(--line-strong); background: var(--panel); border-radius: 11px; padding: 11px 13px; cursor: pointer; transition: all .14s; width: 100%; }
   .pitch-pick:hover:not(:disabled) { border-color: var(--green); background: rgba(31,157,99,.05); transform: translateY(-1px); }
+  .pitch-pick.recommended { border-color: rgba(31,157,99,.4); background: rgba(31,157,99,.035); }
   .pitch-pick b { font-family: var(--disp); font-size: 12px; font-weight: 700; color: #12855a; }
+  .pitch-pick b em { font-style: normal; color: var(--accent); }
   .pitch-pick span { font-size: 12.5px; color: var(--ink); line-height: 1.4; }
   .pitch-pick.chosen { border-color: var(--green); background: rgba(31,157,99,.08); }
   .pitch-pick:disabled { cursor: default; opacity: .6; }
@@ -2388,7 +2390,7 @@ function pitchIdeeCard(d) {
       <div class="dc-flag chance"><b>Pitchbereit — wähle einen Ansatz</b><span>Daraus schreibt der Bot die Nachricht, die du danach nochmal freigibst.</span></div>
       ${d.incoming ? `<div class="dc-in">Auf: „${esc(d.incoming)}"</div>` : ""}
       <div class="pitch-ideas">
-        ${ideen.map((idee, i) => `<button class="pitch-pick" data-idx="${i}"><b>Ansatz ${i + 1}</b><span>${esc(idee)}</span></button>`).join("")}
+        ${ideen.map((idee, i) => `<button class="pitch-pick${i === 0 ? " recommended" : ""}" data-idx="${i}"><b>Ansatz ${i + 1}${i === 0 ? " <em>(Empfohlen)</em>" : ""}</b><span>${esc(idee)}</span></button>`).join("")}
       </div>
       <div class="dc-foot"><button class="dc-delete" title="Löschen – ohne Ersatz">🗑</button></div>
     </div>`;

@@ -4,10 +4,12 @@ import { fetchThreads } from "./inbox.js";
 import { converseStep } from "./personalize.js";
 import { sendThreadReply } from "./outreach.js";
 import { queueReplyDraft, getDraft } from "./drafts.js";
-import { markRepliedByName, markDeclinedByName } from "./crm.js";
+import { markInboundReply } from "./crm.js";
+import { recordCrmStage } from "./crmStages.js";
 import { governor, GovernorBlocked } from "../core/safetyGovernor.js";
 import { events } from "../core/events.js";
 import { goalForConversation, recordGoalAlert } from "./goals.js";
+import { observeRelationshipMessage } from "./relationshipPolicy.js";
 
 /**
  * AUTOPILOT: voll-autonome Gespräche. Liest Threads, beantwortet Routine selbst
@@ -41,7 +43,11 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
     const conv = getConv(t.threadUrl, t.participant);
     if (conv.status !== "active") continue; // schon gebucht oder eskaliert → Finger weg
 
-    markRepliedByName(t.participant); // Hot Lead
+    const contactId = markInboundReply(t.threadUrl, t.participant); // jede eingehende Antwort ins CRM
+    if (contactId) {
+      observeRelationshipMessage(contactId, t.lastIncoming);
+      recordCrmStage(contactId, "replied", "bot");
+    }
 
     const conversationGoal = goalForConversation(t.threadUrl, t.participant);
     const step = await converseStep(t.messages, t.participant, conversationGoal).catch(() => null);
@@ -69,7 +75,8 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
     if (step && step.intent === "absage") {
       try {
         if (step.reply) await sendThreadReply(t.threadUrl, step.reply, t.participant);
-        markDeclinedByName(t.participant);
+        markInboundReply(t.threadUrl, t.participant, true);
+        if (contactId) recordCrmStage(contactId, "lost", "bot");
         db.prepare("UPDATE conversations SET status='closed', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
         console.info(`[autopilot] ${t.participant} hat abgewunken → Abschied gesendet, Thread zu.`);
       } catch (e) {
@@ -94,6 +101,7 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
      * Genau Stufe 2 des Zielbilds: die Schwelle lässt sich pro Kategorie anheben.
      */
     if (step.intent === "einwand" || step.intent === "chance") {
+      if (step.intent === "chance" && contactId) recordCrmStage(contactId, "qualified", "bot");
       if (autonomyFor(step.intent) === "ask") {
         queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, step.reply, step.intent);
         db.prepare("UPDATE conversations SET status='escalated', updated_at=datetime('now') WHERE thread_url=?").run(t.threadUrl);
@@ -113,6 +121,10 @@ export async function runAutopilot(max = 8): Promise<{ replied: number; booked: 
 
     // Termin-Zusage oder Kontakt genannt → HANDOFF, ab hier übernimmt der Mensch
     if (step.intent === "meeting" || step.contact) {
+      if (contactId) {
+        recordCrmStage(contactId, "qualified", "bot");
+        recordCrmStage(contactId, "meeting", "bot");
+      }
       db.prepare("UPDATE conversations SET status='booked', contact=?, updated_at=datetime('now') WHERE thread_url=?")
         .run(step.contact ?? null, t.threadUrl);
       events.emit("lead:booked", { participant: t.participant, contact: step.contact, threadUrl: t.threadUrl });

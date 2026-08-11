@@ -22,6 +22,27 @@ import { countByStatus, resetHaengendeInvites } from "./modules/crm.js";
 import { saveLiveShot } from "./core/session.js";
 import { SerialJobQueue } from "./core/jobQueue.js";
 import { ensureDailyBackup } from "./core/backups.js";
+import { syncAnonymousLearning } from "./modules/learning.js";
+import { backfillCrmStages } from "./modules/crmStages.js";
+import { runReadJobWhenDue } from "./modules/lowRead.js";
+import { backfillRelationshipSignals } from "./modules/relationshipPolicy.js";
+import { backfillContactIdentities } from "./modules/contactIdentity.js";
+import { backfillContactTimeline } from "./modules/contactTimeline.js";
+import { backfillCampaignWorkflows, syncCampaignTargetForDraft } from "./modules/campaignWorkflow.js";
+import { backfillConversationMemories, backfillDraftContexts } from "./modules/conversationMemory.js";
+import { LeseBudgetErschoepft } from "./core/leseBudget.js";
+
+backfillCrmStages();
+const identityBackfill = backfillContactIdentities();
+backfillContactTimeline();
+backfillConversationMemories();
+if (identityBackfill.unresolved) console.info(`[kontaktidentitaet] ${identityBackfill.unresolved} Zuordnung(en) brauchen eine manuelle Pruefung.`);
+const relationshipBackfill = backfillRelationshipSignals();
+if (relationshipBackfill) console.info(`[beziehungsschutz] ${relationshipBackfill} bestehende Wiedervorlage(n)/Sperre(n) übernommen.`);
+const draftContexts = backfillDraftContexts();
+if (draftContexts.blocked) console.info(`[gesprächskontext] ${draftContexts.blocked} widersprüchliche proaktive Entwürfe blockiert.`);
+const campaignBackfill = backfillCampaignWorkflows();
+if (campaignBackfill.failed) console.info(`[kampagnen] ${campaignBackfill.failed} festgefahrene Ziele sind jetzt sichtbar und manuell wiederholbar.`);
 
 /**
  * Zentraler Loop. Läuft lokal dauerhaft.
@@ -58,6 +79,12 @@ async function einzeln(name: string, fn: () => Promise<unknown>, priority = 50) 
       db.prepare("DELETE FROM bot_activity WHERE id NOT IN (SELECT id FROM bot_activity ORDER BY id DESC LIMIT 300)").run();
       return result;
     } catch (error) {
+      if (error instanceof LeseBudgetErschoepft) {
+        db.prepare("UPDATE bot_activity SET status='skipped',detail=?,finished_at=datetime('now') WHERE id=?")
+          .run(`Geplant pausiert: ${error.message}`, id);
+        console.info(`[${name}] wartet planmäßig – ${error.message}`);
+        return null;
+      }
       db.prepare("UPDATE bot_activity SET status='failed',detail=?,finished_at=datetime('now') WHERE id=?")
         .run(String((error as Error)?.message || error).slice(0, 180), id);
       throw error;
@@ -167,7 +194,9 @@ function versucheBinden(): Promise<"ok" | "belegt" | "fehler"> {
  * Sicher, weil beim Start garantiert kein Versand läuft (der Portlock lässt nur eine Engine zu).
  */
 {
+  const haengendeIds = db.prepare("SELECT id FROM drafts WHERE status='sending'").all() as Array<{ id: number }>;
   const haengend = db.prepare("UPDATE drafts SET status='unknown' WHERE status='sending'").run().changes;
+  for (const row of haengendeIds) syncCampaignTargetForDraft(row.id, "unknown", "App wurde während des Versands beendet – Verlauf prüfen");
   if (haengend) console.warn(`[start] ${haengend} Entwurf/Entwürfe hingen im Versand ('sending') – als "Status unklar" markiert, bitte im LinkedIn-Verlauf prüfen.`);
 }
 
@@ -185,7 +214,7 @@ setState("engine_code_version", ENGINE_CODE_VERSION);
 setState("engine_active_job", "");
 setState("engine_queue_length", "0");
 setState("engine_queue_next", "");
-db.prepare("UPDATE bot_activity SET status='failed',detail='Durch Neustart beendet',finished_at=datetime('now') WHERE status='running'").run();
+db.prepare("UPDATE bot_activity SET status='interrupted',detail='Durch Neustart sauber beendet',finished_at=datetime('now') WHERE status='running'").run();
 cron.schedule("* * * * *", async () => {
   setState("engine_heartbeat", new Date().toISOString());
   // Ein Screenshot auf derselben Seite darf keine Navigation/Interaktion unterbrechen.
@@ -200,19 +229,19 @@ setTimeout(async () => {
   await einzeln("backup", () => ensureDailyBackup(), 5);
   // ZUERST der Selbst-Check: Funktioniert der Sende-Weg überhaupt? Ist er defekt, blockiert der
   // Governor Nachrichten von vornherein (statt still zu scheitern) und meldet es dir.
-  await einzeln("healthcheck", () => selbstCheck(), 75);
-  await einzeln("acceptance", () => checkAcceptances(), 60);
+  await einzeln("healthcheck", () => runReadJobWhenDue("healthcheck", 360, () => selbstCheck()), 75);
+  await einzeln("acceptance", () => runReadJobWhenDue("acceptance", 120, () => checkAcceptances()), 60);
   await einzeln("outreach", () => outreachTick(), 30);
   // Auch das Postfach sofort prüfen: wer den Bot mittags startet, soll nicht bis zur
   // nächsten Viertelstunde warten, um zu sehen, dass er arbeitet.
   await einzeln("drafts", async () => {
-    if (getAgentMode() === "off") await generateInboxDrafts(8);
+    if (getAgentMode() === "off") await runReadJobWhenDue("inbox", 30, () => generateInboxDrafts(8));
   }, 80);
   // Freigegebene Entwürfe, die noch offen sind, gleich beim Start abarbeiten.
   await einzeln("sendApproved", () => sendApprovedDrafts(15), 100);
   // Beim Start einmal Nachschub holen: wer Quellen angelegt + den Bot gestartet hat, bekommt
   // gleich Leads, statt bis zum nächsten festen Fütter-Termin zu warten.
-  await einzeln("feed", () => feedTick(), 20);
+  await einzeln("feed", () => runReadJobWhenDue("feed", 300, () => feedTick()), 20);
   await einzeln("campaign", () => campaignTick(), 50);
   // Post-Ideen: nur nachlegen, wenn KEINE offen sind (schont das Gemini-Limit). So sieht der
   // Nutzer gleich beim ersten Start Beitrags-Entwürfe zum Freigeben, statt bis Montag zu warten.
@@ -224,6 +253,10 @@ setTimeout(async () => {
 
 // Falls die App über Nacht läuft, entsteht auch ohne Neustart täglich ein frischer Snapshot.
 cron.schedule("10 3 * * *", () => einzeln("backup", () => ensureDailyBackup(), 5));
+
+// Lokales Lernen geschieht direkt bei jeder Entscheidung. Dieser Lauf teilt nur dann anonyme
+// k-anonyme Aggregate, wenn der Betreiber bewusst einen sicheren Lernserver konfiguriert hat.
+cron.schedule("20 4 * * *", () => einzeln("learning", () => syncAnonymousLearning(), 5));
 
 /**
  * POSTEN läuft jetzt für JEDEN – auch OHNE LinkedIn-API-Schlüssel: dann über die Browser-Session
@@ -265,20 +298,21 @@ cron.schedule("* * * * *", () =>
 // SELBST-CHECK alle 3 Stunden (rein lesend): prüft, ob der Sende-Weg (Login/Postfach/Eingabefeld/
 // Senden-Knopf) technisch funktioniert. Bricht ein Selektor, wird der Sende-Weg als defekt markiert
 // → Governor pausiert Nachrichten + Telegram-/Dashboard-Alarm, statt still Fehler zu produzieren.
-cron.schedule("15 9-21/3 * * *", () => einzeln("healthcheck", () => selbstCheck(), 75));
+cron.schedule("15 9-21/6 * * *", () => einzeln("healthcheck", () => runReadJobWhenDue("healthcheck", 360, () => selbstCheck()), 75));
 
 // Outreach-Tick alle 12 Minuten. Der Governor drosselt intern (Caps/Warm-up/Zeitfenster/Delays).
 cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick(), 30));
 
-// Acceptance-Tracking STÜNDLICH in der Arbeitszeit (vorher nur 3x täglich).
+// Acceptance-Tracking alle ZWEI STUNDEN in der Arbeitszeit. Ein Sweep findet weiterhin jede
+// Annahme, halbiert aber die wiederholten Aufrufe der Verbindungsseite.
 // Rein lesend, kein Senden, kein Governor → kostet KEINE Sicherheit, spart aber Wartezeit:
 // Jede erkannte Annahme erzeugt sofort den Erstnachricht-Entwurf. Vorher lag zwischen
-// "hat angenommen" und "Entwurf liegt bereit" bis zu 8 Stunden, jetzt maximal 1.
-cron.schedule("5 9-22 * * *", () => einzeln("acceptance", () => checkAcceptances(), 60));
+// "hat angenommen" und "Entwurf liegt bereit" bis zu 8 Stunden, jetzt maximal 2.
+cron.schedule("5 9-21/2 * * *", () => einzeln("acceptance", () => runReadJobWhenDue("acceptance", 120, () => checkAcceptances()), 60));
 
 // Lead-Fütterung 2x täglich: gespeicherte Such-Quellen abgrasen (rein lesend).
 // Hält die Pipeline gefüllt, damit der Outreach nicht trockenläuft.
-cron.schedule("0 10,16 * * *", () => einzeln("feed", () => feedTick(), 20));
+cron.schedule("0 10,16 * * *", () => einzeln("feed", () => runReadJobWhenDue("feed", 300, () => feedTick()), 20));
 
 // Aktive Event-Kampagnen arbeiten parallel zum normalen Outreach. Die eigentliche Nachricht
 // bleibt ein normaler Entwurf und durchlaeuft denselben Freigabe- und Governor-Weg.
@@ -389,8 +423,9 @@ cron.schedule("*/2 * * * *", () =>
 // DM-Entwürfe 2x täglich generieren (rein lesend + Gemini, SENDET NICHT).
 // Neue Entwürfe erscheinen als 'pending' im Dashboard zur Freigabe.
 /**
- * Postfach ALLE 15 MINUTEN prüfen, solange der Bot läuft (vorher nur 2x täglich um 9:30/15:30 –
- * wer den Bot um 11:36 startete, sah bis 15:30 nichts passieren).
+ * Postfach ALLE 30 MINUTEN prüfen, solange der Bot läuft (vorher nur 2x täglich um 9:30/15:30 –
+ * wer den Bot um 11:36 startete, sah bis 15:30 nichts passieren). Der Vorschau-Cache öffnet
+ * veränderte Chats sofort im nächsten Lauf und spart unveränderte Einzel-Threads vollständig.
  *
  * Warum das trotz Gemini-Limit (~20/Tag) geht: Threads lesen kostet KEINEN KI-Aufruf. Die KI
  * läuft nur, wenn wirklich eine neue, unbeantwortete Nachricht da ist – und `hasOpenDraft`
@@ -398,10 +433,10 @@ cron.schedule("*/2 * * * *", () =>
  * bereits verworfen wurde. Die Kosten hängen also an der Zahl NEUER Nachrichten, nicht am Takt.
  * Ist das Gratis-Kontingent leer, springt Claude ein und meldet sich vorher (core/textLlm.ts).
  */
-cron.schedule("*/15 9-22 * * *", () =>
+cron.schedule("*/30 9-22 * * *", () =>
   einzeln("drafts", async () => {
     // Sobald der Sales-Agent aktiv ist (Test/Live), macht ER die Antworten – dann keine Alt-Entwürfe.
-    if (getAgentMode() === "off") await generateInboxDrafts(8);
+    if (getAgentMode() === "off") await runReadJobWhenDue("inbox", 30, () => generateInboxDrafts(8));
   }, 80),
 );
 
@@ -410,7 +445,7 @@ cron.schedule("*/15 9-22 * * *", () =>
 // als Erstes die frische Antwort-Liste bereit und gestern Genehmigtes geht sofort raus.
 cron.schedule("0 9 * * *", () =>
   einzeln("morgen", async () => {
-    if (getAgentMode() === "off") await generateInboxDrafts(10);
+    if (getAgentMode() === "off") await runReadJobWhenDue("inbox", 30, () => generateInboxDrafts(10));
     await sendApprovedDrafts(20);
   }, 95),
 );

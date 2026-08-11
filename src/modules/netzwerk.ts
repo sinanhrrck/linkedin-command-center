@@ -6,6 +6,7 @@ import { reaktivierungMessage } from "./personalize.js";
 import { istPlausibleNachricht } from "../core/nachrichtCheck.js";
 import { events } from "../core/events.js";
 import { getDraft } from "./drafts.js";
+import { attachDraftContext } from "./conversationMemory.js";
 
 /**
  * BESTEHENDES NETZWERK REAKTIVIEREN.
@@ -97,6 +98,9 @@ export function reaktivierbareKontakte(limit: number): Contact[] {
       `SELECT * FROM contacts
        WHERE aus_netzwerk = 1
          AND messaged_at IS NULL
+         AND COALESCE(do_not_contact,0)=0
+         AND COALESCE(automation_status,'active')='active'
+         AND (snoozed_until IS NULL OR snoozed_until<=datetime('now'))
          AND status NOT IN ('messaged','replied','closed','skipped')
          AND NOT EXISTS (
            SELECT 1 FROM drafts d WHERE d.thread_url = contacts.profile_url
@@ -125,9 +129,11 @@ export async function generateReaktivierung(limit = 3): Promise<number> {
       continue;
     }
     const info = db
-      .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original) VALUES('reaktivierung',?,?,?,?,?)")
-      .run(c.profile_url, c.full_name ?? null, "", text, text);
-    events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
+      .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft, ki_original) VALUES(?,'reaktivierung',?,?,?,?,?)")
+      .run(c.id, c.profile_url, c.full_name ?? null, "", text, text);
+    const draftId = Number(info.lastInsertRowid);
+    attachDraftContext(draftId, c.id);
+    events.emit("draft:new", getDraft(draftId));
     done++;
   }
   if (done) console.info(`[netzwerk] ${done} Reaktivierungs-Entwurf/-Entwürfe erzeugt.`);

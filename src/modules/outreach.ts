@@ -3,6 +3,7 @@ import { governor, GovernorBlocked, DuplikatBlockiert } from "../core/safetyGove
 import { humanDelay, humanScroll, humanType, humanTypeInto } from "../core/humanize.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { db, getState, setState } from "../db/index.js";
+import { deferProfile, recordReadSaving } from "./lowRead.js";
 
 /** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
 function normText(s: string): string {
@@ -165,7 +166,19 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
 
       const connect = await findConnectButton(page);
       if ((await connect.count()) === 0) {
-        // Kein Vernetzen-Button (z.B. schon vernetzt / Anfrage ausstehend) – überspringen.
+        // Ist stattdessen „Nachricht“ sichtbar, besteht die Verbindung bereits. Nicht sieben
+        // Tage erneut versuchen, sondern direkt korrekt ins CRM übernehmen.
+        if ((await page.locator(SEL.messageBtn).first().count()) > 0) {
+          db.prepare(
+            "UPDATE contacts SET status='accepted',accepted_at=COALESCE(accepted_at,datetime('now')),retry_after=NULL,retry_reason=NULL WHERE profile_url=?",
+          ).run(profileUrl);
+          console.info(`[outreach] ${profileUrl} ist bereits vernetzt – als angenommen übernommen.`);
+          return;
+        }
+        // Weder Vernetzen noch Nachricht: möglicherweise ausstehend/nicht erreichbar. Nicht bei
+        // jedem 12-Minuten-Tick dasselbe Profil erneut öffnen.
+        deferProfile(profileUrl, "Kein Vernetzen-Knopf gefunden", 7);
+        recordReadSaving("profile_retry");
         throw new GovernorBlocked("Kein Vernetzen-Button gefunden");
       }
       // WICHTIG: KEIN Koordinaten-Klick – die klebrige Top-Navi ("Marketing" → Campaign

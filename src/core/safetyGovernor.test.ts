@@ -51,7 +51,7 @@ test("stoppt, sobald das halbe Kontingent verbraucht ist", () => {
   if (!connect.ok) assert.match(connect.reason, /halbes Kontingent|Tageslimit/);
 });
 
-test("unter der Gefahrenschwelle wird ganz gestoppt", () => {
+test("unter der Gefahrenschwelle läuft ein kleines Recovery-Kontingent", () => {
   db.prepare("DELETE FROM actions WHERE type='connect'").run();
   // Quote auf ~8% drücken: viele reife Einladungen ohne Annahme.
   const add = db.prepare(
@@ -60,9 +60,20 @@ test("unter der Gefahrenschwelle wird ganz gestoppt", () => {
   for (let i = 0; i < 120; i++) add.run(`https://example.test/kalt-${i}`);
   const { rate } = governor.acceptanceRate();
   assert.ok(rate < 0.2, `Quote sollte unter 20% liegen, ist ${(rate * 100).toFixed(0)}%`);
+  assert.equal(governor.canDoAction("connect").ok, true, "Recovery darf weiter vernetzen");
+  const addAction = db.prepare("INSERT INTO actions(type,target) VALUES('connect',?)");
+  for (let i = 0; i < 3; i++) addAction.run(`https://example.test/recovery-${i}`);
   const connect = governor.canDoAction("connect");
   assert.equal(connect.ok, false);
-  if (!connect.ok) assert.match(connect.reason, /zu riskant/);
+  if (!connect.ok) assert.match(connect.reason, /Recovery-Kontingent 3\/3/);
+});
+
+test("ein defekter Sendeweg stoppt auch Kampagnennachrichten", () => {
+  setState("send_health", "broken");
+  const campaign = governor.canDoAction("campaign");
+  assert.equal(campaign.ok, false);
+  if (!campaign.ok) assert.match(campaign.reason, /Sende-Weg defekt/);
+  setState("send_health", "ok");
 });
 
 test.after(() => {

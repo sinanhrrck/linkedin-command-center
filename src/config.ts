@@ -85,6 +85,22 @@ export const config = {
     chatId: process.env.TELEGRAM_CHAT_ID ?? "",
   },
 
+  learning: {
+    // Standard bleibt strikt lokal. Ein gemeinsamer Lernserver muss bewusst konfiguriert UND
+    // aktiviert werden; selbst dann gehen nur Aggregate ohne Texte, Namen, URLs oder Zeitpunkte.
+    syncEnabled: process.env.LEARNING_SYNC_ENABLED === "true",
+    syncUrl: process.env.LEARNING_SYNC_URL ?? "",
+  },
+
+  /**
+   * Optionaler, installationsübergreifender Meldeweg. Ohne ausdrücklich eingerichteten
+   * NextLead-Relay bleiben Meldungen ausschließlich lokal in der Warteschlange. Die Domain
+   * einer Empfängeradresse darf niemals stillschweigend als technischer Endpunkt dienen.
+   */
+  reporting: {
+    endpoint: process.env.NEXTLEAD_REPORT_ENDPOINT ?? "https://nextlead-report-relay.siharrack.chatgpt.site/api/nextlead-report",
+  },
+
   /**
    * SAFETY. Das Herzstück. Alle sendenden Aktionen respektieren diese Werte.
    */
@@ -140,16 +156,22 @@ export const config = {
     weekendActions: ["connect", "like", "profileView"],
     workOnWeekends: true, // Wochenende NICHT komplett sperren – die Feinsteuerung macht weekendActions
 
-    // Circuit-Breaker: fällt die Akzeptanzrate der letzten 7 Tage darunter,
-    // pausiert der Outreach automatisch.
+    // Circuit-Breaker: fällt die Akzeptanzrate des rollierenden Fensters darunter,
+    // wird der Outreach zunächst halbiert und bei sehr schwacher Quote auf Recovery gedrosselt.
     minAcceptanceRate: 0.30,
     /**
-     * Ab HIER wird komplett gestoppt (2026-08-06). Zwischen diesem Wert und `minAcceptanceRate`
-     * läuft nur noch das halbe Tageskontingent. Grund: Ein harter Stopp bei 30% legte den
-     * gesamten Betrieb still und konnte sich nicht selbst auflösen. Unter 20% ist die Quote
-     * dagegen so schwach, dass LinkedIn die Einladungsfunktion einschränkt – da ist Schluss.
+     * Ab HIER greift der sehr kleine Recovery-Modus. Zwischen diesem Wert und
+     * `minAcceptanceRate` läuft das halbe Tageskontingent. Ein vollständiger Stopp könnte sich
+     * ohne neue, bessere Kontakte nicht selbst auflösen; Recovery bleibt deshalb bewusst klein.
      */
     hardStopAcceptance: 0.20,
+    /**
+     * RECOVERY statt Sackgasse: Auch unterhalb der Gefahrenschwelle darf NextLead wenige,
+     * weiterhin vom Lead-Score priorisierte Vernetzungen senden. So kann sich eine durch alte,
+     * schlechte Quellen gedrückte Quote mit besseren Kontakten wieder erholen, ohne den
+     * Kontoschutz komplett auszuschalten.
+     */
+    recoveryConnectCap: 3,
     // Erst ab dieser Zahl versendeter Invites greift die Akzeptanzraten-Prüfung.
     acceptanceRateMinSample: 20,
     // Rollierendes Bewertungsfenster. 7 Tage waren bei 20 Anfragen/Tag zu nervös: wenige

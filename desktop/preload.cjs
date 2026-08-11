@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("nextlead", {
   check: () => ipcRenderer.invoke("update:check"),
   // Update herunterladen + anwenden (Windows) bzw. .dmg öffnen (macOS).
   install: () => ipcRenderer.invoke("update:install"),
+  // Ausschließlich einen vom Nutzer aufgezogenen Bereich des NextLead-Fensters aufnehmen.
+  captureFeedbackRegion: (rect) => ipcRenderer.invoke("feedback:capture-region", rect),
   // Status-Updates aus dem Hauptprozess empfangen (checking/available/downloading/…).
   onStatus: (cb) => ipcRenderer.on("update:status", (_e, s) => cb(s)),
 });

@@ -93,6 +93,26 @@ async function suchNachUpdate(manuell) {
 
 ipcMain.handle("app:version", () => app.getVersion());
 ipcMain.handle("update:check", () => suchNachUpdate(true));
+ipcMain.handle("feedback:capture-region", async (_event, rawRect) => {
+  if (!mainWin || mainWin.isDestroyed()) throw new Error("NextLead-Fenster ist nicht verfügbar.");
+  const [contentWidth, contentHeight] = mainWin.getContentSize();
+  const x = Math.max(0, Math.min(contentWidth - 1, Math.floor(Number(rawRect?.x) || 0)));
+  const y = Math.max(0, Math.min(contentHeight - 1, Math.floor(Number(rawRect?.y) || 0)));
+  const width = Math.min(contentWidth - x, Math.floor(Number(rawRect?.width) || 0));
+  const height = Math.min(contentHeight - y, Math.floor(Number(rawRect?.height) || 0));
+  if (width < 24 || height < 24) throw new Error("Der markierte Bereich ist zu klein.");
+
+  const captured = await mainWin.webContents.capturePage({ x, y, width, height });
+  const originalSize = captured.getSize();
+  const image = originalSize.width > 1200
+    ? captured.resize({ width: 1200, quality: "good" })
+    : captured;
+  let buffer = image.toJPEG(78);
+  if (buffer.length > 900_000) buffer = image.toJPEG(58);
+  if (buffer.length > 1_100_000) throw new Error("Der Bildausschnitt ist zu groß. Bitte kleiner markieren.");
+  const size = image.getSize();
+  return { mimeType: "image/jpeg", base64: buffer.toString("base64"), width: size.width, height: size.height, bytes: buffer.length };
+});
 ipcMain.handle("update:install", async () => {
   if (!latestUpdate) return { ok: false };
   try {

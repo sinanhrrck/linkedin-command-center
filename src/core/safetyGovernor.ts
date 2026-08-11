@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { db, getStartDate, getState, setState } from "../db/index.js";
 import { humanDelay } from "./humanize.js";
 import { events } from "./events.js";
+import { sendHealthStand } from "./sendHealth.js";
 
 // "message" = KALTE Erstnachricht/Follow-up an neue Kontakte (riskant, eng gecappt).
 // "reply"   = Antwort in einem bestehenden Gespräch (jemand schrieb DIR) – risikoarm, eigener,
@@ -185,8 +186,12 @@ class SafetyGovernor {
     // SELBST-CHECK: Ist der Sende-Weg als defekt gemeldet (Selektor gebrochen o.ä.), gehen
     // Nachrichten/Kommentare NICHT raus (sonst still Mist bauen). Vernetzen nutzt einen anderen
     // Weg und läuft weiter. Der Nutzer wurde bereits per Telegram/Dashboard gewarnt.
-    if ((type === "message" || type === "reply" || type === "comment") && getState("send_health") === "broken")
-      return { ok: false, reason: "Selbst-Check: Sende-Weg defekt – pausiert, bis wieder funktionsfähig" };
+    if (type === "message" || type === "reply" || type === "campaign" || type === "comment") {
+      const health = sendHealthStand();
+      if (health.status !== "ok") return { ok: false, reason: health.status === "broken"
+        ? "Selbst-Check: Sende-Weg defekt – pausiert, bis wieder funktionsfähig"
+        : `Selbst-Check ausstehend: ${health.reason}` };
+    }
 
     if (!this.withinWorkingHours(type)) {
       const now = new Date();
@@ -214,15 +219,18 @@ class SafetyGovernor {
      * bei 23% den kompletten Betrieb still, inklusive der Event-Kampagne, deren Kontakte auf
      * eine Vernetzung warteten. Der Nutzer sah nur einen Bot, der nichts tut.
      *
-     * Jetzt: unter `hardStopAcceptance` (echte Gefahrenzone) weiterhin Stopp, dazwischen nur
-     * das halbe Tageskontingent – weniger Anfragen bei schwacher Quote ist sachlich richtig,
-     * ein Totalstillstand ist es nicht.
+     * Jetzt: unter `hardStopAcceptance` nur das kleine Recovery-Kontingent, dazwischen das
+     * halbe Tageskontingent. Weniger Anfragen bei schwacher Quote ist sachlich richtig; ein
+     * Totalstillstand könnte die Quote dagegen nicht mit besseren Kontakten reparieren.
      */
     if (type === "connect") {
       const { rate, sample } = this.acceptanceRate();
       if (sample >= config.safety.acceptanceRateMinSample) {
-        if (rate < config.safety.hardStopAcceptance) {
-          return { ok: false, reason: `Akzeptanzrate ${(rate * 100).toFixed(0)}% – zu riskant, Vernetzungen gestoppt` };
+        if (rate < config.safety.hardStopAcceptance && this.countToday("connect") >= config.safety.recoveryConnectCap) {
+          return {
+            ok: false,
+            reason: `Akzeptanzrate ${(rate * 100).toFixed(0)}% – Recovery-Kontingent ${config.safety.recoveryConnectCap}/${config.safety.recoveryConnectCap} für heute erreicht`,
+          };
         }
         if (rate < config.safety.minAcceptanceRate && this.countToday("connect") >= Math.ceil(this.effectiveCap("connect") / 2)) {
           return { ok: false, reason: `Akzeptanzrate ${(rate * 100).toFixed(0)}% unter ${(config.safety.minAcceptanceRate * 100).toFixed(0)}% – heute nur halbes Kontingent` };
@@ -240,6 +248,8 @@ class SafetyGovernor {
   snapshot() {
     const { rate, sample } = this.acceptanceRate();
     const warmup = this.warmupFactor();
+    const recovery = sample >= config.safety.acceptanceRateMinSample && rate < config.safety.hardStopAcceptance;
+    const connectCap = this.effectiveCap("connect");
     return {
       notAus: this.notAusAktiv(),
       zeitfenster: this.zeitfensterAktiv(),
@@ -255,7 +265,8 @@ class SafetyGovernor {
       },
       connect: {
         today: this.countToday("connect"),
-        effectiveCap: this.effectiveCap("connect"),
+        effectiveCap: connectCap,
+        allowedCap: recovery ? Math.min(connectCap, config.safety.recoveryConnectCap) : connectCap,
         hardCap: config.safety.dailyCaps.connect,
         week: this.countThisWeek("connect"),
         weeklyCap: config.safety.weeklyConnectCap,
@@ -279,6 +290,8 @@ class SafetyGovernor {
         minRate: config.safety.minAcceptanceRate,
         minSample: config.safety.acceptanceRateMinSample,
         armed: sample >= config.safety.acceptanceRateMinSample,
+        recovery,
+        recoveryCap: config.safety.recoveryConnectCap,
       },
     };
   }

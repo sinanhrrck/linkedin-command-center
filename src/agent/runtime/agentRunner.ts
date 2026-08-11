@@ -12,7 +12,8 @@ import { config } from "../../config.js";
 import { fetchThreads } from "../../modules/inbox.js";
 import { sendThreadReply } from "../../modules/outreach.js";
 import { queueReplyDraft } from "../../modules/drafts.js";
-import { markRepliedByName } from "../../modules/crm.js";
+import { markInboundReply } from "../../modules/crm.js";
+import { recordCrmStage } from "../../modules/crmStages.js";
 import { db, getAgentMode } from "../../db/index.js";
 import { events } from "../../core/events.js";
 import { generateText } from "../../core/textLlm.js";
@@ -58,7 +59,8 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
     // Person ist am Zug = sie hat geantwortet → im CRM als 'replied' markieren (Hot Lead). WICHTIG:
     // Sonst bleibt sie 'messaged' und bekäme fälschlich ein Follow-up/Reminder, obwohl SINAN am Zug
     // ist (der Grund, warum trotz Antwort Reminder rausgingen, wenn der Agent aktiv war).
-    if (t.participant) markRepliedByName(t.participant);
+    const crmContactId = t.participant ? markInboundReply(t.threadUrl, t.participant) : null;
+    if (crmContactId) recordCrmStage(crmContactId, "replied", "agent");
 
     let conv = (await repo.load(t.threadUrl)) ?? neueConversation(t.threadUrl, t.participant);
     if (conv.status !== "aktiv") continue;
@@ -125,8 +127,10 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
         repo.saveMessage(t.threadUrl, "Sinan", e.text, e.intents);
         res.gesendet++;
         events.emit("agent:gesendet", { participant: t.participant, text: e.text, threadUrl: t.threadUrl, stage: e.conversation.stage });
-        if (e.conversation.status === "verloren")
+        if (e.conversation.status === "verloren") {
+          if (crmContactId) recordCrmStage(crmContactId, "lost", "agent");
           repo.recordOutcome({ threadUrl: t.threadUrl, teilnehmer: t.participant, ergebnis: "verloren", letzterState: e.conversation.stage, nachrichten: t.messages.length, trust: e.conversation.scores.trust, interest: e.conversation.scores.interest });
+        }
       } catch (err) {
         // GovernorBlocked = vorübergehend (Arbeitszeit/Limit): NICHT gesendet-markieren → nächster
         // Tick versucht NUR den Versand erneut (kein neuer KI-Aufruf, siehe oben). Echter Fehler:
@@ -143,6 +147,10 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
       }
     } else if (e.typ === "eskalieren") {
       if (e.conversation.status === "gebucht") {
+        if (crmContactId) {
+          recordCrmStage(crmContactId, "qualified", "agent");
+          recordCrmStage(crmContactId, "meeting", "agent");
+        }
         events.emit("lead:booked", { participant: t.participant, contact: e.kontakt, threadUrl: t.threadUrl });
         repo.recordOutcome({ threadUrl: t.threadUrl, teilnehmer: t.participant, ergebnis: "gebucht", letzterState: e.conversation.stage, nachrichten: t.messages.length, trust: e.conversation.scores.trust, interest: e.conversation.scores.interest });
       } else {

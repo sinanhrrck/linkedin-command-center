@@ -11,7 +11,7 @@ import { getPost, approvePost, discardPost, generatePostDraft } from "../modules
 import { addSource, deleteSource } from "../modules/leadFeed.js";
 import { deleteContact } from "../modules/crm.js";
 import {
-  createCampaign, updateCampaign, deleteCampaign, setCampaignActive, recordOutcome, OUTCOME_STAGES, type OutcomeStage,
+  createCampaign, updateCampaign, deleteCampaign, setCampaignActive, previewCampaign, recordOutcome, OUTCOME_STAGES, type OutcomeStage,
   addCampaignAsset, updateCampaignAsset, deleteCampaignAsset, getCampaignAsset, campaignAssetPath,
 } from "../modules/campaigns.js";
 import { addSalesTask, completeSalesTask, deleteSalesTask } from "../modules/salesDesk.js";
@@ -23,6 +23,30 @@ import { db, getState, setState, setMode, setFocus, getFocus, setAgentMode, type
 import { LIVE_SHOT_PATH } from "../core/session.js";
 import { createMission } from "../modules/missions.js";
 import { resolveGoalAlert } from "../modules/goals.js";
+import { flushPendingReports, queueUserReport } from "../modules/reporting.js";
+import { backfillRelationshipSignals, setRelationshipPolicy } from "../modules/relationshipPolicy.js";
+import { backfillContactIdentities, resolveIdentityConflict } from "../modules/contactIdentity.js";
+import { backfillContactTimeline } from "../modules/contactTimeline.js";
+import { backfillCampaignWorkflows, retryCampaignTarget, retryFailedCampaignTargets } from "../modules/campaignWorkflow.js";
+import { backfillConversationMemories, backfillDraftContexts } from "../modules/conversationMemory.js";
+
+// Die Desktop-App startet zuerst das Cockpit; die eigentliche Engine kann bewusst ausgeschaltet
+// bleiben. Historische Beziehungssignale muessen deshalb bereits hier uebernommen werden, sonst
+// waeren geschuetzte Kontakte bis zum naechsten Engine-Start noch in offenen Kampagnen sichtbar.
+const identityBackfill = backfillContactIdentities();
+backfillContactTimeline();
+backfillConversationMemories();
+if (identityBackfill.unresolved) {
+  console.info(`[kontaktidentitaet] ${identityBackfill.unresolved} Zuordnung(en) brauchen eine manuelle Pruefung.`);
+}
+const relationshipBackfill = backfillRelationshipSignals();
+if (relationshipBackfill) {
+  console.info(`[beziehungsschutz] ${relationshipBackfill} bestehende Wiedervorlage(n)/Sperre(n) uebernommen.`);
+}
+const draftContexts = backfillDraftContexts();
+if (draftContexts.blocked) console.info(`[gesprächskontext] ${draftContexts.blocked} widersprüchliche proaktive Entwürfe blockiert.`);
+const campaignBackfill = backfillCampaignWorkflows();
+if (campaignBackfill.failed) console.info(`[kampagnen] ${campaignBackfill.failed} festgefahrene Ziele sind jetzt sichtbar und manuell wiederholbar.`);
 
 /**
  * Lokales CRM-Cockpit. Nutzung: npm run crm
@@ -141,6 +165,37 @@ function engineAlive(): boolean {
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
 
+  // Fehlerberichte und allgemeines Feedback gehen über den zentralen Relay. Die Browserseite
+  // darf bei Fehlern nur die lokale Aktivitäts-ID nennen; der Server holt den echten Fehler
+  // selbst aus der DB und bereinigt ihn vor dem Versand.
+  if (url.pathname === "/api/report" && req.method === "POST") {
+    let body = "";
+    let tooLarge = false;
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 1_600_000 && !tooLarge) {
+        tooLarge = true;
+        res.writeHead(413, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "Meldung ist zu groß." }));
+      }
+    });
+    req.on("end", async () => {
+      if (tooLarge) return;
+      try {
+        const input = JSON.parse(body || "{}") as {
+          kind?: "error" | "feedback"; message?: string; replyEmail?: string; activityId?: number;
+          screenshot?: { mimeType?: string; base64?: string; width?: number; height?: number } | null;
+        };
+        if (input.kind !== "error" && input.kind !== "feedback") throw new Error("Ungültige Meldung.");
+        const result = await queueUserReport({ ...input, kind: input.kind });
+        res.writeHead(202, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify({ ok: true, ...result }));
+      } catch (error) {
+        res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" })
+          .end(JSON.stringify({ error: String((error as Error)?.message || error) }));
+      }
+    });
+    return;
+  }
+
   // ===== SETUP-ASSISTENT (Onboarding ohne Terminal, für Laien) =====
   // Status: ist alles eingerichtet? Steuert die Weiche "/" → Dashboard oder Setup.
   if (url.pathname === "/api/setup/status") {
@@ -239,7 +294,12 @@ const server = createServer((req, res) => {
           deleteDraft(Number(id));
         } else if (action === "approve") {
           // Genehmigen: der Bot sendet beim nächsten Lauf (governor-gedrosselt). Kein Direktversand.
-          approveDraft(Number(id), typeof text === "string" ? text : undefined);
+          const ok = approveDraft(Number(id), typeof text === "string" ? text : undefined);
+          if (!ok) {
+            const blocked = getDraft(Number(id));
+            res.writeHead(409, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: blocked?.blockiert_grund || "Entwurf kann nicht freigegeben werden." }));
+            return;
+          }
         } else if (action === "reject") {
           // Ablehnen speichert den Grund. Bei „anderer Ansatz" folgt zuerst eine echte
           // Richtungswahl; bei Qualitätsfeedback entsteht direkt ein korrigierter Text.
@@ -599,7 +659,10 @@ const server = createServer((req, res) => {
       try {
         const input = JSON.parse(body || "{}");
         const { action, id } = input;
-        if (action === "create") {
+        if (action === "preview") {
+          const preview = previewCampaign(input);
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, preview }));
+        } else if (action === "create") {
           const campaignId = createCampaign(input);
           res.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, id: campaignId }));
         } else if (action === "update") {
@@ -611,11 +674,53 @@ const server = createServer((req, res) => {
         } else if (action === "pause" || action === "resume") {
           const ok = setCampaignActive(Number(id), action === "resume");
           res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else if (action === "retry_target") {
+          const ok = retryCampaignTarget(Number(id), Number(input.contactId));
+          res.writeHead(ok ? 200 : 409, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else if (action === "retry_failed") {
+          const retried = retryFailedCampaignTargets(Number(id));
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, retried }));
         } else {
           res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
         }
       } catch (e) {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // BEZIEHUNGSSCHUTZ: bewusst eigene Kontaktsteuerung. Pausieren oder Ausschließen entfernt
+  // proaktive Entwürfe sofort; direkte Antworten auf neue Nachrichten bleiben möglich.
+  if (url.pathname === "/api/contact-policy" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const input = JSON.parse(body || "{}");
+        if (!["pause", "resume", "exclude", "manual"].includes(input.action)) throw new Error("Ungültige Kontaktregel.");
+        const ok = setRelationshipPolicy({
+          contactId: Number(input.contactId), action: input.action, until: input.until, reason: input.reason,
+        });
+        res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/contact-identity" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      try {
+        const input = JSON.parse(body || "{}");
+        const ok = resolveIdentityConflict(Number(input.conflictId), Number(input.contactId));
+        if (!ok) throw new Error("Die Zuordnung ist nicht mehr offen oder passt nicht zu diesem Kontakt.");
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify({ ok: true }));
+      } catch (error) {
+        res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify({ error: String((error as Error).message || error) }));
       }
     });
     return;
@@ -965,3 +1070,9 @@ server.listen(PORT, "127.0.0.1", () => {
   console.info(`\n  CRM-Cockpit läuft →  http://localhost:${PORT}\n`);
   console.info("  Beenden mit STRG+C.\n");
 });
+
+// Funktioniert auch bei ausgeschalteter Engine: Der Dashboard-Prozess versucht Offline-Meldungen
+// regelmäßig erneut und hält den Timer nicht künstlich am Leben, wenn die App beendet wird.
+const reportRetryTimer = setInterval(() => flushPendingReports().catch(() => {}), 5 * 60_000);
+reportRetryTimer.unref();
+setTimeout(() => flushPendingReports().catch(() => {}), 8_000).unref();

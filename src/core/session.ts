@@ -113,9 +113,11 @@ export async function getContext(opts: { visible?: boolean } = {}): Promise<Brow
  * Nur Hauptframe und nur LinkedIn; Unterframes und Werbe-Iframes zählen nicht.
  */
 const gezaehlteSeiten = new WeakSet<Page>();
+const abgestuerzteSeiten = new WeakSet<Page>();
 function haengeZaehlerAn(page: Page): void {
   if (gezaehlteSeiten.has(page)) return; // niemals doppelt zählen
   gezaehlteSeiten.add(page);
+  page.on("crash", () => abgestuerzteSeiten.add(page));
   page.on("framenavigated", (frame) => {
     if (frame !== page.mainFrame()) return;
     const url = frame.url();
@@ -135,7 +137,7 @@ export async function newPage(opts: { manuell?: boolean } = {}): Promise<Page> {
   // eine Sicherung, die sich selbst aussperrt.
   if (!opts.manuell) pruefeLeseBudget();
   const ctx = await getContext();
-  const page = ctx.pages()[0] ?? (await ctx.newPage());
+  const page = ctx.pages().find((candidate) => !candidate.isClosed() && !abgestuerzteSeiten.has(candidate)) ?? (await ctx.newPage());
   return page;
 }
 

@@ -11,6 +11,15 @@ export const db = new Database(config.paths.dbPath);
 db.pragma("journal_mode = WAL");
 db.exec(readFileSync(join(__dirname, "schema.sql"), "utf-8"));
 
+for (const [column, definition] of [
+  ["screenshot_base64", "TEXT"],
+  ["screenshot_mime", "TEXT"],
+  ["screenshot_width", "INTEGER"],
+  ["screenshot_height", "INTEGER"],
+] as const) {
+  try { db.exec(`ALTER TABLE user_reports ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
+}
+
 // Leichte Migration: Spalten für bestehende DBs nachrüsten (CREATE IF NOT EXISTS
 // ergänzt keine Spalten). Wirft, wenn Spalte schon da → ignorieren.
 try {
@@ -80,6 +89,13 @@ for (const [column, definition] of [
 ] as const) {
   try { db.exec(`ALTER TABLE drafts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
 }
+for (const [column, definition] of [
+  ["context_evidence_json", "TEXT"],
+  ["context_validation", "TEXT"],
+  ["context_memory_version", "INTEGER"],
+] as const) {
+  try { db.exec(`ALTER TABLE drafts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
+}
 
 try {
   // Aus welcher Lead-Quelle stammt der Kontakt? Fuer den Quellen-Vergleich in der Analytics
@@ -134,6 +150,39 @@ try {
 } catch {
   /* Spalte existiert bereits */
 }
+for (const [column, definition] of [["retry_after", "TEXT"], ["retry_reason", "TEXT"]] as const) {
+  try { db.exec(`ALTER TABLE contacts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
+}
+for (const [table, column] of [["drafts", "contact_id"], ["conversations", "contact_id"]] as const) {
+  try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER`); } catch { /* existiert */ }
+}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_drafts_contact ON drafts(contact_id,created_at)"); } catch { /* existiert */ }
+for (const [column, definition] of [
+  ["automation_status", "TEXT NOT NULL DEFAULT 'active'"],
+  ["snoozed_until", "TEXT"],
+  ["snooze_label", "TEXT"],
+  ["snooze_reason", "TEXT"],
+  ["do_not_contact", "INTEGER NOT NULL DEFAULT 0"],
+  ["last_meaningful_contact_at", "TEXT"],
+] as const) {
+  try { db.exec(`ALTER TABLE contacts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
+}
+
+// Altbestand: Profil- und Thread-Entwürfe wurden historisch nicht über dieselbe URL gespeichert.
+// Der eindeutige Name ist deshalb nur für diesen konservativen Aktivitäts-Backfill ein Fallback;
+// bei mehrfach vorkommenden Namen wird bewusst nichts geraten.
+db.exec(`
+  UPDATE contacts
+     SET last_meaningful_contact_at = COALESCE(
+       (SELECT MAX(d.sent_at) FROM drafts d
+         WHERE d.status='sent' AND d.sent_at IS NOT NULL
+           AND (d.thread_url=contacts.profile_url OR d.thread_url=contacts.normalized_url
+                OR (d.participant=contacts.full_name AND
+                    (SELECT COUNT(*) FROM contacts same_name WHERE lower(trim(same_name.full_name))=lower(trim(contacts.full_name)))=1))),
+       replied_at, messaged_at
+     )
+   WHERE last_meaningful_contact_at IS NULL;
+`);
 
 for (const [column, definition] of [
   ["kind", "TEXT NOT NULL DEFAULT 'outreach'"],
@@ -150,9 +199,30 @@ for (const [column, definition] of [
   ["briefing", "TEXT"],
   ["goal_code", "TEXT"],
   ["search_brief", "TEXT"],
+  ["workflow_version", "INTEGER NOT NULL DEFAULT 1"],
+  ["entry_rules_json", "TEXT"],
+  ["exit_rules_json", "TEXT"],
+  ["activated_at", "TEXT"],
 ] as const) {
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
 }
+for (const [column, definition] of [
+  ["draft_id", "INTEGER"],
+  ["attempt_count", "INTEGER NOT NULL DEFAULT 0"],
+  ["last_error", "TEXT"],
+  ["next_attempt_at", "TEXT"],
+  ["completed_at", "TEXT"],
+  ["version", "INTEGER NOT NULL DEFAULT 0"],
+] as const) {
+  try { db.exec(`ALTER TABLE campaign_targets ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
+}
+db.exec("UPDATE campaigns SET activated_at=COALESCE(activated_at,created_at) WHERE active=1");
+// Geplante Sicherheitsstopps und saubere Neustarts sind keine Defekte. Alte Versionen haben
+// beides rot als "failed" protokolliert und dadurch das Dashboard mit Scheinfehlern gefüllt.
+db.exec(`UPDATE bot_activity SET status='skipped'
+          WHERE status='failed' AND detail LIKE 'Tagesbudget für % erreicht (%';
+         UPDATE bot_activity SET status='interrupted'
+          WHERE status='failed' AND detail='Durch Neustart beendet';`);
 
 // Bestehende Leads lassen sich automatisch ihrer Quelle und damit einer später zugeordneten
 // Kampagne zuordnen. Unverknüpfte Alt-Leads bleiben bewusst unangetastet.

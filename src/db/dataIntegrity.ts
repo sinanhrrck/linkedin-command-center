@@ -18,6 +18,12 @@ type Contact = {
   source_id: number | null;
   campaign_id: number | null;
   aus_netzwerk: number | null;
+  automation_status?: string | null;
+  snoozed_until?: string | null;
+  snooze_label?: string | null;
+  snooze_reason?: string | null;
+  do_not_contact?: number | null;
+  last_meaningful_contact_at?: string | null;
   created_at: string;
 };
 
@@ -66,11 +72,36 @@ export function repairContactDuplicates(db: Database.Database): { groups: number
       const messagedAt = minDate(list, "messaged_at");
       const repliedAt = minDate(list, "replied_at");
       const status = ordered[0].status;
+      const excluded = list.some((row) => row.do_not_contact || row.automation_status === "excluded");
+      const manual = !excluded && list.some((row) => row.automation_status === "manual");
+      const paused = !excluded && !manual && list.some((row) => row.automation_status === "paused");
+      const automationStatus = excluded ? "excluded" : manual ? "manual" : paused ? "paused" : "active";
+      const snoozed = [...list].filter((row) => row.snoozed_until).sort((a, b) => String(b.snoozed_until).localeCompare(String(a.snoozed_until)))[0];
+      const lastMeaningful = [...list].map((row) => row.last_meaningful_contact_at).filter((value): value is string => !!value).sort().at(-1) ?? null;
 
       // Abhaengige Vertriebsdaten zuerst auf den Gewinner umhaengen.
       if (dropIds.length && tableExists(db, "sales_tasks")) {
         const q = dropIds.map(() => "?").join(",");
         db.prepare(`UPDATE sales_tasks SET contact_id=? WHERE contact_id IN (${q})`).run(keep.id, ...dropIds);
+      }
+      if (dropIds.length) {
+        const q = dropIds.map(() => "?").join(",");
+        for (const table of ["relationship_events", "crm_stage_events", "contact_timeline_events"] as const) {
+          if (tableExists(db, table)) db.prepare(`UPDATE ${table} SET contact_id=? WHERE contact_id IN (${q})`).run(keep.id, ...dropIds);
+        }
+        if (tableExists(db, "drafts")) {
+          const hasContactId = (db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).some((row) => row.name === "contact_id");
+          if (hasContactId) db.prepare(`UPDATE drafts SET contact_id=? WHERE contact_id IN (${q})`).run(keep.id, ...dropIds);
+        }
+        if (tableExists(db, "campaign_targets")) {
+          db.prepare(`INSERT OR IGNORE INTO campaign_targets(campaign_id,contact_id,route,status,reason,created_at,updated_at)
+            SELECT campaign_id,?,route,status,reason,created_at,updated_at FROM campaign_targets WHERE contact_id IN (${q})`).run(keep.id, ...dropIds);
+          db.prepare(`DELETE FROM campaign_targets WHERE contact_id IN (${q})`).run(...dropIds);
+        }
+        if (tableExists(db, "contact_identities")) {
+          db.prepare(`DELETE FROM contact_identities WHERE contact_id IN (${q}) AND identity_type='profile_url'`).run(...dropIds);
+          db.prepare(`UPDATE contact_identities SET contact_id=? WHERE contact_id IN (${q})`).run(keep.id, ...dropIds);
+        }
       }
       if (tableExists(db, "sales_outcomes")) {
         const outcomes = db.prepare(`SELECT * FROM sales_outcomes WHERE contact_id IN (${list.map(() => "?").join(",")}) ORDER BY updated_at DESC`).all(...list.map((row) => row.id)) as Array<Record<string, unknown>>;
@@ -96,7 +127,8 @@ export function repairContactDuplicates(db: Database.Database): { groups: number
       db.prepare(
         `UPDATE contacts SET profile_url=?, normalized_url=?, full_name=?, headline=?, status=?, notes=?,
            invited_at=?, accepted_at=?, messaged_at=?, replied_at=?, zielgruppe=?, lead_score=?,
-           score_grund=?, source_id=?, campaign_id=?, aus_netzwerk=?, created_at=? WHERE id=?`,
+           score_grund=?, source_id=?, campaign_id=?, aus_netzwerk=?,automation_status=?,snoozed_until=?,
+           snooze_label=?,snooze_reason=?,do_not_contact=?,last_meaningful_contact_at=?,created_at=? WHERE id=?`,
       ).run(
         canonical, canonical,
         first(list, (row) => row.full_name)?.full_name ?? null,
@@ -108,6 +140,9 @@ export function repairContactDuplicates(db: Database.Database): { groups: number
         first(list, (row) => row.source_id)?.source_id ?? null,
         first(list, (row) => row.campaign_id)?.campaign_id ?? null,
         invitedAt ? 0 : Math.max(...list.map((row) => row.aus_netzwerk ?? 0)),
+        automationStatus,snoozed?.snoozed_until ?? null,snoozed?.snooze_label ?? null,
+        snoozed?.snooze_reason ?? first(list, (row) => row.snooze_reason)?.snooze_reason ?? null,
+        excluded ? 1 : 0,lastMeaningful,
         minDate(list, "created_at") ?? keep.created_at, keep.id,
       );
     }

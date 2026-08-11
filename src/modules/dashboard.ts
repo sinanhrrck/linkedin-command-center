@@ -12,6 +12,11 @@ import { listCampaigns } from "./campaigns.js";
 import { openSalesTasks, salesDesk } from "./salesDesk.js";
 import { getBackupStatus } from "../core/backups.js";
 import { listExperiments } from "./experiments.js";
+import { learningSummary } from "./learning.js";
+import { crmDataQuality, goalFunnelEconomics } from "./crmStages.js";
+import { readSavingsToday } from "./lowRead.js";
+import { contactIdentityHealth } from "./contactIdentity.js";
+import { sendHealthStand } from "../core/sendHealth.js";
 
 // Pfad zur gebündelten app.asar-DATEI (nur in der gepackten App). Deren Änderungsdatum verrät ein
 // frisch installiertes Update; liegt es NACH dem Engine-Start, läuft die Engine noch mit altem Code.
@@ -62,13 +67,20 @@ type ContactRow = {
   open_draft_id: number | null;
   open_draft_kind: string | null;
   open_draft_status: string | null;
+  automation_status: string | null;
+  snoozed_until: string | null;
+  snooze_label: string | null;
+  snooze_reason: string | null;
+  do_not_contact: number | null;
 };
 
 export function getDashboardData() {
+  const sendHealth = sendHealthStand();
   const contacts = db
     .prepare(
       `SELECT c.id, c.full_name, c.headline, c.profile_url, c.status, c.invited_at, c.accepted_at,
               c.messaged_at,c.replied_at,c.aus_netzwerk,c.created_at,c.lead_score,c.campaign_id,ca.name AS campaign_name,
+              c.automation_status,c.snoozed_until,c.snooze_label,c.snooze_reason,c.do_not_contact,
               o.stage AS outcome_stage,o.note AS outcome_note,o.value_cents AS outcome_value_cents,
               (SELECT d.id FROM drafts d WHERE d.thread_url=c.profile_url AND d.status IN ('pending','approved','sending') ORDER BY CASE d.status WHEN 'sending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,d.created_at DESC LIMIT 1) AS open_draft_id,
               (SELECT d.kind FROM drafts d WHERE d.thread_url=c.profile_url AND d.status IN ('pending','approved','sending') ORDER BY CASE d.status WHEN 'sending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,d.created_at DESC LIMIT 1) AS open_draft_kind,
@@ -276,8 +288,10 @@ export function getDashboardData() {
        LEFT JOIN campaigns ca ON ca.id=a.campaign_id
       WHERE a.status='open' ORDER BY a.created_at DESC`,
   ).all();
-  const systemIssues = Number(getState("send_health") === "broken") +
-    (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status IN ('blockiert','unknown')").get() as { n: number }).n;
+  // Eine Sicherheitsentscheidung (kein Interesse, Wiedervorlage, Duplikatschutz) ist kein
+  // Systemfehler. Nur ein unklarer Versandstatus oder ein kaputter Sendeweg zählt hier rot.
+  const systemIssues = Number(sendHealth.status === "broken") +
+    (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status='unknown'").get() as { n: number }).n;
   // Kampagnen-Einladungen zählen bewusst NICHT in den Arbeitskorb "Heute": sie werden in der
   // jeweiligen Kampagne geprüft, damit dort Zielgruppe, Kontext und Texte zusammen bleiben.
   const attention = {
@@ -308,21 +322,36 @@ export function getDashboardData() {
         .get(activeJob) as { job: string; detail: string | null; started_at: string } | undefined
     : undefined;
   const approved = approvedCount();
-  const campaignWaiting = (db.prepare(
+  const campaignQueued = (db.prepare(
     `SELECT COUNT(*) n FROM campaign_targets t JOIN campaigns c ON c.id=t.campaign_id
-      WHERE c.active=1 AND t.status IN ('queued','awaiting_connection')`,
+      WHERE c.active=1 AND t.status='queued'`,
+  ).get() as { n: number }).n;
+  const campaignConnections = (db.prepare(
+    `SELECT COUNT(*) n FROM campaign_targets t JOIN campaigns c ON c.id=t.campaign_id
+      WHERE c.active=1 AND t.status='awaiting_connection'`,
   ).get() as { n: number }).n;
   const newContacts = counts.new ?? 0;
   const connectState = governorState.connect;
-  const connectRemaining = Math.max(0, Number(connectState?.effectiveCap || connectState?.hardCap || 0) - Number(connectState?.today || 0));
+  const connectRemaining = Math.max(0, Number(connectState?.allowedCap || connectState?.effectiveCap || connectState?.hardCap || 0) - Number(connectState?.today || 0));
+  const readBudget = leseStand();
   const upcoming: { job: string; detail: string; timing: string; blocked?: boolean }[] = [];
   if (!governorState.notAus) {
-    if (approved) upcoming.push({ job: "sendApproved", detail: `${approved} freigegebene Nachricht${approved === 1 ? "" : "en"}`, timing: "innerhalb von 10 Minuten" });
-    if (campaignWaiting) upcoming.push({ job: "campaign", detail: `${campaignWaiting} Kampagnenkontakt${campaignWaiting === 1 ? "" : "e"} weiterführen`, timing: "innerhalb von 10 Minuten" });
+    if (approved) upcoming.push({ job: "sendApproved", detail: `${approved} freigegebene Nachricht${approved === 1 ? "" : "en"}`,
+      timing: readBudget.erschoepft ? "morgen nach Rücksetzung des Lesebudgets" : "innerhalb von 10 Minuten", blocked: readBudget.erschoepft });
+    if (campaignQueued) upcoming.push({ job: "campaign", detail: `${campaignQueued} Kampagnenkontakt${campaignQueued === 1 ? "" : "e"} als Entwurf vorbereiten`, timing: "innerhalb von 10 Minuten" });
+    if (campaignConnections) upcoming.push({ job: "outreach", detail: `${campaignConnections} Kampagnenkontakt${campaignConnections === 1 ? " wartet" : "e warten"} auf Vernetzung`,
+      timing: readBudget.erschoepft || !connectRemaining ? "morgen nach Sicherheitslimit" : "nach freiem Vernetzungskontingent", blocked: readBudget.erschoepft || !connectRemaining });
     if (newContacts && connectRemaining) upcoming.push({ job: "outreach", detail: `bis zu ${Math.min(newContacts, connectRemaining)} neue Vernetzung${Math.min(newContacts, connectRemaining) === 1 ? "" : "en"}`, timing: "innerhalb von 12 Minuten" });
     else if (newContacts && !connectRemaining) upcoming.push({ job: "outreach", detail: `${newContacts} Kontakte warten, Tageslimit erreicht`, timing: "morgen im Zeitfenster", blocked: true });
-    upcoming.push({ job: getAgentMode() === "off" ? "drafts" : "agent", detail: "Neue Antworten im Postfach prüfen", timing: "innerhalb von 15 Minuten" });
+    upcoming.push({ job: getAgentMode() === "off" ? "drafts" : "agent", detail: "Neue Antworten im Postfach prüfen",
+      timing: readBudget.erschoepft ? "morgen nach Rücksetzung des Lesebudgets" : "innerhalb von 15 Minuten", blocked: readBudget.erschoepft });
   }
+
+  // PLANUNGSRECHNER: Der Nenner sind eindeutig angeschriebene Kontakte, nicht jede einzelne
+  // Chatnachricht. Sonst würden Follow-ups und Antworten eine vermeintlich schlechtere Quote
+  // erzeugen. Als Ergebnis zählt bewusst nur "won"; Termine und qualifizierte Kontakte sind
+  // Zwischenstufen, noch kein verdienter B1/P1/AEC-Wert.
+  const goalEconomics = goalFunnelEconomics();
 
   return {
     generatedAt: new Date().toISOString(),
@@ -349,8 +378,10 @@ export function getDashboardData() {
     // Lese-Budget: die Kennzahl, die LinkedIn tatsächlich beobachtet. Muss sichtbar sein,
     // sonst wächst sie wieder unbemerkt (siehe core/leseBudget.ts).
     leseBudget: leseStand(),
+    lowRead: readSavingsToday(),
     leadSources,
     campaigns: listCampaigns(),
+    identityQuality: contactIdentityHealth(),
     goalAlerts,
     /**
      * Zuordnung Kontakt → Kampagne für das Kampagnen-CRM (2026-08-05). Bewusst als schlanke
@@ -365,13 +396,17 @@ export function getDashboardData() {
         // dem CRM unterscheiden – genau daran ist die erste Fassung gescheitert (sie zeigte
         // Juli-Antworten als Kampagnen-Erfolg, teils für Leute ohne jede Einladung).
         `SELECT t.campaign_id campaignId, t.contact_id contactId, t.status, t.route,
+                t.reason, t.last_error lastError, t.attempt_count attempts, t.draft_id draftId,
                 (SELECT MAX(d.sent_at) FROM drafts d
                   WHERE d.thread_url=(SELECT profile_url FROM contacts WHERE id=t.contact_id)
                     AND d.kind='event' AND d.incoming='campaign:'||t.campaign_id AND d.status='sent') invitedAt
            FROM campaign_targets t`,
       )
-      .all() as Array<{ campaignId: number; contactId: number; status: string; route: string; invitedAt: string | null }>,
+      .all() as Array<{ campaignId: number; contactId: number; status: string; route: string; reason: string | null; lastError: string | null; attempts: number; draftId: number | null; invitedAt: string | null }>,
     experiments: listExperiments(),
+    learning: learningSummary(),
+    goalEconomics,
+    crmDataQuality: crmDataQuality(),
     salesDesk: salesDesk(),
     salesTasks: openSalesTasks(),
     todayDone: { drafts: draftsToday, posts: postsToday, leads: leadsToday },
@@ -379,9 +414,9 @@ export function getDashboardData() {
     governor: governorState,
     // SYSTEMSTATUS + FEHLER SICHTBAR: der Selbst-Check-Zustand und was zuletzt schiefging.
     systemHealth: {
-      sendeWeg: getState("send_health") || "unbekannt", // "ok" | "broken" | "unbekannt"
-      grund: getState("send_health_grund") || null,
-      geprueft: getState("send_health_ts") || null,
+      sendeWeg: sendHealth.status,
+      grund: sendHealth.reason,
+      geprueft: sendHealth.checkedAt,
     },
     /**
      * WARUM STEHT ES GERADE? (2026-08-06, Sinans Kernanliegen)
@@ -424,11 +459,16 @@ export function getDashboardData() {
       if (lese.erschoepft) liste.push({ was: "Lesen und damit fast alles", grund: lese.grund!, tun: "Läuft morgen automatisch weiter", aktion: { art: "warten", text: "Läuft morgen weiter" } });
       const acc = governorState.acceptance;
       if (acc.armed && acc.rate < config.safety.hardStopAcceptance) {
-        liste.push({ was: "Vernetzungen", grund: `Annahmequote ${(acc.rate * 100).toFixed(0)}% – unter ${(config.safety.hardStopAcceptance * 100).toFixed(0)}% wird gestoppt`, tun: "Lead-Quellen prüfen", aktion: { art: "gehe", ziel: "settings", text: "Lead-Quellen prüfen" } });
+        liste.push({
+          was: "Vernetzungen (Recovery-Modus)",
+          grund: `Annahmequote ${(acc.rate * 100).toFixed(0)}% – NextLead vernetzt kontrolliert weiter, maximal ${acc.recoveryCap} pro Tag`,
+          tun: "Lead-Quellen prüfen",
+          aktion: { art: "gehe", ziel: "settings", text: "Lead-Quellen prüfen" },
+        });
       } else if (acc.armed && acc.rate < acc.minRate) {
         liste.push({ was: "Vernetzungen (halbes Tempo)", grund: `Annahmequote ${(acc.rate * 100).toFixed(0)}% liegt unter ${(acc.minRate * 100).toFixed(0)}%`, tun: "Lead-Quellen prüfen", aktion: { art: "gehe", ziel: "settings", text: "Lead-Quellen prüfen" } });
       }
-      if (getState("send_health") === "broken") liste.push({ was: "Nachrichtenversand", grund: getState("send_health_grund") || "Sendeweg gestört", tun: "Sendeweg prüfen", aktion: { art: "gehe", ziel: "settings", text: "Sendeweg prüfen" } });
+      if (sendHealth.status !== "ok") liste.push({ was: "Nachrichtenversand", grund: sendHealth.reason || "Sendeweg noch nicht geprüft", tun: "Sendeweg prüfen", aktion: { art: "gehe", ziel: "settings", text: "Sendeweg prüfen" } });
       // Zweiter Versandbeleg systematisch gebrochen? Dann meldet der Bot Erfolge, die er nicht
       // mehr nachweisen kann – der Fall, der im Juli zu falsch gemeldeten Versänden führte.
       const beleg = verlaufsBelegStand();
@@ -450,7 +490,7 @@ export function getDashboardData() {
         liste.push({ was: `Kampagne „${k.name}"`, grund: "Kein Kontakt mehr in der Warteschlange", tun: "Zielgruppe bearbeiten", aktion: { art: "kampagne", id: k.id, text: "Zielgruppe bearbeiten" } });
       }
       const faelle = (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status IN ('blockiert','unknown')").get() as { n: number }).n;
-      if (faelle) liste.push({ was: "Nicht zugestellte Nachrichten", grund: `${faelle} Fälle warten auf deine Entscheidung`, tun: "Ansehen und abhaken", aktion: { art: "gehe", ziel: "settings", text: "Ansehen und abhaken" } });
+      if (faelle) liste.push({ was: "Vom Schutz gestoppte Entwürfe", grund: `${faelle} Nachrichten wurden bewusst nicht versendet`, tun: "Prüfen oder verwerfen", aktion: { art: "gehe", ziel: "settings", text: "Schutzfälle ansehen" } });
       return liste;
     })(),
     operations: {

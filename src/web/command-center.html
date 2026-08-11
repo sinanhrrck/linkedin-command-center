@@ -23,7 +23,7 @@
   <main>
     <header class="topbar">
       <div><p id="page-kicker">DEIN ARBEITSTAG</p><h1 id="page-title">Heute</h1></div>
-      <div class="top-actions"><span id="updated-at">–</span><button id="emergency" class="danger-ghost">Not-Aus</button></div>
+      <div class="top-actions"><span id="updated-at">–</span><button id="feedback-open" class="support-button">Feedback</button><button id="emergency" class="danger-ghost">Not-Aus</button></div>
     </header>
 
     <section class="view active" id="view-today">
@@ -100,15 +100,48 @@
 
     <section class="view" id="view-contacts">
       <section class="page-intro compact"><div><span class="eyebrow">Eine Kontaktbasis</span><h2>Kontakte und Gespräche</h2><p>Jede Person erscheint nur einmal. Filter zeigen, wo der Kontakt gerade steht.</p></div></section>
-      <div class="contact-toolbar"><input id="contact-search" type="search" placeholder="Name oder Headline suchen"/><select id="contact-filter"><option value="all">Alle Kontakte</option><option value="attention">Braucht Entscheidung</option><option value="new">Noch nicht kontaktiert</option><option value="invited">Anfrage offen</option><option value="accepted">Angenommen</option><option value="messaged">Angeschrieben</option><option value="replied">Hat geantwortet</option><option value="closed">Abgeschlossen</option></select><span id="contact-count"></span></div>
+      <div class="contact-toolbar"><input id="contact-search" type="search" placeholder="Name oder Headline suchen"/><select id="contact-filter"><option value="all">Alle Kontakte</option><option value="attention">Braucht Entscheidung</option><option value="paused">Wiedervorlagen</option><option value="excluded">Nicht mehr anschreiben</option><option value="new">Noch nicht kontaktiert</option><option value="invited">Anfrage offen</option><option value="accepted">Angenommen</option><option value="messaged">Angeschrieben</option><option value="replied">Hat geantwortet</option><option value="closed">Abgeschlossen</option></select><span id="identity-quality" class="identity-quality"></span><span id="contact-count"></span></div>
       <div class="contact-table"><div class="contact-row contact-head"><span>Kontakt</span><span>Status</span><span>Nächster Schritt</span><span></span></div><div id="contact-rows"></div></div>
     </section>
 
     <section class="view" id="view-insights">
       <section class="page-intro compact"><div><span class="eyebrow">Belastbare Zahlen</span><h2>Was funktioniert wirklich?</h2><p>Nur Kontakte aus deinem Outreach-Funnel. Bestehende Verbindungen verzerren die Quoten nicht.</p></div></section>
       <div id="insight-kpis" class="insight-kpis"></div>
+      <section class="insight-panel planning-lab">
+        <div class="section-head"><div><span class="eyebrow">Zielweg-Rechner</span><h3>Vom Monatsziel zur nötigen Kontaktzahl</h3></div><span class="planning-badge">B1 · P1 · AEC</span></div>
+        <div class="planning-controls">
+          <label><span>Zielweg</span><select id="planning-goal"><option value="B1">B1 · Kunde</option><option value="P1">P1 · Vertriebspartner</option><option value="AEC">AEC</option></select></label>
+          <div class="planning-evidence"><span>Datengrundlage</span><b id="planning-evidence"></b></div>
+        </div>
+        <div class="conversion-rail" aria-label="CRM Conversion-Stufen">
+          <div class="rail-stage"><b id="rail-messaged">0</b><span>Nachrichten</span></div>
+          <label class="rail-rate"><input id="rate-reply" type="number" min="0.1" max="100" step="0.1"/><b>%</b><small id="source-reply">Annahme</small></label>
+          <div class="rail-stage"><b id="rail-replied">0</b><span>Antworten</span></div>
+          <label class="rail-rate"><input id="rate-qualified" type="number" min="0.1" max="100" step="0.1"/><b>%</b><small id="source-qualified">Annahme</small></label>
+          <div class="rail-stage"><b id="rail-qualified">0</b><span>Qualifiziert</span></div>
+          <label class="rail-rate"><input id="rate-meeting" type="number" min="0.1" max="100" step="0.1"/><b>%</b><small id="source-meeting">Annahme</small></label>
+          <div class="rail-stage"><b id="rail-meeting">0</b><span>Termine</span></div>
+          <label class="rail-rate"><input id="rate-won" type="number" min="0.1" max="100" step="0.1"/><b>%</b><small id="source-won">Annahme</small></label>
+          <div class="rail-stage won"><b id="rail-won">0</b><span>Gewonnen</span></div>
+        </div>
+        <div class="planning-total"><span>Gesamtquote Nachricht → gewonnen</span><b id="planning-total-rate">–</b><small id="planning-data-quality"></small></div>
+        <div class="planning-equations">
+          <article class="planning-card">
+            <div><span class="equation-index">A</span><p>Ich will eine bestimmte Anzahl erreichen</p></div>
+            <label><span>Gewünschte B1/P1/AEC</span><input id="planning-results" type="number" min="1" step="1" value="10" inputmode="numeric"/></label>
+            <div class="equation-flow"><span id="planning-a-results">10 Ergebnisse</span><i>÷ Quote</i><strong id="planning-a-messages">–</strong><small>Nachrichten erforderlich</small></div>
+          </article>
+          <article class="planning-card revenue-card">
+            <div><span class="equation-index">B</span><p>Ich starte bei meinem Umsatz-Ziel</p></div>
+            <div class="planning-pair"><label><span>Wert je Ergebnis</span><div class="money-input"><i>€</i><input id="planning-value" type="number" min="1" step="50" value="1500" inputmode="decimal"/></div></label><label><span>Monatsziel</span><div class="money-input"><i>€</i><input id="planning-revenue" type="number" min="1" step="500" value="10000" inputmode="decimal"/></div></label></div>
+            <div class="equation-flow"><span id="planning-b-results">– Ergebnisse</span><i>÷ Quote</i><strong id="planning-b-messages">–</strong><small>Nachrichten erforderlich</small></div>
+          </article>
+        </div>
+        <p class="planning-note">„Gemessen“ wird ab fünf Fällen in der jeweiligen Vorstufe automatisch verwendet. Bis dahin bleibt die Quote eine klar markierte, veränderbare Annahme. Follow-ups werden nicht doppelt gezählt.</p>
+      </section>
       <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Conversion</span><h3>Vom Lead zur Antwort</h3></div></div><div id="funnel-bars"></div></section>
       <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Aktivität heute</span><h3>Was NextLead ausgeführt hat</h3></div></div><div id="today-actions" class="today-actions"></div></section>
+      <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Stetiges Lernen</span><h3>Was NextLead aus deinen Entscheidungen lernt</h3></div><span id="learning-privacy" class="learning-privacy"></span></div><div id="learning-summary"></div></section>
     </section>
 
     <section class="view" id="view-settings">
@@ -124,6 +157,50 @@
 
     <footer>NextLead arbeitet lokal auf diesem Mac · <span id="footer-count">–</span></footer>
   </main>
+</div>
+<div id="contact-workspace-modal" class="report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="contact-workspace-title">
+  <button id="contact-workspace-backdrop" class="report-backdrop" aria-label="Verlauf schließen"></button>
+  <section class="report-card contact-workspace-card">
+    <div class="report-head"><div><span class="eyebrow">Kontaktspur</span><h2 id="contact-workspace-title">Kontaktverlauf</h2><p id="contact-workspace-subtitle"></p></div><button id="contact-workspace-close" class="icon-btn" aria-label="Schließen">×</button></div>
+    <div id="contact-identity-state" class="contact-identity-state"></div>
+    <div id="contact-timeline" class="contact-timeline" aria-live="polite"></div>
+  </section>
+</div>
+<div id="relationship-modal" class="report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="relationship-title">
+  <button id="relationship-backdrop" class="report-backdrop" aria-label="Dialog schließen"></button>
+  <section class="report-card relationship-card">
+    <div class="report-head"><div><span class="eyebrow">Beziehung schützen</span><h2 id="relationship-title">Kontakt zurückstellen</h2></div><button id="relationship-close" class="icon-btn" aria-label="Schließen">×</button></div>
+    <p class="report-copy"><b id="relationship-name"></b> erhält bis zur Freigabe keine Kampagnen-, Event- oder Follow-up-Nachrichten. Direkte Antworten auf neue Nachrichten bleiben möglich.</p>
+    <label class="report-field"><span>Wiedervorlage am</span><input id="relationship-until" type="date" /></label>
+    <label class="report-field"><span>Warum wartet der Kontakt?</span><input id="relationship-reason" maxlength="240" placeholder="z. B. Prüfungsvorbereitung – im Winter wieder melden" /></label>
+    <p id="relationship-note" class="form-note" role="status"></p>
+    <div class="relationship-actions"><button id="relationship-exclude" class="danger-ghost">Nicht mehr anschreiben</button><span></span><button id="relationship-cancel">Abbrechen</button><button id="relationship-save" class="primary">Kontakt pausieren</button></div>
+  </section>
+</div>
+<div id="report-modal" class="report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="report-title">
+  <button id="report-backdrop" class="report-backdrop" aria-label="Dialog schließen"></button>
+  <section class="report-card">
+    <div class="report-head"><div><span class="eyebrow">Direkt an das NextLead-Team</span><h2 id="report-title">Feedback senden</h2></div><button id="report-close" class="icon-btn" aria-label="Schließen">×</button></div>
+    <p id="report-copy" class="report-copy">Was können wir verständlicher oder zuverlässiger machen?</p>
+    <label class="report-field"><span id="report-message-label">Dein Feedback</span><textarea id="report-message" rows="5" maxlength="2000" placeholder="Beschreibe kurz, was dir aufgefallen ist."></textarea></label>
+    <label class="report-field"><span>E-Mail für Rückfragen <i>optional</i></span><input id="report-email" type="email" maxlength="180" placeholder="name@firma.de" /></label>
+    <div class="report-shot-row">
+      <button id="report-capture" type="button" class="capture-button"><span>⌗</span> Bereich markieren</button>
+      <span>Optional · nur der ausgewählte Ausschnitt</span>
+    </div>
+    <div id="report-shot-preview" class="report-shot-preview hidden">
+      <img id="report-shot-image" alt="Vorschau des markierten Feedback-Ausschnitts" />
+      <div><b>Screenshot angehängt</b><span id="report-shot-meta"></span></div>
+      <button id="report-shot-remove" type="button" aria-label="Screenshot entfernen">×</button>
+    </div>
+    <div class="report-privacy"><b>Was wird gesendet?</b><span id="report-privacy-copy">Dein Text, App-Version und Betriebssystem. Keine LinkedIn-Namen, Nachrichten, Links oder Zugangsdaten.</span></div>
+    <p id="report-note" class="form-note" role="status"></p>
+    <div class="report-actions"><button id="report-cancel">Abbrechen</button><button id="report-send" class="primary">Feedback senden</button></div>
+  </section>
+</div>
+<div id="capture-overlay" class="capture-overlay hidden" aria-label="Bereich für Feedback-Screenshot markieren">
+  <div class="capture-guide"><b>Bereich markieren</b><span>Ziehe ein Rechteck über die Stelle, die du zeigen möchtest · Esc bricht ab</span></div>
+  <div id="capture-selection" class="capture-selection"></div>
 </div>
 <div id="toast" role="status"></div>
 <script type="module" src="/command-center.js"></script>

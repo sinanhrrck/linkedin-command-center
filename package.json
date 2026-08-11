@@ -1,6 +1,6 @@
 {
   "name": "linkedin-command-center",
-  "version": "0.3.0",
+  "version": "0.8.0-beta.1",
   "private": true,
   "type": "module",
   "description": "Lokales All-in-One LinkedIn-Tool: Posting, Outreach, Inbox, CRM, Analytics",
@@ -21,7 +21,8 @@
     "bilanz": "tsx src/scripts/bilanz.ts",
     "app": "electron desktop/main.cjs",
     "build:app": "tsc && node build-assets.mjs",
-    "dist": "npm run build:app && electron-builder"
+    "prepare:browser": "node desktop/prepareBrowser.cjs",
+    "dist": "npm run build:app && npm run prepare:browser && electron-builder"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
@@ -45,6 +46,9 @@
   "build": {
     "appId": "com.nextlead.app",
     "productName": "NextLead",
+    "directories": {
+      "output": "release"
+    },
     "files": [
       "desktop/**",
       "dist/**",
