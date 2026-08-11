@@ -439,6 +439,22 @@ CREATE TABLE IF NOT EXISTS campaign_target_events (
 );
 CREATE INDEX IF NOT EXISTS idx_campaign_target_events_target ON campaign_target_events(campaign_id,contact_id,created_at);
 
+-- Zentrale Fehlerbremse für Engine-Jobs. Wiederkehrende technische Fehler werden nicht bei jedem
+-- Cron-Tick endlos wiederholt: erst Backoff, nach drei Fehlschlägen Dead-Letter mit manueller
+-- Freigabe. Pro Job reicht eine Zeile; bot_activity bleibt das chronologische Betriebsprotokoll.
+CREATE TABLE IF NOT EXISTS job_reliability (
+  job                  TEXT PRIMARY KEY,
+  status               TEXT NOT NULL DEFAULT 'ready', -- ready | backoff | dead | resolved
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
+  last_error           TEXT,
+  last_failed_at       TEXT,
+  next_attempt_at      TEXT,
+  dead_at              TEXT,
+  resolved_at          TEXT,
+  updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_job_reliability_status ON job_reliability(status,next_attempt_at);
+
 -- Einfacher Key/Value-State (z.B. globaler Pause-Schalter, Startdatum)
 CREATE TABLE IF NOT EXISTS state (
   key   TEXT PRIMARY KEY,

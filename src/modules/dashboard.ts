@@ -1,5 +1,6 @@
 import { statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { db, getState, getMode, getFocus, getAgentMode } from "../db/index.js";
 import { governor } from "../core/safetyGovernor.js";
 import { leseStand } from "../core/leseBudget.js";
@@ -17,6 +18,12 @@ import { crmDataQuality, goalFunnelEconomics } from "./crmStages.js";
 import { readSavingsToday } from "./lowRead.js";
 import { contactIdentityHealth } from "./contactIdentity.js";
 import { sendHealthStand } from "../core/sendHealth.js";
+import { openJobFailures } from "../core/jobReliability.js";
+
+const APP_VERSION = (() => {
+  try { return String(createRequire(import.meta.url)("../../package.json").version || "unbekannt"); }
+  catch { return "unbekannt"; }
+})();
 
 // Pfad zur gebündelten app.asar-DATEI (nur in der gepackten App). Deren Änderungsdatum verrät ein
 // frisch installiertes Update; liegt es NACH dem Engine-Start, läuft die Engine noch mit altem Code.
@@ -76,6 +83,7 @@ type ContactRow = {
 
 export function getDashboardData() {
   const sendHealth = sendHealthStand();
+  const jobFailures = openJobFailures();
   const contacts = db
     .prepare(
       `SELECT c.id, c.full_name, c.headline, c.profile_url, c.status, c.invited_at, c.accepted_at,
@@ -355,6 +363,7 @@ export function getDashboardData() {
 
   return {
     generatedAt: new Date().toISOString(),
+    app: { version: APP_VERSION, channel: APP_VERSION.includes("beta") ? "Beta" : "Stabil" },
     engine: {
       heartbeat,
       alive: engineAlive,
@@ -450,6 +459,7 @@ export function getDashboardData() {
         | { art: "sofort"; befehl: "engine_start" | "notaus_loesen" | "pause_loesen"; text: string }
         | { art: "gehe"; ziel: "today" | "settings" | "contacts" | "campaigns"; text: string }
         | { art: "kampagne"; id: number; text: string }
+        | { art: "job"; name: string; text: string }
         | { art: "warten"; text: string };
       const liste: { was: string; grund: string; tun: string; aktion: Aktion }[] = [];
       if (governorState.notAus) liste.push({ was: "Jeder Versand", grund: "Not-Aus ist aktiv", tun: "Not-Aus lösen", aktion: { art: "sofort", befehl: "notaus_loesen", text: "Not-Aus lösen" } });
@@ -469,6 +479,16 @@ export function getDashboardData() {
         liste.push({ was: "Vernetzungen (halbes Tempo)", grund: `Annahmequote ${(acc.rate * 100).toFixed(0)}% liegt unter ${(acc.minRate * 100).toFixed(0)}%`, tun: "Lead-Quellen prüfen", aktion: { art: "gehe", ziel: "settings", text: "Lead-Quellen prüfen" } });
       }
       if (sendHealth.status !== "ok") liste.push({ was: "Nachrichtenversand", grund: sendHealth.reason || "Sendeweg noch nicht geprüft", tun: "Sendeweg prüfen", aktion: { art: "gehe", ziel: "settings", text: "Sendeweg prüfen" } });
+      for (const failure of jobFailures) {
+        liste.push({
+          was: `Hintergrundaufgabe „${failure.job}"`,
+          grund: failure.status === "dead"
+            ? `${failure.consecutiveFailures} technische Fehler – automatisch angehalten: ${failure.lastError || "Ursache unbekannt"}`
+            : `Technischer Fehler, nächster Versuch nach Wartezeit: ${failure.lastError || "Ursache unbekannt"}`,
+          tun: failure.status === "dead" ? "Nach Prüfung erneut versuchen" : "Jetzt erneut versuchen",
+          aktion: { art: "job", name: failure.job, text: failure.status === "dead" ? "Erneut versuchen" : "Wartezeit aufheben" },
+        });
+      }
       // Zweiter Versandbeleg systematisch gebrochen? Dann meldet der Bot Erfolge, die er nicht
       // mehr nachweisen kann – der Fall, der im Juli zu falsch gemeldeten Versänden führte.
       const beleg = verlaufsBelegStand();
@@ -498,6 +518,7 @@ export function getDashboardData() {
       codeVersion: getState("engine_code_version") || null,
       processId: getState("engine_pid") || null,
     },
+    jobFailures,
     sendeFehler: (() => {
       const errs = (() => {
         try {

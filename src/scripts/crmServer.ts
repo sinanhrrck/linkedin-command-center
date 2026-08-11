@@ -24,6 +24,7 @@ import { LIVE_SHOT_PATH } from "../core/session.js";
 import { createMission } from "../modules/missions.js";
 import { resolveGoalAlert } from "../modules/goals.js";
 import { flushPendingReports, queueUserReport } from "../modules/reporting.js";
+import { retryJob } from "../core/jobReliability.js";
 import { backfillRelationshipSignals, setRelationshipPolicy } from "../modules/relationshipPolicy.js";
 import { backfillContactIdentities, resolveIdentityConflict } from "../modules/contactIdentity.js";
 import { backfillContactTimeline } from "../modules/contactTimeline.js";
@@ -191,6 +192,25 @@ const server = createServer((req, res) => {
       } catch (error) {
         res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" })
           .end(JSON.stringify({ error: String((error as Error)?.message || error) }));
+      }
+    });
+    return;
+  }
+
+  // Eine Dead-Letter-Aufgabe wird nur durch eine konkrete Nutzeraktion wieder freigegeben.
+  // Der nächste reguläre Zeitplan führt sie dann durch dieselbe serielle Queue aus; dieser
+  // Endpunkt startet bewusst keinen parallelen Browserjob.
+  if (url.pathname === "/api/job-retry" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { job } = JSON.parse(body || "{}");
+        if (!job || typeof job !== "string" || !/^[a-zA-Z][a-zA-Z0-9_-]{0,40}$/.test(job)) throw new Error("Ungültige Aufgabe.");
+        const ok = retryJob(job);
+        res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok, job }));
+      } catch (error) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String((error as Error)?.message || error) }));
       }
     });
     return;

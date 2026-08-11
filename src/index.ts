@@ -31,6 +31,7 @@ import { backfillContactTimeline } from "./modules/contactTimeline.js";
 import { backfillCampaignWorkflows, syncCampaignTargetForDraft } from "./modules/campaignWorkflow.js";
 import { backfillConversationMemories, backfillDraftContexts } from "./modules/conversationMemory.js";
 import { LeseBudgetErschoepft } from "./core/leseBudget.js";
+import { jobRunPermission, recordJobFailure, recordJobSuccess } from "./core/jobReliability.js";
 
 backfillCrmStages();
 const identityBackfill = backfillContactIdentities();
@@ -66,6 +67,11 @@ const jobQueue = new SerialJobQueue((snapshot) => {
 });
 
 async function einzeln(name: string, fn: () => Promise<unknown>, priority = 50) {
+  const erlaubnis = jobRunPermission(name);
+  if (!erlaubnis.allowed) {
+    console.info(`[${name}] kontrolliert zurückgestellt – ${erlaubnis.reason}`);
+    return false;
+  }
   const protokolliert = async () => {
     const info = db.prepare("INSERT INTO bot_activity(job,status) VALUES(?,'running')").run(name);
     const id = Number(info.lastInsertRowid);
@@ -75,6 +81,7 @@ async function einzeln(name: string, fn: () => Promise<unknown>, priority = 50) 
         ? result > 0 ? `${result} Element${result === 1 ? "" : "e"} bearbeitet` : "Geprüft, nichts Neues"
         : "Prüfung abgeschlossen";
       db.prepare("UPDATE bot_activity SET status='done',detail=?,finished_at=datetime('now') WHERE id=?").run(detail, id);
+      recordJobSuccess(name);
       // Das Protokoll ist eine Betriebsanzeige, kein ewiges Audit-Log.
       db.prepare("DELETE FROM bot_activity WHERE id NOT IN (SELECT id FROM bot_activity ORDER BY id DESC LIMIT 300)").run();
       return result;
@@ -87,6 +94,10 @@ async function einzeln(name: string, fn: () => Promise<unknown>, priority = 50) 
       }
       db.prepare("UPDATE bot_activity SET status='failed',detail=?,finished_at=datetime('now') WHERE id=?")
         .run(String((error as Error)?.message || error).slice(0, 180), id);
+      const reliability = recordJobFailure(name, error);
+      if (reliability.status === "dead") {
+        console.error(`[${name}] nach ${reliability.consecutiveFailures} Fehlern angehalten – im Dashboard prüfen.`);
+      }
       throw error;
     }
   };

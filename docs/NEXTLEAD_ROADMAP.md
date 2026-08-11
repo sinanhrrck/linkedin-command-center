@@ -52,12 +52,13 @@ in eine neue proaktive Sequenz gelangen.
 
 ## Phase 4 – Betriebssicherheit und Transparenz
 
-- [ ] Einheitliche Job-Queue fuer Lesen, Vernetzen, Entwuerfe und Versand
+- [x] Einheitliche Job-Queue fuer Lesen, Vernetzen, Entwuerfe und Versand
 - [ ] Wiederholungsregeln, Zeitlimits und Dead-Letter-Queue fuer dauerhafte Fehler
-- [ ] Erklaerbare Statusgruende und konkrete Reparaturaktion bei jedem Stillstand
-- [ ] Audit-Log: warum wurde ein Kontakt aufgenommen, blockiert, verschoben oder angeschrieben
-- [ ] Kontingente, Ruhezeiten, Recovery-Modus und LinkedIn-Sicherheitsgrenzen zentral verwalten
-- [ ] Fehlerbericht und Feedback fuer jede Installation, Zustellung nur an den Betreiber
+  - Backoff und Dead-Letter nach drei Fehlern sind umgesetzt; zentrale abbrechbare Zeitlimits fehlen noch.
+- [x] Erklaerbare Statusgruende und konkrete Reparaturaktion bei jedem Stillstand
+- [x] Audit-Log: warum wurde ein Kontakt aufgenommen, blockiert, verschoben oder angeschrieben
+- [x] Kontingente, Ruhezeiten, Recovery-Modus und LinkedIn-Sicherheitsgrenzen zentral verwalten
+- [x] Fehlerbericht und Feedback fuer jede Installation, Zustellung nur an den Betreiber
 
 Abnahme: Jeder Stillstand ist erklaerbar und jeder Versand kann auf eine konkrete Entscheidung
 zurueckgefuehrt werden.

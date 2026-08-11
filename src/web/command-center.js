@@ -95,6 +95,7 @@ function renderStatus() {
   $("side-dot").style.background = okay ? "#58d19b" : critical ? "#ef7482" : "#e4ae54";
   $("side-state").textContent = stopped ? "Not-Aus aktiv" : alive ? "Arbeitet" : "Engine aus";
   $("side-detail").textContent = state.engine?.activeJob ? `Jetzt: ${state.engine.activeJob}` : alive ? "Aufgaben werden priorisiert" : "Keine Hintergrundarbeit";
+  $("app-version").textContent = `Version ${state.app?.version || "unbekannt"} · ${state.app?.channel || ""}`;
   const strip = $("status-strip"); strip.className = `status-strip ${okay ? "ok" : critical ? "bad" : "warn"}`;
   const title = stopped ? "Jeder Versand ist gestoppt." : health === "broken" ? "Der Sendeweg braucht Aufmerksamkeit."
     : health !== "ok" ? "Der Sendeweg wird vor dem nächsten Versand geprüft."
@@ -132,6 +133,18 @@ function renderStatus() {
       if (a.art === "kampagne") {
         showView("campaigns");
         return openCampaignForm((state.campaigns || []).find((c) => c.id === a.id));
+      }
+      if (a.art === "job") {
+        button.disabled = true;
+        try {
+          await post("/api/job-retry", { job: a.name });
+          toast("Wartezeit aufgehoben. Die Aufgabe läuft beim nächsten Zeitfenster erneut.");
+          await load(true);
+        } catch (error) {
+          toast(`Nicht geklappt: ${error.message}`);
+          button.disabled = false;
+        }
+        return;
       }
       button.disabled = true;
       const alterText = button.textContent;
