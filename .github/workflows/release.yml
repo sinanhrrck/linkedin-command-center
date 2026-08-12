@@ -60,5 +60,9 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          draft: true
+          # Direkt veroeffentlichen statt Entwurf: Ein Entwurf ist nur eingeloggt sichtbar und
+          # `releases/latest` findet ihn nicht — damit greifen weder die Download-Links der
+          # Landing-Page noch der eingebaute Update-Check.
+          draft: false
+          prerelease: true
           files: installer/**/*
