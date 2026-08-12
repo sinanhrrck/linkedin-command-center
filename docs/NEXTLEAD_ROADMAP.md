@@ -4,6 +4,10 @@ Dieser Fahrplan priorisiert zuerst Beziehungsschutz und Datenqualitaet. Mehr Aut
 erst sinnvoll, wenn eine bereits bekannte Aussage eines Kontakts jede spaetere Kampagne sicher
 stoppen oder verschieben kann.
 
+**Aktueller Stand (12.08.2026):** `0.8.0-beta.6` ist lokal installiert. Phasen 0 bis 4 sind
+abgeschlossen. Phase 5 ist begonnen. Der interne Funktionsstand ist noch nicht fuer eine breite
+externe Veroeffentlichung freigegeben; dafuer gelten die Kriterien in `RELEASE_QA_GATE.md`.
+
 ## Phase 0 – Beziehungsschutz (abgeschlossen)
 
 - [x] Kontaktweite Stati: aktiv, pausiert, nur manuell, ausgeschlossen
@@ -66,20 +70,39 @@ zurueckgefuehrt werden.
 ## Phase 5 – Wirkung messen und verbessern
 
 - [ ] Funnel je Kampagne und Segment von Quelle bis Termin/Ergebnis
+  - Gesamtfunnel und Ziel-Oekonomie fuer B1/P1/AEC sind vorhanden.
+  - Offen: belastbare Zuordnung je Kampagne, Lead-Quelle, Segment und Zeitraum bis zum Ergebnis.
 - [ ] Antwortqualitaet und echte Geschaeftsergebnisse statt nur Aktivitaet messen
+  - Status fuer qualifiziert, Termin, gewonnen und verloren sind technisch vorbereitet.
+  - Offen: konsistente Einordnung aller Antworten und eine belastbare Ergebnisansicht.
 - [ ] Versionierte Vorlagen und kontrollierte A/B-Tests
+  - Experiment-Grundstruktur ist vorhanden.
+  - Offen: unveraenderliche Vorlagenversionen, faire Zuteilung, Mindeststichprobe und Rollback.
 - [ ] Warnung bei sinkender Annahme-, Antwort- oder Qualifizierungsrate
+  - [x] Annahmequote mit Warnschwelle, sichtbarer Wirkung und Schalter fuer weniger Anfragen.
+  - [ ] Antwortquote, positive Antwortquote und Qualifizierungsquote mit Mindeststichprobe.
 - [ ] Empfehlungen bleiben Vorschlaege und veraendern keine laufende Kampagne ungeprueft
+  - Offen: Vorschau, bewusste Uebernahme, Ignorieren und Rueckgaengigmachen jeder Empfehlung.
 
 Abnahme: Verbesserungen werden anhand belastbarer Ergebnisse entschieden und sind rueckrollbar.
 
 ## Phase 6 – Mehrnutzerfaehigkeit und Produktreife
 
 - [ ] Nutzer, Rollen, getrennte Datenraeume und installationsuebergreifende Konfiguration
+  - Jede Installation arbeitet bereits mit ihrem lokalen Datenbestand.
+  - Offen: Anmeldung, Rollen und nachweisbar getrennte Datenraeume fuer mehrere Nutzer.
 - [ ] Geheimnisse ausschliesslich serverseitig und sicher rotierbar speichern
+  - Feedback wird ueber einen zentralen Relay-Dienst nur an den Betreiber zugestellt.
+  - Offen: Rotation des verwendeten Mail-Schluessels und zentrale Verwaltung aller Produktgeheimnisse.
 - [ ] Zentraler Release-Kanal mit Migration, Backup und Rueckrollmoeglichkeit
+  - Versionierte DMGs, Backup vor Installation und lokale Rueckfall-App sind vorhanden.
+  - Offen: signierter/notarisierter Updatekanal und automatisches, geprueftes Rollback fuer andere Nutzer.
 - [ ] Monitoring, Datenschutz, Aufbewahrungsregeln und Export/Loeschung
+  - Bereinigte Fehlerberichte, Feedback und optionale Ausschnitt-Screenshots sind vorhanden.
+  - Offen: zentrale Fehleruebersicht, Aufbewahrungsfristen, vollstaendiger Export und Kontoloeschung.
 - [ ] End-to-End-Tests fuer Installation, Update, Kampagne, Antwort, Sperre und Wiederherstellung
+  - 69 automatisierte Kern-, Integritaets- und Regressionstests sind gruen.
+  - Offen: echte Mehrinstallations- und Oberflaechenablaeufe einschliesslich Update und Wiederherstellung.
 
 Abnahme: Neue Nutzer erhalten dasselbe Verhalten und dieselben Schutzregeln ohne lokale
 Sonderkonfiguration fuer den Betreiber.
