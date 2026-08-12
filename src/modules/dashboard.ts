@@ -308,6 +308,7 @@ export function getDashboardData() {
     firstMessages: draftCount("first"),
     followups: draftCount("followup"),
     reactivations: draftCount("reaktivierung"),
+    comments: draftCount("comment"),
     eventInvites: draftCount("event"),
     meetings: meetingAttention,
     systemIssues,
@@ -460,6 +461,8 @@ export function getDashboardData() {
         | { art: "gehe"; ziel: "today" | "settings" | "contacts" | "campaigns"; text: string }
         | { art: "kampagne"; id: number; text: string }
         | { art: "job"; name: string; text: string }
+        | { art: "review"; kinds: string[]; text: string }
+        | { art: "campaignReview"; id: number; text: string }
         | { art: "warten"; text: string };
       const liste: { was: string; grund: string; tun: string; aktion: Aktion }[] = [];
       if (governorState.notAus) liste.push({ was: "Jeder Versand", grund: "Not-Aus ist aktiv", tun: "Not-Aus lösen", aktion: { art: "sofort", befehl: "notaus_loesen", text: "Not-Aus lösen" } });
@@ -502,7 +505,17 @@ export function getDashboardData() {
           aktion: { art: "gehe", ziel: "settings", text: "Verlauf prüfen" },
         });
       }
-      if (!approved && openDrafts.length) liste.push({ was: "Versand", grund: `${openDrafts.length} Entwürfe warten auf deine Freigabe`, tun: "Jetzt prüfen", aktion: { art: "gehe", ziel: "today", text: "Jetzt prüfen" } });
+      if (!approved && openDrafts.length) {
+        const normaleEntwuerfe = openDrafts.filter((draft) => draft.kind !== "event");
+        const ersterEvent = openDrafts.find((draft) => draft.kind === "event");
+        const campaignId = Number(String(ersterEvent?.incoming || "").replace("campaign:", ""));
+        const aktion: Aktion = normaleEntwuerfe.length
+          ? { art: "review", kinds: ["message", "pitchidee", "first", "reaktivierung", "followup", "comment"], text: "Jetzt prüfen" }
+          : Number.isInteger(campaignId) && campaignId > 0
+            ? { art: "campaignReview", id: campaignId, text: "Jetzt prüfen" }
+            : { art: "gehe", ziel: "campaigns", text: "Jetzt prüfen" };
+        liste.push({ was: "Versand", grund: `${openDrafts.length} Entwürfe warten auf deine Freigabe`, tun: "Jetzt prüfen", aktion });
+      }
       const kampagnenOhneZiel = db.prepare(
         `SELECT c.id, c.name FROM campaigns c WHERE c.active=1
            AND c.goal_code IS NULL

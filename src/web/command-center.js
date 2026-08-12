@@ -130,6 +130,14 @@ function renderStatus() {
       const a = (blockaden[Number(button.dataset.blockade)] || {}).aktion;
       if (!a) return;
       if (a.art === "gehe") return showView(a.ziel);
+      if (a.art === "review") {
+        showView("today"); reviewCampaign = null; reviewKinds = a.kinds; reviewIndex = 0; renderReviewer();
+        return;
+      }
+      if (a.art === "campaignReview") {
+        showView("campaigns"); reviewKinds = null; reviewCampaign = Number(a.id); reviewIndex = 0; renderReviewer();
+        return;
+      }
       if (a.art === "kampagne") {
         showView("campaigns");
         return openCampaignForm((state.campaigns || []).find((c) => c.id === a.id));
@@ -174,6 +182,7 @@ const GROUPS = [
   { key: "firstMessages", kinds: ["first"], icon: "+", title: "Erstnachrichten freigeben", copy: "Neue Vernetzungen persönlich eröffnen." },
   { key: "reactivations", kinds: ["reaktivierung"], icon: "◎", title: "Zusatz · bestehendes Netzwerk", copy: "Getrennt von der Akquise und immer nur nach deiner Freigabe." },
   { key: "followups", kinds: ["followup"], icon: "↻", title: "Follow-ups prüfen", copy: "Freundlich nachfassen, maximal zweimal." },
+  { key: "comments", kinds: ["comment"], icon: "✦", title: "Kommentar prüfen", copy: "Öffentliche Kommentare werden nur nach deiner Freigabe veröffentlicht." },
 ];
 function renderToday() {
   const attention = state.attention || {};
@@ -370,8 +379,8 @@ function contextEvidenceCard(draft) {
   ].filter(Boolean);
   return `<section class="context-evidence ${blocked ? "conflict" : ""}"><div class="context-evidence-head"><span>${blocked ? "Konflikt im Gespräch" : "Warum passt diese Nachricht?"}</span><b>${blocked ? "Nicht freigeben" : "Kontext geprüft"}</b></div><div class="context-evidence-grid">${facts.map(([label, value]) => `<div><span>${esc(label)}</span><p>${esc(value)}</p></div>`).join("")}</div>${evidence.nextContactAt ? `<small>Nächste Ansprache frühestens: ${esc(new Date(evidence.nextContactAt.replace(" ", "T")).toLocaleDateString("de-DE"))}</small>` : ""}</section>`;
 }
-function bindDraftDelete(draft) {
-  const button = $("review-delete");
+function bindDraftDelete(draft, reviewer) {
+  const button = reviewer.querySelector('[data-review-action="delete"]');
   if (!button) return;
   let armed = false;
   button.onclick = async () => {
@@ -398,33 +407,39 @@ function renderReviewer() {
   const draft = list[reviewIndex]; reviewer.classList.remove("hidden");
   if (draft.phase === "approach") {
     let options = []; try { options = JSON.parse(draft.draft || "[]"); } catch {}
-    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Neue Gesprächsrichtung</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>Wähle zuerst die Idee. Danach schreibt NextLead einen komplett neuen Text.</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}<div class="approach-grid">${options.map((option, index) => `<button class="approach-card" data-approach="${esc(option.key)}"><span>0${index + 1}</span><b>${esc(option.title)}</b><small>${esc(option.description)}</small></button>`).join("")}</div><div class="review-actions"><button id="review-delete" class="delete-draft">Entwurf löschen</button></div></div></div>`;
+    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Neue Gesprächsrichtung</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>Wähle zuerst die Idee. Danach schreibt NextLead einen komplett neuen Text.</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}<div class="approach-grid">${options.map((option, index) => `<button class="approach-card" data-approach="${esc(option.key)}"><span>0${index + 1}</span><b>${esc(option.title)}</b><small>${esc(option.description)}</small></button>`).join("")}</div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button></div></div></div>`;
     reviewer.querySelectorAll("[data-approach]").forEach((button) => button.addEventListener("click", async () => { button.disabled = true; await post("/api/draft", { id: draft.id, action: "choose_approach", text: { approachKey: button.dataset.approach } }); toast("Neue Richtung gewählt. Nachricht wurde neu geschrieben."); await load(); renderReviewer(); }));
-    bindDraftDelete(draft);
+    bindDraftDelete(draft, reviewer);
   } else if (draft.kind === "pitchidee") {
     let ideas = []; try { ideas = JSON.parse(draft.draft || "[]"); } catch {}
-    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Pitch-Richtung wählen</span><h3>${esc(draft.participant || "Kontakt")}</h3></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose"><div class="incoming">${esc(draft.incoming || "Kein Eingangstext gespeichert.")}</div><div class="work-groups">${ideas.map((idea, index) => `<button class="work-item${index === 0 ? " recommended" : ""}" data-pitch="${index}"><span class="work-icon">${index + 1}</span><span class="work-copy"><b>Ansatz ${index + 1}${index === 0 ? ' <em class="recommended-label">(Empfohlen)</em>' : ""}</b><span>${esc(idea)}</span></span></button>`).join("")}</div><div class="review-actions"><button id="review-delete" class="delete-draft">Entwurf löschen</button></div></div></div>`;
+    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Pitch-Richtung wählen</span><h3>${esc(draft.participant || "Kontakt")}</h3></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose"><div class="incoming">${esc(draft.incoming || "Kein Eingangstext gespeichert.")}</div><div class="work-groups">${ideas.map((idea, index) => `<button class="work-item${index === 0 ? " recommended" : ""}" data-pitch="${index}"><span class="work-icon">${index + 1}</span><span class="work-copy"><b>Ansatz ${index + 1}${index === 0 ? ' <em class="recommended-label">(Empfohlen)</em>' : ""}</b><span>${esc(idea)}</span></span></button>`).join("")}</div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button></div></div></div>`;
     reviewer.querySelectorAll("[data-pitch]").forEach((button) => button.addEventListener("click", async () => { button.disabled = true; await post("/api/pitch", { id: draft.id, idee: ideas[Number(button.dataset.pitch)] }); toast("Nachricht wird vorbereitet."); await load(); renderReviewer(); }));
-    bindDraftDelete(draft);
+    bindDraftDelete(draft, reviewer);
   } else {
     const label = { message: "Antwort", first: "Erstnachricht", followup: "Follow-up", reaktivierung: "Netzwerk-Zusatz · Freigabe erforderlich", event: "Event-Einladung" }[draft.kind] || "Entwurf";
     const reviewHint = draft.kind === "reaktivierung"
       ? "Zusätzlicher Kontakt – wird nur nach deiner Genehmigung gesendet."
       : draft.approach_key ? `Ansatz: ${draft.approach_key.replaceAll("_", " ")}` : draft.intent || "bereit zur Prüfung";
-    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">${label}</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>${esc(reviewHint)}</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}${contextEvidenceCard(draft)}<textarea id="review-text">${esc(draft.draft)}</textarea><div id="reject-feedback" class="reject-feedback hidden"><span class="eyebrow">Was soll sich ändern?</span><div class="feedback-options"><button data-feedback="different_approach">Komplett anderer Ansatz</button><button data-feedback="artificial">Klingt künstlich</button><button data-feedback="too_personal">Zu persönlich</button><button data-feedback="too_salesy">Zu verkäuferisch</button></div><div class="custom-feedback"><input id="custom-feedback-text" placeholder="Oder beschreibe kurz deine gewünschte Richtung…"/><button id="custom-feedback-send">Neu schreiben</button></div></div><div class="review-actions"><button id="review-delete" class="delete-draft">Entwurf löschen</button><button id="review-reject">Ablehnen</button><button id="review-approve" class="primary">Genehmigen</button></div></div></div>`;
-    $("review-approve").onclick = async () => {
-      const button = $("review-approve"), reject = $("review-reject");
+    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">${label}</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>${esc(reviewHint)}</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}${contextEvidenceCard(draft)}<textarea data-review-field="text">${esc(draft.draft)}</textarea><div data-review-panel="reject" class="reject-feedback hidden"><span class="eyebrow">Was soll sich ändern?</span><div class="feedback-options"><button data-feedback="different_approach">Komplett anderer Ansatz</button><button data-feedback="artificial">Klingt künstlich</button><button data-feedback="too_personal">Zu persönlich</button><button data-feedback="too_salesy">Zu verkäuferisch</button></div><div class="custom-feedback"><input data-review-field="feedback" placeholder="Oder beschreibe kurz deine gewünschte Richtung…"/><button data-review-action="rewrite">Neu schreiben</button></div></div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button><button data-review-action="reject">Ablehnen</button><button data-review-action="approve" class="primary">Genehmigen</button></div></div></div>`;
+    const approve = reviewer.querySelector('[data-review-action="approve"]');
+    const reject = reviewer.querySelector('[data-review-action="reject"]');
+    const textField = reviewer.querySelector('[data-review-field="text"]');
+    const rejectPanel = reviewer.querySelector('[data-review-panel="reject"]');
+    const feedbackField = reviewer.querySelector('[data-review-field="feedback"]');
+    const rewrite = reviewer.querySelector('[data-review-action="rewrite"]');
+    approve.onclick = async () => {
+      const button = approve;
       button.disabled = true; reject.disabled = true; button.textContent = "Wird gespeichert…";
       try {
-        await post("/api/draft", { id: draft.id, action: "approve", text: $("review-text").value }, 10000);
+        await post("/api/draft", { id: draft.id, action: "approve", text: textField.value }, 10000);
         toast("Genehmigt – NextLead stellt sicher zu."); await load(); renderReviewer();
       } catch (error) { toast(`Genehmigen fehlgeschlagen: ${error.message}`); renderReviewer(); }
     };
-    $("review-reject").onclick = () => { $("reject-feedback").classList.toggle("hidden"); $("reject-feedback").scrollIntoView({ behavior: "smooth", block: "nearest" }); };
+    reject.onclick = () => { rejectPanel.classList.toggle("hidden"); rejectPanel.scrollIntoView({ behavior: "smooth", block: "nearest" }); };
     const rejectWith = async (reason, instruction = "") => {
       const buttons = reviewer.querySelectorAll("button");
       buttons.forEach((button) => { button.disabled = true; });
-      const selected = reviewer.querySelector(`[data-feedback="${reason}"]`) || $("custom-feedback-send");
+      const selected = reviewer.querySelector(`[data-feedback="${reason}"]`) || rewrite;
       if (selected) selected.textContent = reason === "different_approach" ? "Richtungen werden geladen…" : "Wird neu geschrieben…";
       try {
         await post("/api/draft", { id: draft.id, action: "reject", text: { reason, instruction } }, 90000);
@@ -433,8 +448,8 @@ function renderReviewer() {
       } catch (error) { toast(`Ablehnen fehlgeschlagen: ${error.message}`); renderReviewer(); }
     };
     reviewer.querySelectorAll("[data-feedback]").forEach((button) => button.addEventListener("click", () => rejectWith(button.dataset.feedback)));
-    $("custom-feedback-send").onclick = () => { const instruction = $("custom-feedback-text").value.trim(); if (!instruction) return $("custom-feedback-text").focus(); rejectWith("custom", instruction); };
-    bindDraftDelete(draft);
+    rewrite.onclick = () => { const instruction = feedbackField.value.trim(); if (!instruction) return feedbackField.focus(); rejectWith("custom", instruction); };
+    bindDraftDelete(draft, reviewer);
   }
   if (reviewCampaign) {
     // In der Kampagne ist die Prüfung ein aufklappbarer Bereich – deshalb ein eigenes Schließen.
