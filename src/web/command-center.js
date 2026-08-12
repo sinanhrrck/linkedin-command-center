@@ -840,6 +840,22 @@ function renderSettings() {
   const level = automationLevel(); document.querySelectorAll("[data-level]").forEach((button) => button.classList.toggle("active", button.dataset.level === level));
   $("automation-copy").textContent = { vorschlaege: "NextLead vernetzt automatisch. Jede Nachricht bleibt ein Entwurf.", halb: "Azubi-Erstnachrichten werden automatisch gesendet, Antworten bleiben zur Prüfung.", agent_test: "Der Gesprächsagent denkt mit, sendet aber nicht selbst.", agent_live: "Der Gesprächsagent führt Routinegespräche selbst und übergibt wichtige Fälle." }[level] + " Bestehende Netzwerk-Kontakte brauchen in jeder Stufe deine Freigabe.";
   const g = state.governor || {}, connect = g.connect || {};
+  const acceptance = g.acceptance || {};
+  const warning = $("acceptance-warning");
+  const lowAcceptance = !!acceptance.armed && !!acceptance.low;
+  warning.classList.toggle("hidden", !lowAcceptance);
+  warning.classList.toggle("protection-off", lowAcceptance && !acceptance.protectionActive);
+  if (lowAcceptance) {
+    $("acceptance-warning-rate").textContent = `${Math.round((acceptance.rate || 0) * 100)} %`;
+    $("acceptance-warning-threshold").textContent = `Warnschwelle ${Math.round((acceptance.minRate || 0) * 100)} %`;
+    $("acceptance-warning-effect").textContent = acceptance.protectionActive
+      ? `Aktiv: NextLead sendet höchstens ${acceptance.reducedCap} statt ${acceptance.normalCap} Vernetzungsanfragen pro Tag. Nachrichten und Antworten laufen normal weiter.`
+      : `Aus: NextLead darf bis zu ${acceptance.normalCap} Vernetzungsanfragen pro Tag senden. Empfohlen sind aktuell höchstens ${acceptance.reducedCap}.`;
+    const toggle = $("acceptance-protection-toggle");
+    toggle.setAttribute("aria-checked", String(!!acceptance.protectionActive));
+    toggle.classList.toggle("active", !!acceptance.protectionActive);
+    $("acceptance-protection-state").textContent = acceptance.protectionActive ? `Aktiv · max. ${acceptance.reducedCap}/Tag` : `Aus · max. ${acceptance.normalCap}/Tag`;
+  }
   /**
    * Das Lese-Budget steht bewusst GANZ OBEN und mit Warnfarbe: Es ist die Kennzahl, wegen der
    * LinkedIn am 05.08.2026 das Konto gesperrt hat ("große Menge an Profildaten abgerufen").
@@ -1015,6 +1031,17 @@ $("relationship-exclude").onclick = async () => {
   finally { button.disabled = false; }
 };
 $("engine-toggle").onclick = async () => { await post("/api/engine", { action: state.engine?.alive ? "stop" : "start" }); toast(state.engine?.alive ? "Engine wird gestoppt." : "Engine startet."); setTimeout(load, 1800); };
+$("acceptance-protection-toggle").onclick = async (event) => {
+  const button = event.currentTarget;
+  const an = !state.governor?.acceptance?.protectionActive;
+  button.disabled = true;
+  try {
+    await post("/api/acceptance-protection", { an });
+    await load();
+    toast(an ? "Weniger Anfragen sind aktiviert." : "Reduzierung ist ausgeschaltet.");
+  } catch (error) { toast(`Nicht möglich: ${error.message}`); }
+  finally { button.disabled = false; }
+};
 $("backup-now").onclick = async () => { await post("/api/backup"); toast("Sicherung erstellt."); };
 document.querySelectorAll("[data-level]").forEach((button) => button.addEventListener("click", async () => { await post("/api/automatik", { level: button.dataset.level }); await load(); toast("Automatik aktualisiert."); }));
 $("source-add").onclick = async () => { await post("/api/source", { action: "add", label: $("source-label").value, url: $("source-url").value }); $("source-label").value = ""; $("source-url").value = ""; await load(); toast("Quelle gespeichert. Nachschub wird geholt."); };

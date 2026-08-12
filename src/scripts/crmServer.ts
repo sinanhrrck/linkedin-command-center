@@ -560,6 +560,23 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // ANNAHMEQUOTEN-SCHUTZ: reduziert bei schwacher Quote nur neue Vernetzungsanfragen.
+  // Harte Tages-/Wochenlimits und alle übrigen Sicherungen bleiben auch bei "Aus" aktiv.
+  if (url.pathname === "/api/acceptance-protection" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { an } = JSON.parse(body || "{}");
+        governor.setAcceptanceProtection(!!an);
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, an: !!an }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
   /**
    * SICHERHEITSPAUSE LÖSEN (2026-08-06). Der Circuit-Breaker (Checkpoint, Fehlerserie) pausiert
    * den Governor und verlangt bewusst manuelles Eingreifen. Bisher gab es dafür KEINEN Weg im

@@ -470,13 +470,15 @@ export function getDashboardData() {
       const acc = governorState.acceptance;
       if (acc.armed && acc.rate < config.safety.hardStopAcceptance) {
         liste.push({
-          was: "Vernetzungen (Recovery-Modus)",
-          grund: `Annahmequote ${(acc.rate * 100).toFixed(0)}% – NextLead vernetzt kontrolliert weiter, maximal ${acc.recoveryCap} pro Tag`,
-          tun: "Lead-Quellen prüfen",
-          aktion: { art: "gehe", ziel: "settings", text: "Lead-Quellen prüfen" },
+          was: acc.protectionActive ? "Vernetzungen (Schutzmodus)" : "Annahmequote niedrig – Schutz ist aus",
+          grund: acc.protectionActive
+            ? `Annahmequote ${(acc.rate * 100).toFixed(0)}% – maximal ${acc.reducedCap} statt ${acc.normalCap} Anfragen pro Tag`
+            : `Annahmequote ${(acc.rate * 100).toFixed(0)}% – derzeit gilt das normale Limit von ${acc.normalCap} Anfragen pro Tag`,
+          tun: "Anfragen einstellen",
+          aktion: { art: "gehe", ziel: "settings", text: "Anfragen einstellen" },
         });
       } else if (acc.armed && acc.rate < acc.minRate) {
-        liste.push({ was: "Vernetzungen (halbes Tempo)", grund: `Annahmequote ${(acc.rate * 100).toFixed(0)}% liegt unter ${(acc.minRate * 100).toFixed(0)}%`, tun: "Lead-Quellen prüfen", aktion: { art: "gehe", ziel: "settings", text: "Lead-Quellen prüfen" } });
+        liste.push({ was: acc.protectionActive ? "Vernetzungen (Schutzmodus)" : "Annahmequote niedrig – Schutz ist aus", grund: acc.protectionActive ? `Annahmequote ${(acc.rate * 100).toFixed(0)}% – maximal ${acc.reducedCap} statt ${acc.normalCap} Anfragen pro Tag` : `Annahmequote ${(acc.rate * 100).toFixed(0)}% – normales Limit ${acc.normalCap} pro Tag`, tun: "Anfragen einstellen", aktion: { art: "gehe", ziel: "settings", text: "Anfragen einstellen" } });
       }
       if (sendHealth.status !== "ok") liste.push({ was: "Nachrichtenversand", grund: sendHealth.reason || "Sendeweg noch nicht geprüft", tun: "Sendeweg prüfen", aktion: { art: "gehe", ziel: "settings", text: "Sendeweg prüfen" } });
       for (const failure of jobFailures) {

@@ -112,6 +112,15 @@ class SafetyGovernor {
     console.warn(`[GOVERNOR] Zeitfenster ${an ? "AN (9–22 Uhr)" : "AUS (rund um die Uhr)"}`);
   }
 
+  /** Optionale Annahmequoten-Bremse. Default AN, damit Updates nie unbemerkt beschleunigen. */
+  acceptanceProtectionAktiv(): boolean {
+    return getState("acceptance_protection_off") !== "1";
+  }
+  setAcceptanceProtection(an: boolean) {
+    setState("acceptance_protection_off", an ? "0" : "1");
+    console.warn(`[GOVERNOR] Annahmequoten-Schutz ${an ? "AKTIV" : "AUS"}`);
+  }
+
   private withinWorkingHours(type?: ActionType): boolean {
     const now = new Date();
     // Uhrzeit-Fenster NUR prüfen, wenn eingeschaltet. Ist es aus, darf zu jeder Stunde gesendet werden.
@@ -223,7 +232,7 @@ class SafetyGovernor {
      * halbe Tageskontingent. Weniger Anfragen bei schwacher Quote ist sachlich richtig; ein
      * Totalstillstand könnte die Quote dagegen nicht mit besseren Kontakten reparieren.
      */
-    if (type === "connect") {
+    if (type === "connect" && this.acceptanceProtectionAktiv()) {
       const { rate, sample } = this.acceptanceRate();
       if (sample >= config.safety.acceptanceRateMinSample) {
         if (rate < config.safety.hardStopAcceptance && this.countToday("connect") >= config.safety.recoveryConnectCap) {
@@ -249,7 +258,12 @@ class SafetyGovernor {
     const { rate, sample } = this.acceptanceRate();
     const warmup = this.warmupFactor();
     const recovery = sample >= config.safety.acceptanceRateMinSample && rate < config.safety.hardStopAcceptance;
+    const acceptanceLow = sample >= config.safety.acceptanceRateMinSample && rate < config.safety.minAcceptanceRate;
+    const acceptanceProtection = this.acceptanceProtectionAktiv();
     const connectCap = this.effectiveCap("connect");
+    const reducedConnectCap = recovery
+      ? Math.min(connectCap, config.safety.recoveryConnectCap)
+      : acceptanceLow ? Math.ceil(connectCap / 2) : connectCap;
     return {
       notAus: this.notAusAktiv(),
       zeitfenster: this.zeitfensterAktiv(),
@@ -266,7 +280,7 @@ class SafetyGovernor {
       connect: {
         today: this.countToday("connect"),
         effectiveCap: connectCap,
-        allowedCap: recovery ? Math.min(connectCap, config.safety.recoveryConnectCap) : connectCap,
+        allowedCap: acceptanceProtection ? reducedConnectCap : connectCap,
         hardCap: config.safety.dailyCaps.connect,
         week: this.countThisWeek("connect"),
         weeklyCap: config.safety.weeklyConnectCap,
@@ -290,8 +304,12 @@ class SafetyGovernor {
         minRate: config.safety.minAcceptanceRate,
         minSample: config.safety.acceptanceRateMinSample,
         armed: sample >= config.safety.acceptanceRateMinSample,
+        low: acceptanceLow,
         recovery,
         recoveryCap: config.safety.recoveryConnectCap,
+        protectionActive: acceptanceProtection,
+        normalCap: connectCap,
+        reducedCap: reducedConnectCap,
       },
     };
   }

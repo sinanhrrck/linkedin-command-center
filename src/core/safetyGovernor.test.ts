@@ -68,6 +68,18 @@ test("unter der Gefahrenschwelle läuft ein kleines Recovery-Kontingent", () => 
   if (!connect.ok) assert.match(connect.reason, /Recovery-Kontingent 3\/3/);
 });
 
+test("Nutzer kann die Reduzierung aus- und wieder einschalten", () => {
+  const vorher = governor.snapshot();
+  assert.equal(vorher.acceptance.protectionActive, true);
+  assert.equal(vorher.connect.allowedCap, 3);
+  governor.setAcceptanceProtection(false);
+  const ohneSchutz = governor.snapshot();
+  assert.equal(ohneSchutz.connect.allowedCap, ohneSchutz.connect.effectiveCap);
+  assert.equal(governor.canDoAction("connect").ok, true);
+  governor.setAcceptanceProtection(true);
+  assert.equal(governor.canDoAction("connect").ok, false);
+});
+
 test("ein defekter Sendeweg stoppt auch Kampagnennachrichten", () => {
   setState("send_health", "broken");
   const campaign = governor.canDoAction("campaign");
