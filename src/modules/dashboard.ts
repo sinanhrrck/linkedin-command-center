@@ -318,7 +318,7 @@ export function getDashboardData() {
     .prepare(
       `SELECT id,job,status,detail,started_at,finished_at
          FROM bot_activity
-        WHERE status IN ('done','failed')
+        WHERE status IN ('done','failed','timed_out')
           AND NOT (job='post' AND detail='Geprüft, nichts Neues')
         ORDER BY COALESCE(finished_at,started_at) DESC
         LIMIT 12`,

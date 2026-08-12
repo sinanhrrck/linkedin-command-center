@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { config } from "../config.js";
 import { governor } from "./safetyGovernor.js";
 import { zaehleAbruf, pruefeLeseBudget } from "./leseBudget.js";
+import { throwIfJobAborted } from "./jobTimeout.js";
 
 let context: BrowserContext | null = null;
 
@@ -63,6 +64,7 @@ export const LIVE_SHOT_PATH = join(process.cwd(), ".live", "screen.jpg");
  * @param opts.visible true = Fenster sichtbar lassen (nur fürs manuelle Login nötig).
  */
 export async function getContext(opts: { visible?: boolean } = {}): Promise<BrowserContext> {
+  throwIfJobAborted();
   // SELBSTHEILUNG: Stirbt der Browser (Absturz, pkill, Rechner-Schlaf), zeigte die Variable
   // trotzdem weiter auf ihn. getContext() gab dann die Leiche zurück und JEDER Versand
   // scheiterte mit "Target page, context or browser has been closed" – dauerhaft, bis der
@@ -132,6 +134,7 @@ function haengeZaehlerAn(page: Page): void {
  * statt weiterzulesen, bis LinkedIn eingreift (siehe core/leseBudget.ts).
  */
 export async function newPage(opts: { manuell?: boolean } = {}): Promise<Page> {
+  throwIfJobAborted();
   // `manuell` = der Mensch sitzt davor (npm run login). Das Lese-Budget bremst den BOT,
   // nicht den Nutzer: Wäre es aufgebraucht, käme man sich sonst nicht mal mehr einloggen –
   // eine Sicherung, die sich selbst aussperrt.
@@ -170,6 +173,7 @@ export async function saveLiveShot(): Promise<void> {
  * Nach jeder Navigation aufrufen.
  */
 export async function guardAgainstCheckpoint(page: Page): Promise<boolean> {
+  throwIfJobAborted();
   const url = page.url();
   // Primärsignal: die URL. LinkedIn-Sicherheitsseiten leiten hierhin um.
   let checkpointHit =

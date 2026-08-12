@@ -305,7 +305,7 @@ CREATE INDEX IF NOT EXISTS idx_draft_feedback_thread ON draft_feedback(thread_ur
 CREATE TABLE IF NOT EXISTS bot_activity (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   job         TEXT NOT NULL,
-  status      TEXT NOT NULL DEFAULT 'running', -- running | done | failed
+  status      TEXT NOT NULL DEFAULT 'running', -- running | done | failed | timed_out | skipped | interrupted
   detail      TEXT,
   started_at  TEXT NOT NULL DEFAULT (datetime('now')),
   finished_at TEXT

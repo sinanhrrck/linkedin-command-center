@@ -19,7 +19,7 @@ import { selbstCheck } from "./modules/healthcheck.js";
 import { config } from "./config.js";
 import { startTelegram } from "./modules/telegram.js";
 import { countByStatus, resetHaengendeInvites } from "./modules/crm.js";
-import { saveLiveShot } from "./core/session.js";
+import { closeSession, saveLiveShot } from "./core/session.js";
 import { SerialJobQueue } from "./core/jobQueue.js";
 import { ensureDailyBackup } from "./core/backups.js";
 import { syncAnonymousLearning } from "./modules/learning.js";
@@ -32,6 +32,7 @@ import { backfillCampaignWorkflows, syncCampaignTargetForDraft } from "./modules
 import { backfillConversationMemories, backfillDraftContexts } from "./modules/conversationMemory.js";
 import { LeseBudgetErschoepft } from "./core/leseBudget.js";
 import { jobRunPermission, recordJobFailure, recordJobSuccess } from "./core/jobReliability.js";
+import { JobTimeoutError, JOB_TIMEOUT_MS, DEFAULT_JOB_TIMEOUT_MS, runWithJobTimeout } from "./core/jobTimeout.js";
 
 backfillCrmStages();
 const identityBackfill = backfillContactIdentities();
@@ -76,7 +77,15 @@ async function einzeln(name: string, fn: () => Promise<unknown>, priority = 50) 
     const info = db.prepare("INSERT INTO bot_activity(job,status) VALUES(?,'running')").run(name);
     const id = Number(info.lastInsertRowid);
     try {
-      const result = await fn();
+      const result = await runWithJobTimeout(name, fn, {
+        timeoutMs: JOB_TIMEOUT_MS[name] ?? DEFAULT_JOB_TIMEOUT_MS,
+        onTimeout: async (timeout) => {
+          db.prepare("UPDATE bot_activity SET detail=? WHERE id=?")
+            .run(`${timeout.message} – Browser wird sicher beendet`, id);
+          console.warn(`[${name}] ${timeout.message}; gemeinsamer Browser wird geschlossen.`);
+          await closeSession();
+        },
+      });
       const detail = typeof result === "number"
         ? result > 0 ? `${result} Element${result === 1 ? "" : "e"} bearbeitet` : "Geprüft, nichts Neues"
         : "Prüfung abgeschlossen";
@@ -92,8 +101,9 @@ async function einzeln(name: string, fn: () => Promise<unknown>, priority = 50) 
         console.info(`[${name}] wartet planmäßig – ${error.message}`);
         return null;
       }
-      db.prepare("UPDATE bot_activity SET status='failed',detail=?,finished_at=datetime('now') WHERE id=?")
-        .run(String((error as Error)?.message || error).slice(0, 180), id);
+      const timeout = error instanceof JobTimeoutError;
+      db.prepare("UPDATE bot_activity SET status=?,detail=?,finished_at=datetime('now') WHERE id=?")
+        .run(timeout ? "timed_out" : "failed", String((error as Error)?.message || error).slice(0, 180), id);
       const reliability = recordJobFailure(name, error);
       if (reliability.status === "dead") {
         console.error(`[${name}] nach ${reliability.consecutiveFailures} Fehlern angehalten – im Dashboard prüfen.`);
