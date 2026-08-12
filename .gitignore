@@ -17,3 +17,6 @@ dist/
 # Persönliches Nutzer-Profil (bleibt lokal, wie .env)
 profil.local.json
 services/report-relay-site/
+
+# Installer-Ausgabe von electron-builder (build.directories.output)
+release/

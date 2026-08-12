@@ -22,7 +22,9 @@ import { getConversationWorkspace } from "../modules/conversationWorkspace.js";
 import { db, getState, setState, setMode, setFocus, getFocus, setAgentMode, type Mode, type Focus, type AgentMode } from "../db/index.js";
 import { LIVE_SHOT_PATH } from "../core/session.js";
 import { createMission } from "../modules/missions.js";
-import { resolveGoalAlert } from "../modules/goals.js";
+import { resolveGoalAlert, GOAL_CODES } from "../modules/goals.js";
+import { contactsForStage, funnelByCampaign, funnelBySource, funnelReport, type FunnelFilter } from "../modules/funnel.js";
+import { FUNNEL_STAGES } from "../modules/crmStages.js";
 import { flushPendingReports, queueUserReport } from "../modules/reporting.js";
 import { retryJob } from "../core/jobReliability.js";
 import { backfillRelationshipSignals, setRelationshipPolicy } from "../modules/relationshipPolicy.js";
@@ -213,6 +215,61 @@ const server = createServer((req, res) => {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String((error as Error)?.message || error) }));
       }
     });
+    return;
+  }
+
+  // ===== MESSMODELL (Phase 5) =====
+  // Rein lesend. `/api/funnel` liefert die Kette und die Quoten, `/api/funnel/contacts` genau die
+  // Kontakte hinter einem einzelnen Wert. Beide nutzen dieselben Filter und dieselbe Tabelle,
+  // damit die Liste nie von der Kennzahl abweichen kann.
+  if (url.pathname === "/api/funnel" || url.pathname === "/api/funnel/contacts") {
+    try {
+      const zahl = (name: string) => {
+        const roh = url.searchParams.get(name);
+        if (roh === null || roh === "") return null;
+        const wert = Number(roh);
+        if (!Number.isInteger(wert)) throw new Error(`Ungültiger Wert für ${name}.`);
+        return wert;
+      };
+      const auswahl = <T extends string>(name: string, erlaubt: readonly T[]): T | null => {
+        const roh = url.searchParams.get(name);
+        if (!roh) return null;
+        if (!erlaubt.includes(roh as T)) throw new Error(`Ungültiger Wert für ${name}.`);
+        return roh as T;
+      };
+      const datum = (name: string) => {
+        const roh = url.searchParams.get(name);
+        if (!roh) return null;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(roh)) throw new Error(`Ungültiges Datum für ${name}.`);
+        return roh;
+      };
+      const filter: FunnelFilter = {
+        campaignId: zahl("campaign"),
+        sourceId: zahl("source"),
+        goalCode: auswahl("goal", GOAL_CODES),
+        zielgruppe: auswahl("zielgruppe", ["azubi", "student"] as const),
+        route: auswahl("route", ["network", "external"] as const),
+        automation: auswahl("automation", ["active", "paused", "excluded"] as const),
+        from: datum("from"),
+        to: datum("to"),
+      };
+
+      if (url.pathname === "/api/funnel/contacts") {
+        const stage = auswahl("stage", FUNNEL_STAGES);
+        if (!stage) throw new Error("Parameter 'stage' fehlt.");
+        const kontakte = contactsForStage(stage, filter);
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ stage, filter, count: kontakte.length, kontakte }));
+        return;
+      }
+
+      const gruppierung = auswahl("groupBy", ["campaign", "source"] as const);
+      const daten = gruppierung === "campaign" ? { gruppen: funnelByCampaign(filter) }
+        : gruppierung === "source" ? { gruppen: funnelBySource(filter) }
+        : funnelReport(filter);
+      res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(daten));
+    } catch (error) {
+      res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String((error as Error)?.message || error) }));
+    }
     return;
   }
 

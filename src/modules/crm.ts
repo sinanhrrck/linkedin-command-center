@@ -2,6 +2,7 @@ import { db } from "../db/index.js";
 import { canonicalProfileUrl } from "../core/profileUrl.js";
 import { proactiveDecision } from "./relationshipPolicy.js";
 import { linkContactIdentity, resolveContactIdentity } from "./contactIdentity.js";
+import { recordCrmStage, replyQualityFromIntent, type ReplyQuality } from "./crmStages.js";
 
 export type Contact = {
   id: number;
@@ -56,6 +57,12 @@ export function upsertContact(c: { profileUrl: string; fullName?: string; headli
     | { id: number; status: string; accepted_at: string | null; aus_netzwerk: number | null; full_name: string | null }
     | undefined;
   if (row) linkContactIdentity({ contactId: row.id, value: profileUrl, type: "profile_url", confidence: "confirmed", source: "contact_upsert", participant: row.full_name || "" });
+  // Funnel-Eintritt. Der Dedupe-Schlüssel je Kontakt sorgt dafür, dass ein erneuter Fund über
+  // dieselbe oder eine zweite Quelle den Kontakt NICHT ein zweites Mal als „gefunden“ zählt.
+  if (row) {
+    recordCrmStage(row.id, "found", "bot");
+    if (score >= SCORE_MIN) recordCrmStage(row.id, "suitable", "bot");
+  }
   if (campaignId) {
     if (row) {
       const connected = !!row.aus_netzwerk || !!row.accepted_at || ["accepted", "messaged", "replied"].includes(row.status);
@@ -161,6 +168,10 @@ export function markAccepted(profileUrl: string): boolean {
       "UPDATE contacts SET accepted_at=datetime('now'), status='accepted' WHERE profile_url = ? AND accepted_at IS NULL",
     )
     .run(profileUrl);
+  if (res.changes > 0) {
+    const row = db.prepare("SELECT id FROM contacts WHERE profile_url=?").get(profileUrl) as { id: number } | undefined;
+    if (row) recordCrmStage(row.id, "accepted", "bot");
+  }
   return res.changes > 0;
 }
 
@@ -274,6 +285,11 @@ export function markInboundReply(threadUrl: string, fullName: string, declined =
                          last_meaningful_contact_at=datetime('now')
       WHERE id=? AND status IN ('messaged','replied')`,
   ).run(declined ? "closed" : "replied", contact.id);
+  // Die Antwort zählt genau einmal; die Einordnung darf sich später präzisieren. Ohne eigene
+  // Einordnung gilt eine höflich abgelehnte Antwort als „nicht passend“, sonst als neutral.
+  const memory = db.prepare("SELECT intent FROM conversation_memories WHERE contact_id=?").get(contact.id) as { intent: string } | undefined;
+  const quality: ReplyQuality = memory ? replyQualityFromIntent(memory.intent) : declined ? "not_fit" : "neutral";
+  recordCrmStage(contact.id, "replied", "bot", undefined, { quality });
   return contact.id;
 }
 

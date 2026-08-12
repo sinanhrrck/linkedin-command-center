@@ -98,6 +98,36 @@ braucht den Governor NICHT.
   aller seriellen Engine-Jobs. Das Dashboard zeigt „Jetzt", die bedarfsabhängig geplanten
   nächsten Arbeiten und die letzten Abschlüsse. Sendende Aktionen bleiben zusätzlich in
   `actions` als unveränderliches Safety-/Metrik-Protokoll.
+- **EINHEITLICHES MESSMODELL (2026-08-12, Phase 5.1):** `crm_stage_events` ist die EINZIGE Wahrheit
+  für jede Funnel-Zahl. Vorher lagen die vorderen Stufen als Zeitstempel auf `contacts` und die
+  hinteren als Ereignisse — zwei Wahrheiten, die sich nicht fair vergleichen ließen. Jetzt trägt die
+  Tabelle die volle Kette (`FUNNEL_STAGES`: found → suitable → invited → accepted → messaged →
+  replied → qualified → meeting → won/lost/not_fit) plus `reply_quality` (`REPLY_QUALITIES`).
+  DREI REGELN, die nicht aufgeweicht werden dürfen:
+  1. **Ein Ereignis zählt einmal.** `dedupe_key` ist FACHLICH (`contact:<id>:<stage>`), nie zeitlich.
+     Ein Neustart, ein zweiter Tick oder ein erneuter Lead-Fund schreibt denselben Schlüssel und
+     wird ignoriert. Wer `Date.now()` in einen Dedupe-Key schreibt, zerstört genau diese Zusage.
+  2. **Zuordnung wird beim Schreiben eingefroren** (`campaign_id`, `source_id`, `goal_code`,
+     `occurred_at`). Niemals über `contacts` joinen: ein späterer Kampagnenwechsel würde sonst die
+     Historie rückwirkend umschreiben. Fehlende Zuordnung wird NACHGETRAGEN, belegte nie geändert.
+  3. **`aus_netzwerk=1` bekommt kein `invited`/`accepted`** — diese Verbindungen kosteten nie eine
+     Anfrage und würden die Annahmequote nach oben verfälschen.
+  Schreibpfad: `recordCrmStage()` in `crmStages.ts` (Hooks in `crm.ts` upsert/markAccepted/
+  markInboundReply und `outreach.ts` nach bestätigter Einladung). Lesepfad: `modules/funnel.ts`
+  (`funnelReport`, `funnelByCampaign`, `funnelBySource`, `contactsForStage`) mit Filtern nach
+  Kampagne/Ziel/Quelle/Zielgruppe/Zeitraum/Route/Automatik-Status. API: `GET /api/funnel` und
+  `GET /api/funnel/contacts?stage=…` — beide mit identischen Filtern, damit die Drilldown-Liste
+  nie von der Kennzahl abweichen kann (das ist die Abnahme „jeder Wert ist rückführbar").
+  `backfillCrmStages()` übernimmt den Altbestand idempotent aus den vorhandenen Zeitstempeln.
+  COCKPIT: Bereich „Von der Quelle zum Ergebnis" in der Auswertung (`.wirkung` in
+  command-center.html/.css/.js). Der ALTE 5-Stufen-Funnel wurde ERSETZT, nicht ergänzt, und auch
+  der Mini-Funnel auf „Heute" (`dashboard.ts`) liest jetzt aus `funnelReport` — zwei Funnel mit
+  abweichenden Zahlen auf derselben Seite waren genau das Problem. Die Wirkungs-Ansicht hat einen
+  EIGENEN Ladepfad (`ladeWirkung`), nicht `/api/state`, damit Filter sofort reagieren; sie wird
+  einmal geholt und danach nur bei Filteränderung. WICHTIG: `ladeWirkung` nutzt eine laufende
+  Nummer (`wirkungAnfrage`), KEINE Lade-Sperre. Eine Sperre verwarf Filteränderungen während eines
+  laufenden Requests still — die Ansicht zeigte dann Zahlen, die nicht zu den sichtbaren Filtern
+  passten. Neue asynchrone Ansichten hier bitte genauso bauen.
 - `web/crm.html` — vorheriges CRM-Cockpit, nur noch als Altbestand im Repository. HELLES SaaS-Design (2026-07-18, inspiriert von
   Donezo/Nexus/Zentra): App-Shell mit linker Sidebar (`.app > .sidebar + .wrap`), grüner
   Marken-Akzent, weiche Schatten, Card-Layout, grosse Zahlen. WICHTIG bei Umbauten: das CSS

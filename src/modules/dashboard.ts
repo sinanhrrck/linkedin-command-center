@@ -15,6 +15,7 @@ import { getBackupStatus } from "../core/backups.js";
 import { listExperiments } from "./experiments.js";
 import { learningSummary } from "./learning.js";
 import { crmDataQuality, goalFunnelEconomics } from "./crmStages.js";
+import { funnelReport } from "./funnel.js";
 import { readSavingsToday } from "./lowRead.js";
 import { contactIdentityHealth } from "./contactIdentity.js";
 import { sendHealthStand } from "../core/sendHealth.js";
@@ -112,24 +113,17 @@ export function getDashboardData() {
   // unmögliche Quote erzeugen. Jede Folgestufe verlangt zudem explizit ihre Vorstufen.
   // Vorher zählte der Funnel den AKTUELLEN Status → "Angenommen 9" obwohl 18 angenommen
   // hatten (9 waren schon weiter zu angeschrieben/geantwortet). Das war der Zahlen-Widerspruch.
-  const f = db
-    .prepare(
-      `SELECT
-         COUNT(*) AS gesammelt,
-         SUM(CASE WHEN invited_at  IS NOT NULL THEN 1 ELSE 0 END) AS eingeladen,
-         SUM(CASE WHEN invited_at IS NOT NULL AND accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS angenommen,
-         SUM(CASE WHEN invited_at IS NOT NULL AND accepted_at IS NOT NULL AND messaged_at IS NOT NULL THEN 1 ELSE 0 END) AS angeschrieben,
-         SUM(CASE WHEN invited_at IS NOT NULL AND accepted_at IS NOT NULL AND messaged_at IS NOT NULL AND replied_at IS NOT NULL THEN 1 ELSE 0 END) AS geantwortet
-       FROM contacts
-       WHERE COALESCE(aus_netzwerk, 0) = 0`,
-    )
-    .get() as { gesammelt: number; eingeladen: number | null; angenommen: number | null; angeschrieben: number | null; geantwortet: number | null };
+  // EINE WAHRHEIT (2026-08-12): Der Kurzüberblick liest aus demselben Ereignisprotokoll wie die
+  // Auswertung. Vorher rechnete er eigenständig über Kontakt-Zeitstempel — dieselbe Kennzahl
+  // konnte damit an zwei Stellen unterschiedlich aussehen. `route:"external"` hält die Definition
+  // von vorher bei: bestehende Verbindungen gehören nicht in eine Vernetzungs-Conversion.
+  const wirkung = funnelReport({ route: "external" });
   const funnel = [
-    { stage: "gesammelt", label: "Gesammelt", count: f.gesammelt },
-    { stage: "eingeladen", label: "Eingeladen", count: f.eingeladen ?? 0 },
-    { stage: "angenommen", label: "Angenommen", count: f.angenommen ?? 0 },
-    { stage: "angeschrieben", label: "Angeschrieben", count: f.angeschrieben ?? 0 },
-    { stage: "geantwortet", label: "Geantwortet", count: f.geantwortet ?? 0 },
+    { stage: "gesammelt", label: "Gesammelt", count: wirkung.counts.found },
+    { stage: "eingeladen", label: "Eingeladen", count: wirkung.counts.invited },
+    { stage: "angenommen", label: "Angenommen", count: wirkung.counts.accepted },
+    { stage: "angeschrieben", label: "Angeschrieben", count: wirkung.counts.messaged },
+    { stage: "geantwortet", label: "Geantwortet", count: wirkung.counts.replied },
   ];
   // Dashboard braucht beide Wahrheiten: den historischen Funnel für Performance und die
   // aktuellen Status für die Arbeitspriorität. Sie werden bewusst getrennt ausgeliefert,
@@ -142,10 +136,12 @@ export function getDashboardData() {
   const uniqueConnectTargets = (db.prepare("SELECT COUNT(DISTINCT target) n FROM actions WHERE type='connect' AND target IS NOT NULL").get() as { n: number }).n;
   const metrics = {
     historical: {
-      invited: f.eingeladen ?? 0,
-      accepted: f.angenommen ?? 0,
-      messaged: f.angeschrieben ?? 0,
-      replied: f.geantwortet ?? 0,
+      // Dieselbe Quelle wie der Funnel darüber: die KPI-Kacheln und die Kette dürfen nicht
+      // auseinanderlaufen, sonst steht auf einer Seite zweimal dieselbe Kennzahl mit zwei Werten.
+      invited: wirkung.counts.invited,
+      accepted: wirkung.counts.accepted,
+      messaged: wirkung.counts.messaged,
+      replied: wirkung.counts.replied,
     },
     active: { accepted: activeAccepted, replies: activeReplies, closedReplies },
     connectEvents: { total: connectEvents, uniqueTargets: uniqueConnectTargets, duplicates: Math.max(0, connectEvents - uniqueConnectTargets) },

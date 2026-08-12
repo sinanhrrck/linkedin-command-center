@@ -1,50 +1,90 @@
 import { db } from "../db/index.js";
 import { resolveContactIdentity } from "./contactIdentity.js";
 
-export type CrmStage = "messaged" | "replied" | "qualified" | "meeting" | "won" | "lost" | "not_fit";
+/**
+ * Die vollständige Funnel-Kette. Sie ist bewusst EIN Vokabular für alle Auswertungen: gefunden →
+ * geeignet → eingeladen → angenommen → angeschrieben → geantwortet → qualifiziert → Termin →
+ * Ergebnis. Vorher lagen die vorderen Stufen nur als Zeitstempel auf `contacts` und die hinteren
+ * als Ereignisse — zwei Wahrheiten, die sich nicht fair gegeneinander rechnen ließen.
+ */
+export const FUNNEL_STAGES = [
+  "found", "suitable", "invited", "accepted", "messaged", "replied", "qualified", "meeting", "won", "lost", "not_fit",
+] as const;
+export type CrmStage = (typeof FUNNEL_STAGES)[number];
 export type CrmSource = "backfill" | "bot" | "agent" | "manual";
 
-const RANK: Record<CrmStage, number> = { messaged: 1, replied: 2, qualified: 3, meeting: 4, won: 5, lost: 5, not_fit: 5 };
-const TERMINAL = new Set<CrmStage>(["won", "lost", "not_fit"]);
+/**
+ * Einordnung einer eingegangenen Antwort. Eine Antwort allein ist kein Erfolg; erst die Richtung
+ * macht sie auswertbar. `neutral` ist bewusst enthalten, damit JEDE Antwort eine Einordnung hat
+ * und die Summe der Qualitäten nie kleiner ist als die Zahl der Antworten.
+ */
+export const REPLY_QUALITIES = [
+  "interested", "question", "meeting", "later", "busy", "not_fit", "not_interested", "neutral",
+] as const;
+export type ReplyQuality = (typeof REPLY_QUALITIES)[number];
+/** Positiv = das Gespräch geht weiter oder ist gewonnen. Grundlage der positiven Antwortquote. */
+export const POSITIVE_QUALITIES: ReadonlySet<ReplyQuality> = new Set<ReplyQuality>(["interested", "question", "meeting"]);
+
+const RANK: Record<string, number> = { messaged: 1, replied: 2, qualified: 3, meeting: 4, won: 5, lost: 5, not_fit: 5 };
+const TERMINAL = new Set<string>(["won", "lost", "not_fit"]);
+/** Nur diese Stufen sind ein vertriebliches Ergebnis und dürfen `sales_outcomes` fortschreiben. */
+const OUTCOME_STAGES = new Set<CrmStage>(["qualified", "meeting", "won", "lost", "not_fit"]);
 let backfillDone = false;
 
-type ContactRef = { id: number; campaign_id: number | null; goal: string | null };
+type ContactRef = { id: number; campaign_id: number | null; source_id: number | null; goal: string | null };
+
+const CONTACT_REF_SQL =
+  `SELECT c.id,c.campaign_id,c.source_id,COALESCE(c.goal_code_override,ca.goal_code) goal
+     FROM contacts c LEFT JOIN campaigns ca ON ca.id=c.campaign_id WHERE c.id=?`;
 
 function contactById(contactId: number): ContactRef | undefined {
-  return db.prepare(
-    `SELECT c.id,c.campaign_id,COALESCE(c.goal_code_override,ca.goal_code) goal
-       FROM contacts c LEFT JOIN campaigns ca ON ca.id=c.campaign_id WHERE c.id=?`,
-  ).get(contactId) as ContactRef | undefined;
+  return db.prepare(CONTACT_REF_SQL).get(contactId) as ContactRef | undefined;
 }
 
 /** URL ist eindeutig; der Name ist nur ein vorsichtiger Fallback für alte Inbox-Daten. */
 export function contactForConversation(threadUrl: string, participant = ""): ContactRef | undefined {
   const identity = resolveContactIdentity(threadUrl, participant, "crm_stage");
   if (!identity) return undefined;
-  return db.prepare(
-    `SELECT c.id,c.campaign_id,COALESCE(c.goal_code_override,ca.goal_code) goal
-       FROM contacts c LEFT JOIN campaigns ca ON ca.id=c.campaign_id
-      WHERE c.id=?`,
-  ).get(identity.id) as ContactRef | undefined;
+  return db.prepare(CONTACT_REF_SQL).get(identity.id) as ContactRef | undefined;
 }
 
 /**
  * Schreibt eine Stufe idempotent in die Historie und hält den aktuellen CRM-Stand vorwärts fest.
  * Gewonnen bleibt immer manuell; automatische Signale überschreiben nie einen Endstatus.
  */
-export function recordCrmStage(contactId: number, stage: CrmStage, source: CrmSource, dedupeKey?: string): boolean {
+export function recordCrmStage(
+  contactId: number,
+  stage: CrmStage,
+  source: CrmSource,
+  dedupeKey?: string,
+  options: { quality?: ReplyQuality | null; occurredAt?: string | null } = {},
+): boolean {
   const contact = contactById(contactId);
   if (!contact) return false;
+  // Ein Ereignis je Kontakt und Stufe. Der Schlüssel ist fachlich, nicht zeitlich: ein Neustart
+  // oder ein zweiter Lauf schreibt exakt denselben Schlüssel und wird deshalb ignoriert, statt
+  // die Zahlen ein zweites Mal zu erhöhen.
   const key = dedupeKey || `contact:${contactId}:${stage}`;
+  const quality = options.quality && REPLY_QUALITIES.includes(options.quality) ? options.quality : null;
   const inserted = db.prepare(
-    `INSERT OR IGNORE INTO crm_stage_events(dedupe_key,contact_id,goal_code,stage,source)
-     VALUES(?,?,?,?,?)`,
-  ).run(key, contactId, contact.goal, stage, source).changes > 0;
+    `INSERT OR IGNORE INTO crm_stage_events
+       (dedupe_key,contact_id,goal_code,stage,source,campaign_id,source_id,reply_quality,occurred_at)
+     VALUES(?,?,?,?,?,?,?,?,COALESCE(?,datetime('now')))`,
+  ).run(key, contactId, contact.goal, stage, source, contact.campaign_id, contact.source_id, quality, options.occurredAt ?? null).changes > 0;
   // Altbestand war zunächst keinem Zielweg zugeordnet. Sobald B1/P1/AEC bekannt ist, dürfen
   // dessen belegte Stufen zugerechnet werden, ohne Ereignisse oder Kontakte neu anzulegen.
   if (contact.goal) db.prepare("UPDATE crm_stage_events SET goal_code=? WHERE contact_id=? AND goal_code IS NULL").run(contact.goal, contactId);
+  // Dasselbe gilt für die Herkunft: Sie wird nur NACHGETRAGEN, wo sie fehlt, und nie geändert.
+  // Eine einmal belegte Zuordnung bleibt stehen, damit Auswertungen reproduzierbar sind.
+  if (contact.campaign_id) db.prepare("UPDATE crm_stage_events SET campaign_id=? WHERE contact_id=? AND campaign_id IS NULL").run(contact.campaign_id, contactId);
+  if (contact.source_id) db.prepare("UPDATE crm_stage_events SET source_id=? WHERE contact_id=? AND source_id IS NULL").run(contact.source_id, contactId);
+  // Die Einordnung einer Antwort kann sich präzisieren (erst „neutral“, dann erkennbar „später“).
+  // Das ist eine Korrektur derselben Antwort, kein zweites Ereignis — deshalb UPDATE statt INSERT.
+  if (quality && stage === "replied" && !inserted) {
+    db.prepare("UPDATE crm_stage_events SET reply_quality=? WHERE dedupe_key=?").run(quality, key);
+  }
 
-  if (["qualified", "meeting", "lost", "not_fit", "won"].includes(stage)) {
+  if (OUTCOME_STAGES.has(stage)) {
     const current = db.prepare("SELECT stage FROM sales_outcomes WHERE contact_id=?").get(contactId) as { stage: CrmStage } | undefined;
     const mayAdvance = !current || (!TERMINAL.has(current.stage) && RANK[stage] >= RANK[current.stage]);
     if (mayAdvance) db.prepare(
@@ -55,48 +95,86 @@ export function recordCrmStage(contactId: number, stage: CrmStage, source: CrmSo
   return inserted;
 }
 
-export function recordConversationStage(threadUrl: string, participant: string, stage: CrmStage, source: CrmSource): boolean {
+export function recordConversationStage(
+  threadUrl: string,
+  participant: string,
+  stage: CrmStage,
+  source: CrmSource,
+  quality?: ReplyQuality | null,
+): boolean {
   const contact = contactForConversation(threadUrl, participant);
-  return contact ? recordCrmStage(contact.id, stage, source) : false;
+  return contact ? recordCrmStage(contact.id, stage, source, undefined, { quality }) : false;
+}
+
+/**
+ * Übersetzt die Gesprächseinordnung in eine Antwortqualität. `do_not_contact` ist fachlich die
+ * schärfste Form von „kein Interesse“ und wird bewusst dorthin abgebildet, damit die positive
+ * Antwortquote keine eigene Sonderkategorie braucht.
+ */
+export function replyQualityFromIntent(intent: string | null | undefined): ReplyQuality {
+  if (intent === "do_not_contact") return "not_interested";
+  return REPLY_QUALITIES.includes(intent as ReplyQuality) ? (intent as ReplyQuality) : "neutral";
 }
 
 /** Bestehende Zeitstempel/Ergebnisse einmalig in die neue, anonymisierte Stufenhistorie übernehmen. */
 export function backfillCrmStages(): void {
   if (backfillDone) return;
   const add = db.prepare(
-    `INSERT OR IGNORE INTO crm_stage_events(dedupe_key,contact_id,goal_code,stage,source,created_at)
-     VALUES(?,?,?,?,?,?)`,
+    `INSERT OR IGNORE INTO crm_stage_events
+       (dedupe_key,contact_id,goal_code,stage,source,created_at,campaign_id,source_id,occurred_at,reply_quality)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
   );
   const contacts = db.prepare(
-    `SELECT c.id,c.messaged_at,c.replied_at,COALESCE(c.goal_code_override,ca.goal_code) goal
-       FROM contacts c LEFT JOIN campaigns ca ON ca.id=c.campaign_id`,
-  ).all() as Array<{ id: number; messaged_at: string | null; replied_at: string | null; goal: string | null }>;
+    `SELECT c.id,c.created_at,c.invited_at,c.accepted_at,c.messaged_at,c.replied_at,c.status,
+            c.campaign_id,c.source_id,COALESCE(c.aus_netzwerk,0) aus_netzwerk,
+            COALESCE(c.goal_code_override,ca.goal_code) goal, m.intent
+       FROM contacts c
+       LEFT JOIN campaigns ca ON ca.id=c.campaign_id
+       LEFT JOIN conversation_memories m ON m.contact_id=c.id`,
+  ).all() as Array<{
+    id: number; created_at: string | null; invited_at: string | null; accepted_at: string | null;
+    messaged_at: string | null; replied_at: string | null; status: string; campaign_id: number | null;
+    source_id: number | null; aus_netzwerk: number; goal: string | null; intent: string | null;
+  }>;
   const tx = db.transaction(() => {
     for (const c of contacts) {
-      if (c.messaged_at) add.run(`backfill:${c.id}:messaged`, c.id, c.goal, "messaged", "backfill", c.messaged_at);
-      if (c.replied_at) add.run(`backfill:${c.id}:replied`, c.id, c.goal, "replied", "backfill", c.replied_at);
+      const at = (key: string, stage: CrmStage, when: string | null, quality: ReplyQuality | null = null) => {
+        if (when) add.run(`backfill:${c.id}:${key}`, c.id, c.goal, stage, "backfill", when, c.campaign_id, c.source_id, when, quality);
+      };
+      // „Gefunden“ ist der Eintritt in den Datenbestand; „geeignet“ heißt: nicht als zu schwach
+      // aussortiert. Beides ist aus dem Altbestand belegbar, ohne irgendetwas zu schätzen.
+      at("found", "found", c.created_at);
+      if (c.status !== "skipped") at("suitable", "suitable", c.created_at);
+      // Bestehende Verbindungen (`aus_netzwerk`) haben nie eine Anfrage gekostet. Sie als
+      // „eingeladen+angenommen“ zu zählen würde die Annahmequote künstlich nach oben ziehen.
+      if (!c.aus_netzwerk) {
+        at("invited", "invited", c.invited_at);
+        at("accepted", "accepted", c.accepted_at);
+      }
+      at("messaged", "messaged", c.messaged_at);
+      at("replied", "replied", c.replied_at, c.replied_at ? replyQualityFromIntent(c.intent) : null);
     }
     const outcomes = db.prepare("SELECT contact_id,stage,updated_at FROM sales_outcomes").all() as Array<{ contact_id: number; stage: CrmStage; updated_at: string }>;
     for (const o of outcomes) {
       const c = contactById(o.contact_id);
-      if (c) add.run(`backfill:${o.contact_id}:${o.stage}`, o.contact_id, c.goal, o.stage, "backfill", o.updated_at);
+      if (c) add.run(`backfill:${o.contact_id}:${o.stage}`, o.contact_id, c.goal, o.stage, "backfill", o.updated_at, c.campaign_id, c.source_id, o.updated_at, null);
     }
     try {
       const booked = db.prepare("SELECT thread_url,participant,updated_at FROM conversations WHERE status='booked'").all() as Array<{ thread_url: string; participant: string; updated_at: string }>;
       for (const row of booked) {
         const c = contactForConversation(row.thread_url, row.participant || "");
         if (c) {
-          add.run(`backfill:conversation:${c.id}:meeting`, c.id, c.goal, "meeting", "backfill", row.updated_at);
-          recordCrmStage(c.id, "meeting", "backfill", `backfill:conversation:${c.id}:meeting`);
+          add.run(`backfill:conversation:${c.id}:meeting`, c.id, c.goal, "meeting", "backfill", row.updated_at, c.campaign_id, c.source_id, row.updated_at, null);
+          recordCrmStage(c.id, "meeting", "backfill", `backfill:conversation:${c.id}:meeting`, { occurredAt: row.updated_at });
         }
       }
       const agent = db.prepare("SELECT id,thread_url,teilnehmer,ergebnis,ts FROM agent_outcomes WHERE ergebnis IN ('gebucht','verloren')").all() as Array<{ id: number; thread_url: string; teilnehmer: string; ergebnis: string; ts: string }>;
       for (const row of agent) {
         const c = contactForConversation(row.thread_url, row.teilnehmer || "");
         if (c) {
-          const stage = row.ergebnis === "gebucht" ? "meeting" : "lost";
-          add.run(`backfill:agent:${row.id}`, c.id, c.goal, stage, "backfill", row.ts);
-          recordCrmStage(c.id, stage, "backfill", `backfill:agent:${row.id}`);
+          const stage: CrmStage = row.ergebnis === "gebucht" ? "meeting" : "lost";
+          add.run(`backfill:agent:${row.id}`, c.id, c.goal, stage, "backfill", row.ts, c.campaign_id, c.source_id, row.ts, null);
+          recordCrmStage(c.id, stage, "backfill", `backfill:agent:${row.id}`, { occurredAt: row.ts });
         }
       }
     } catch { /* Agent-Tabellen existieren in älteren Installationen eventuell noch nicht. */ }

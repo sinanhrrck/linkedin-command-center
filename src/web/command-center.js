@@ -839,7 +839,11 @@ function renderInsights() {
   const historical = state.metrics?.historical || {}; const acceptance = pct(historical.accepted || 0, historical.invited || 0); const reply = pct(historical.replied || 0, historical.messaged || 0);
   const kpis = [["Anfragen", historical.invited || 0, "versendet"], ["Annahmequote", acceptance == null ? "–" : `${acceptance}%`, `${historical.accepted || 0} angenommen`], ["Antwortquote", reply == null ? "–" : `${reply}%`, `${historical.replied || 0} aus ${historical.messaged || 0} Nachrichten`], ["Termine", (state.bookedLeads || []).length, "persönlich übergeben"]];
   $("insight-kpis").innerHTML = kpis.map(([label, value, note]) => `<div class="kpi-card"><span>${label}</span><b>${value}</b><small>${note}</small></div>`).join("");
-  const funnel = state.funnel || [], max = Math.max(1, ...funnel.map((item) => item.count)); $("funnel-bars").innerHTML = funnel.map((item, index) => { const previous = funnel[index - 1]; const conversion = previous?.count ? pct(item.count, previous.count) : null; return `<div class="funnel-row"><span>${esc(item.label)}</span><div class="funnel-track"><div class="funnel-fill" style="width:${Math.round(item.count / max * 100)}%"></div></div><span class="funnel-count">${item.count}</span><span class="funnel-conv">${conversion == null ? "Start" : `${conversion}%`}</span></div>`; }).join("");
+  // Die Wirkungs-Auswertung hat einen eigenen Ladepfad. Sie wird EINMAL geholt und danach nur
+  // noch, wenn der Nutzer einen Filter ändert — der 30-Sekunden-Takt des Dashboards soll die
+  // Ansicht nicht ständig unter den Händen neu aufbauen.
+  fuelleWirkungFilter();
+  if (!wirkungDaten) ladeWirkung();
   const actions = Object.entries(state.actionsToday || {}); $("today-actions").innerHTML = actions.length ? actions.map(([key, value]) => `<span><b>${value}</b> ${esc({ connect: "Anfragen", message: "Nachrichten", reply: "Antworten", like: "Likes", comment: "Kommentare" }[key] || key)}</span>`).join("") : `<span>Noch keine Aktionen heute.</span>`;
   const learning = state.learning || {}, rules = learning.rules || [], byGoal = learning.byGoal || [];
   $("learning-privacy").textContent = learning.privacy?.localOnly ? "Nur auf diesem PC" : "Anonym geteilt";
@@ -850,6 +854,199 @@ function renderInsights() {
 }
 
 function automationLevel() { if (state.agentMode === "live") return "agent_live"; if (state.agentMode === "shadow") return "agent_test"; return state.mode === "semi" ? "halb" : "vorschlaege"; }
+/* ===== WIRKUNG: Funnel, Antwortqualität und Vergleich (Phase 5.2/5.3) =====
+   Eigener Ladepfad neben /api/state: die Filter sollen sofort reagieren, ohne den kompletten
+   Dashboard-Zustand neu zu ziehen. Alle Werte stammen aus `crm_stage_events` — dieselbe Quelle,
+   aus der auch der Drilldown liest. Deshalb kann die Kontaktliste nie von der Zahl abweichen. */
+let wirkungGruppe = "";
+let wirkungDaten = null;
+/** Laufende Nummer statt einer Lade-Sperre: eine Filteränderung darf NIE verworfen werden, sonst
+    zeigt die Ansicht Zahlen, die nicht zu den sichtbaren Einstellungen passen. Stattdessen gewinnt
+    immer die zuletzt gestellte Anfrage; überholte Antworten werden verworfen. */
+let wirkungAnfrage = 0;
+
+const QUALITAET_LABEL = {
+  interested: "Interessiert", question: "Konkrete Frage", meeting: "Termin vereinbart",
+  later: "Später erneut", busy: "Aktuell keine Zeit", not_fit: "Nicht passend",
+  not_interested: "Kein Interesse", neutral: "Neutral",
+};
+const POSITIVE_QUALITAETEN = ["interested", "question", "meeting"];
+
+function wirkungFilter() {
+  const wert = (id) => ($(id)?.value || "").trim();
+  return {
+    campaign: wert("wf-campaign"), goal: wert("wf-goal"), source: wert("wf-source"),
+    zielgruppe: wert("wf-zielgruppe"), route: wert("wf-route"), automation: wert("wf-automation"),
+    from: wert("wf-from"), to: wert("wf-to"),
+  };
+}
+
+function wirkungQuery(extra = {}) {
+  const params = new URLSearchParams();
+  for (const [schluessel, wert] of Object.entries({ ...wirkungFilter(), ...extra })) if (wert) params.set(schluessel, wert);
+  return params.toString();
+}
+
+/** Filter-Auswahllisten aus dem bereits geladenen Zustand füllen, ohne die Auswahl zu verlieren. */
+function fuelleWirkungFilter() {
+  const setze = (id, eintraege, alle) => {
+    const el = $(id);
+    if (!el) return;
+    const vorher = el.value;
+    el.innerHTML = `<option value="">${alle}</option>` + eintraege.map((e) => `<option value="${e.id}">${esc(e.label)}</option>`).join("");
+    if (eintraege.some((e) => String(e.id) === vorher)) el.value = vorher;
+  };
+  setze("wf-campaign", (state.campaigns || []).map((c) => ({ id: c.id, label: c.name })), "Alle Kampagnen");
+  setze("wf-source", (state.leadSources || []).map((s) => ({ id: s.id, label: s.label || s.search_url || `Quelle ${s.id}` })), "Alle Quellen");
+}
+
+async function ladeWirkung() {
+  const meine = ++wirkungAnfrage;
+  try {
+    const query = wirkungQuery(wirkungGruppe ? { groupBy: wirkungGruppe } : {});
+    const response = await fetch(`/api/funnel${query ? `?${query}` : ""}`, { cache: "no-store" });
+    const daten = await response.json();
+    if (meine !== wirkungAnfrage) return; // überholt: eine neuere Auswahl ist bereits unterwegs
+    if (!response.ok || daten.error) throw new Error(daten.error || "Auswertung nicht ladbar");
+    wirkungDaten = daten;
+    renderWirkung();
+  } catch (error) {
+    if (meine !== wirkungAnfrage) return;
+    $("wirkung-inhalt").innerHTML = `<div class="empty-work">${esc(error.message)}</div>`;
+  }
+}
+
+/** Eine Quote nur dann als belastbar zeigen, wenn der Nenner groß genug ist. */
+function quotenKachel(titel, quote, hinweis) {
+  const wert = quote.pct == null ? "–" : `${quote.pct}%`;
+  const klasse = quote.pct == null ? "" : quote.genugDaten ? "" : " schwach";
+  const fuss = quote.nenner === 0 ? "noch keine Daten"
+    : quote.genugDaten ? `${quote.zaehler} von ${quote.nenner}`
+    : `${quote.zaehler} von ${quote.nenner} · zu wenig für eine Aussage`;
+  return `<div class="wirkung-quote${klasse}"><span>${esc(titel)}</span><b>${wert}</b><small>${esc(hinweis || fuss)}</small></div>`;
+}
+
+function ketteHtml(report) {
+  const kette = report.kette || [];
+  const max = Math.max(1, ...kette.map((s) => s.count));
+  return `<div class="wirkung-kette">` + kette.map((stufe) => `
+    <button class="funnel-row" data-stage="${stufe.stage}" title="Kontakte hinter dieser Zahl anzeigen">
+      <span>${esc(stufe.label)}</span>
+      <div class="funnel-track"><div class="funnel-fill" style="width:${Math.round(stufe.count / max * 100)}%"></div></div>
+      <span class="funnel-count">${stufe.count}</span>
+      <span class="funnel-conv">${stufe.fromPreviousPct == null ? "Start" : `${stufe.fromPreviousPct}%`}</span>
+    </button>`).join("") + `</div>`;
+}
+
+function antwortenHtml(report) {
+  const antworten = report.antworten || { werte: {}, gesamt: 0 };
+  const gesamt = antworten.gesamt || 0;
+  if (!gesamt) return `<div class="empty-work">Noch keine eingeordnete Antwort. Sobald Antworten eingehen, erscheint hier, welche davon wirklich weiterführen.</div>`;
+  return `<div class="wirkung-qualitaeten">` + Object.entries(QUALITAET_LABEL).map(([schluessel, label]) => {
+    const n = antworten.werte?.[schluessel] || 0;
+    const anteil = gesamt ? Math.round(n / gesamt * 100) : 0;
+    return `<div class="qualitaet${POSITIVE_QUALITAETEN.includes(schluessel) ? " positiv" : ""}${n ? "" : " leer"}">
+      <span>${esc(label)}</span><b>${n}</b><small>${anteil}%</small></div>`;
+  }).join("") + `</div>`;
+}
+
+function berichtHtml(report) {
+  const quoten = report.quoten || {};
+  const pro100 = report.pro100Vernetzungen;
+  const tempo = report.tempo || {};
+  const kosten = report.vernetzungenProQualifiziert;
+  return ketteHtml(report)
+    + `<div class="wirkung-quoten">
+        ${quotenKachel("Annahmequote", quoten.annahme)}
+        ${quotenKachel("Antwortquote", quoten.antwort)}
+        ${quotenKachel("Positive Antworten", quoten.positiveAntwort)}
+        ${quotenKachel("Qualifizierung", quoten.qualifizierung)}
+        ${quotenKachel("Termine", quoten.termin)}
+       </div>`
+    + `<div class="wirkung-oekonomie">
+        <div><span>Je 100 Vernetzungen</span><b>${pro100 ? `${pro100.qualifiziert} qualifiziert` : "–"}</b><small>${pro100 ? `${pro100.termine} Termine · ${pro100.gewonnen} gewonnen` : "noch keine Vernetzung gemessen"}</small></div>
+        <div><span>Aufwand je Qualifizierung</span><b>${kosten == null ? "–" : `${kosten} Anfragen`}</b><small>${report.vernetzungenProTermin == null ? "noch kein Termin" : `${report.vernetzungenProTermin} Anfragen je Termin`}</small></div>
+        <div><span>Zeit bis Antwort</span><b>${tempo.tageBisAntwort == null ? "–" : `${tempo.tageBisAntwort} Tage`}</b><small>${tempo.nAntwort || 0} gemessene Fälle</small></div>
+        <div><span>Erstkontakt bis Termin</span><b>${tempo.tageBisTermin == null ? "–" : `${tempo.tageBisTermin} Tage`}</b><small>${tempo.nTermin || 0} gemessene Fälle</small></div>
+       </div>`
+    + `<h4 class="wirkung-untertitel">Wie die Antworten ausfielen</h4>`
+    + antwortenHtml(report);
+}
+
+/** Vergleichstabelle. Sortiert nach positiven Antworten je 100 Vernetzungen — nicht nach Menge:
+    genau die Verwechslung, die eine schwache Quelle sonst gut aussehen lässt. */
+function vergleichHtml(gruppen, art) {
+  const zeilen = gruppen.map((eintrag) => {
+    const name = art === "campaign" ? eintrag.campaign.name : eintrag.source.label;
+    const report = eintrag.report;
+    const positivPro100 = report.pro100Vernetzungen ? report.pro100Vernetzungen.positiv : null;
+    return { name, report, positivPro100, meta: art === "campaign" ? (eintrag.campaign.goal_code || "–") : (eintrag.source.active ? "aktiv" : "pausiert") };
+  }).sort((a, b) => (b.positivPro100 ?? -1) - (a.positivPro100 ?? -1));
+
+  if (!zeilen.length) return `<div class="empty-work">Noch nichts zu vergleichen.</div>`;
+  return `<div class="wirkung-vergleich">
+    <div class="vergleich-row vergleich-head"><span>${art === "campaign" ? "Kampagne" : "Quelle"}</span><span>Kontakte</span><span>Vernetzt</span><span>Antworten</span><span>Positiv</span><span>Qualifiziert</span><span>Positiv je 100</span></div>
+    ${zeilen.map((z) => `<div class="vergleich-row">
+      <span><b>${esc(z.name)}</b><small>${esc(z.meta)}</small></span>
+      <span>${z.report.counts.found}</span>
+      <span>${z.report.counts.invited}</span>
+      <span>${z.report.counts.replied}</span>
+      <span>${z.report.antworten.positiv}</span>
+      <span>${z.report.counts.qualified}</span>
+      <span class="vergleich-kennzahl">${z.positivPro100 == null ? "–" : z.positivPro100}</span>
+    </div>`).join("")}
+  </div>
+  <p class="wirkung-note">Sortiert nach positiven Antworten je 100 Vernetzungen. Eine Quelle mit vielen Kontakten, aber wenig positiven Antworten steht deshalb unten — unabhängig davon, wie groß sie ist.</p>`;
+}
+
+function renderWirkung() {
+  if (!wirkungDaten) return;
+  const ziel = $("wirkung-inhalt");
+  if (!ziel) return;
+  ziel.innerHTML = wirkungDaten.gruppen
+    ? vergleichHtml(wirkungDaten.gruppen, wirkungGruppe)
+    : berichtHtml(wirkungDaten);
+  ziel.querySelectorAll("[data-stage]").forEach((button) => button.addEventListener("click", () => zeigeWirkungKontakte(button.dataset.stage)));
+}
+
+/** ABNAHME 5.1: Jede Zahl lässt sich auf konkrete Kontakte zurückführen. */
+async function zeigeWirkungKontakte(stage) {
+  const box = $("wirkung-drill");
+  box.classList.remove("hidden");
+  box.innerHTML = `<div class="empty-work">Kontakte werden geladen …</div>`;
+  try {
+    const response = await fetch(`/api/funnel/contacts?${wirkungQuery({ stage })}`, { cache: "no-store" });
+    const daten = await response.json();
+    if (!response.ok || daten.error) throw new Error(daten.error || "Kontakte nicht ladbar");
+    const stufe = (wirkungDaten?.kette || []).find((s) => s.stage === stage);
+    box.innerHTML = `<div class="section-head"><div><span class="eyebrow">Nachweis</span><h3>${esc(stufe?.label || stage)} · ${daten.count} Kontakte</h3></div><button class="wirkung-reset" id="wirkung-drill-close" type="button">Schließen</button></div>`
+      + (daten.kontakte.length
+        ? `<div class="drill-list">${daten.kontakte.map((k) => `<a class="drill-row" href="${esc(k.profile_url)}" target="_blank" rel="noopener">
+            <span><b>${esc(k.full_name || "Ohne Namen")}</b><small>${esc(k.headline || "")}</small></span>
+            <span class="drill-meta">${esc(localDate(k.occurred_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" }))}${k.reply_quality ? ` · ${esc(QUALITAET_LABEL[k.reply_quality] || k.reply_quality)}` : ""}</span>
+          </a>`).join("")}</div>`
+        : `<div class="empty-work">Keine Kontakte in dieser Auswahl.</div>`);
+    $("wirkung-drill-close").onclick = () => box.classList.add("hidden");
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } catch (error) {
+    box.innerHTML = `<div class="empty-work">${esc(error.message)}</div>`;
+  }
+}
+
+document.querySelectorAll(".wirkung-tab").forEach((tab) => tab.addEventListener("click", () => {
+  wirkungGruppe = tab.dataset.group;
+  document.querySelectorAll(".wirkung-tab").forEach((el) => el.classList.toggle("active", el === tab));
+  $("wirkung-drill").classList.add("hidden");
+  ladeWirkung();
+}));
+["wf-campaign", "wf-goal", "wf-source", "wf-zielgruppe", "wf-route", "wf-automation", "wf-from", "wf-to"]
+  .forEach((id) => $(id)?.addEventListener("change", () => { $("wirkung-drill").classList.add("hidden"); ladeWirkung(); }));
+$("wf-reset").onclick = () => {
+  ["wf-campaign", "wf-goal", "wf-source", "wf-zielgruppe", "wf-route", "wf-automation", "wf-from", "wf-to"].forEach((id) => { if ($(id)) $(id).value = ""; });
+  $("wirkung-drill").classList.add("hidden");
+  ladeWirkung();
+};
+
 function renderSettings() {
   const alive = !!state.engine?.alive; $("engine-title").textContent = alive ? "Engine arbeitet" : "Engine ist aus"; $("engine-copy").textContent = alive ? "Vernetzung, Kampagnen und freigegebene Nachrichten laufen in einer gemeinsamen Prioritätsqueue." : "Ohne Engine werden keine Hintergrundaufgaben ausgeführt."; $("engine-toggle").textContent = alive ? "Engine stoppen" : "Engine starten";
   const level = automationLevel(); document.querySelectorAll("[data-level]").forEach((button) => button.classList.toggle("active", button.dataset.level === level));

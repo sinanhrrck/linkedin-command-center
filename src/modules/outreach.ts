@@ -4,6 +4,7 @@ import { humanDelay, humanScroll, humanType, humanTypeInto } from "../core/human
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { db, getState, setState } from "../db/index.js";
 import { deferProfile, recordReadSaving } from "./lowRead.js";
+import { recordCrmStage } from "./crmStages.js";
 
 /** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
 function normText(s: string): string {
@@ -209,6 +210,8 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
       db.prepare(
         "UPDATE contacts SET status='invited', invited_at=datetime('now') WHERE profile_url = ?",
       ).run(profileUrl);
+      const eingeladen = db.prepare("SELECT id FROM contacts WHERE profile_url=?").get(profileUrl) as { id: number } | undefined;
+      if (eingeladen) recordCrmStage(eingeladen.id, "invited", "bot");
       console.info(`[outreach] ✅ vernetzt mit ${profileUrl}`);
     });
   } catch (e) {

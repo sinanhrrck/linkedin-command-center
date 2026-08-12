@@ -30,11 +30,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: installer-${{ matrix.os }}
+          # ACHTUNG: muss zu build.directories.output in package.json passen ("release").
+          # Bis 2026-08-12 stand hier "dist/" — das ist das TypeScript-Ziel, nicht das der Installer.
+          # Der Workflow lief seit v0.8.0-beta.1 nicht mehr, deshalb fiel es nie auf; mit
+          # if-no-files-found:error wäre jeder Release-Lauf hier abgebrochen.
           path: |
-            dist/*.dmg
-            dist/*.exe
-            dist/*.yml
-            dist/*.blockmap
+            release/*.dmg
+            release/*.exe
+            release/*.yml
+            release/*.blockmap
           if-no-files-found: error
 
   release:

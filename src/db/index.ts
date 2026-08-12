@@ -234,6 +234,23 @@ db.exec(
       AND (SELECT campaign_id FROM lead_sources s WHERE s.id = contacts.source_id) IS NOT NULL`,
 );
 
+// MESSMODELL (Phase 5.1): Das Stufenprotokoll traegt seine Zuordnung selbst. Kampagne, Quelle
+// und Ereigniszeit werden beim Schreiben eingefroren, statt sie spaeter ueber `contacts` zu
+// joinen. Sonst wuerde eine spaetere Korrektur am Kontakt (andere Kampagne, geloeschte Quelle)
+// rueckwirkend die Historie umschreiben und jede Auswertung waere nicht mehr belegbar.
+for (const [column, definition] of [
+  ["campaign_id", "INTEGER"],
+  ["source_id", "INTEGER"],
+  ["reply_quality", "TEXT"],
+  ["occurred_at", "TEXT"],
+] as const) {
+  try { db.exec(`ALTER TABLE crm_stage_events ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
+}
+// Altbestand kannte nur den Schreibzeitpunkt. Fuer Zeitraum-Filter ist er die einzige belegbare
+// Naeherung an den Ereigniszeitpunkt; neue Ereignisse setzen occurred_at explizit.
+db.exec("UPDATE crm_stage_events SET occurred_at=created_at WHERE occurred_at IS NULL");
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_crm_stage_attribution ON crm_stage_events(campaign_id,source_id,stage,occurred_at)"); } catch { /* existiert */ }
+
 // Einmaliger und danach idempotenter Integritaetslauf. Der produktive Umbau legt vor dem ersten
 // Lauf eine separate SQLite-Sicherung an; weitere Starts finden keine Gruppen mehr.
 const integrity = repairContactDuplicates(db);

@@ -139,7 +139,32 @@
         </div>
         <p class="planning-note">„Gemessen“ wird ab fünf Fällen in der jeweiligen Vorstufe automatisch verwendet. Bis dahin bleibt die Quote eine klar markierte, veränderbare Annahme. Follow-ups werden nicht doppelt gezählt.</p>
       </section>
-      <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Conversion</span><h3>Vom Lead zur Antwort</h3></div></div><div id="funnel-bars"></div></section>
+      <!-- WIRKUNG (Phase 5.2/5.3): eine Kette, eine Quelle. Alle Zahlen kommen aus dem
+           Ereignisprotokoll `crm_stage_events`, nicht aus Kontakt-Zeitstempeln. Jede Stufe ist
+           anklickbar und zeigt exakt die Kontakte, die sie erzeugt haben. -->
+      <section class="insight-panel wirkung">
+        <div class="section-head">
+          <div><span class="eyebrow">Wirkung</span><h3>Von der Quelle zum Ergebnis</h3></div>
+          <div class="wirkung-group" role="group" aria-label="Vergleich">
+            <button class="wirkung-tab active" data-group="">Gesamt</button>
+            <button class="wirkung-tab" data-group="campaign">Je Kampagne</button>
+            <button class="wirkung-tab" data-group="source">Je Quelle</button>
+          </div>
+        </div>
+        <div class="wirkung-filter">
+          <label><span>Kampagne</span><select id="wf-campaign"><option value="">Alle</option></select></label>
+          <label><span>Ziel</span><select id="wf-goal"><option value="">Alle</option><option value="B1">B1</option><option value="P1">P1</option><option value="AEC">AEC</option></select></label>
+          <label><span>Quelle</span><select id="wf-source"><option value="">Alle</option></select></label>
+          <label><span>Zielgruppe</span><select id="wf-zielgruppe"><option value="">Alle</option><option value="azubi">Azubi</option><option value="student">Student</option></select></label>
+          <label><span>Herkunft</span><select id="wf-route"><option value="">Alle</option><option value="external">Neu vernetzt</option><option value="network">Bestehendes Netzwerk</option></select></label>
+          <label><span>Status</span><select id="wf-automation"><option value="">Alle</option><option value="active">Aktiv</option><option value="paused">Pausiert</option><option value="excluded">Ausgeschlossen</option></select></label>
+          <label><span>Von</span><input id="wf-from" type="date"/></label>
+          <label><span>Bis</span><input id="wf-to" type="date"/></label>
+          <button id="wf-reset" class="wirkung-reset" type="button">Zurücksetzen</button>
+        </div>
+        <div id="wirkung-inhalt" aria-live="polite"></div>
+        <section id="wirkung-drill" class="wirkung-drill hidden" aria-live="polite"></section>
+      </section>
       <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Aktivität heute</span><h3>Was NextLead ausgeführt hat</h3></div></div><div id="today-actions" class="today-actions"></div></section>
       <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Stetiges Lernen</span><h3>Was NextLead aus deinen Entscheidungen lernt</h3></div><span id="learning-privacy" class="learning-privacy"></span></div><div id="learning-summary"></div></section>
     </section>

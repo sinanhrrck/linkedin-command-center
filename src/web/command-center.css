@@ -104,3 +104,56 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 @media(max-width:700px){.relationship-actions{grid-template-columns:1fr}.relationship-actions span{display:none}.relationship-actions button{width:100%}}
 @media(max-width:700px){.contact-workspace-card{max-height:94vh}.contact-workspace-card .report-head{padding:18px}.contact-identity-state{margin:12px 18px 2px}.contact-timeline{padding:12px 18px 22px}.timeline-body>div{display:grid;gap:2px}.contact-actions{flex-wrap:wrap;justify-content:flex-start}.identity-quality{margin-left:0!important}}
 @media(max-width:600px){.top-actions #updated-at{display:none}.report-card{padding:20px}.report-actions{flex-direction:column-reverse}.report-actions button{width:100%}.support-button{padding:8px 10px}}
+
+/* ===== WIRKUNG: Funnel, Antwortqualität, Vergleich, Nachweis (Phase 5.2/5.3) ===== */
+.wirkung-group{display:flex;gap:4px;background:#f3f6fa;padding:3px;border-radius:10px}
+.wirkung .wirkung-tab{border:0!important;background:transparent!important;padding:7px 12px!important;border-radius:8px!important;font-size:11px!important;font-weight:750!important;color:var(--muted)!important}
+.wirkung .wirkung-tab.active{background:#fff!important;color:var(--ink)!important;box-shadow:0 2px 6px rgba(27,48,83,.09)}
+.wirkung-filter{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;padding:14px;background:#f8fafc;border:1px solid var(--line);border-radius:13px;margin-bottom:16px}
+.wirkung-filter label{display:grid;gap:4px}
+.wirkung-filter label span{font:700 9px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.1em;color:#8390a3;text-transform:uppercase}
+.wirkung-filter select,.wirkung-filter input{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 10px;font-size:11px;color:var(--ink);min-width:132px}
+.wirkung .wirkung-reset{margin-left:auto}
+/* Die Stufen sind Knöpfe (Drilldown), sollen aber wie Datenzeilen aussehen, nicht wie Aktionen. */
+.wirkung .funnel-row{width:100%;border:1px solid transparent!important;background:transparent!important;padding:7px 9px!important;border-radius:10px!important;text-align:left;font-size:11px!important;font-weight:400!important;color:var(--ink)!important;cursor:pointer}
+.wirkung .funnel-row:hover{border-color:#a9bfdc!important;background:#f8fbff!important}
+.wirkung-quoten{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:18px 0}
+.wirkung-quote{border:1px solid var(--line);border-radius:13px;padding:14px;background:#fff}
+.wirkung-quote span{font-size:10px;color:var(--muted)}
+.wirkung-quote b{display:block;font:750 24px ui-monospace,SFMono-Regular,Menlo,monospace;margin:7px 0 4px}
+.wirkung-quote small{font-size:9px;color:#8390a3}
+/* Unbelastbare Quoten werden gedämpft, nicht versteckt: die Zahl bleibt sichtbar, aber sie
+   sieht nicht aus wie ein Ergebnis, auf das man eine Entscheidung stützen sollte. */
+.wirkung-quote.schwach{background:#fbfcfd;border-style:dashed}
+.wirkung-quote.schwach b{color:#8390a3}
+.wirkung-oekonomie{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:6px}
+.wirkung-oekonomie>div{background:#f8fafc;border-radius:12px;padding:14px}
+.wirkung-oekonomie span{font-size:10px;color:var(--muted)}
+.wirkung-oekonomie b{display:block;font:700 16px ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0 3px}
+.wirkung-oekonomie small{font-size:9px;color:#8390a3}
+.wirkung-untertitel{margin:22px 0 10px;font-size:13px;letter-spacing:-.01em}
+.wirkung-qualitaeten{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.qualitaet{border:1px solid var(--line);border-radius:11px;padding:12px}
+.qualitaet span{font-size:10px;color:var(--muted)}
+.qualitaet b{display:block;font:700 19px ui-monospace,SFMono-Regular,Menlo,monospace;margin:5px 0 2px}
+.qualitaet small{font-size:9px;color:#8390a3}
+.qualitaet.positiv{border-color:#cfe8dc;background:#f9fdfb}
+.qualitaet.positiv b{color:var(--green)}
+.qualitaet.leer{opacity:.5}
+.wirkung-vergleich{display:grid;gap:2px}
+.vergleich-row{display:grid;grid-template-columns:minmax(150px,1.7fr) repeat(6,minmax(58px,.6fr));gap:10px;align-items:center;padding:11px 12px;border-radius:10px;font-size:11px}
+.vergleich-row:nth-child(even){background:#f8fafc}
+.vergleich-head{font:700 9px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:#8390a3;text-transform:uppercase;background:transparent!important}
+.vergleich-row>span{display:grid;gap:2px}
+.vergleich-row small{font-size:9px;color:#8390a3}
+.vergleich-kennzahl{font:700 14px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--blue)}
+.wirkung-note{margin:12px 0 0;font-size:10px;line-height:1.5;color:var(--muted)}
+.wirkung-drill{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
+.drill-list{display:grid;gap:2px;max-height:420px;overflow:auto}
+.drill-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;color:var(--ink);text-decoration:none;font-size:11px}
+.drill-row:hover{background:#f8fbff}
+.drill-row span{display:grid;gap:2px}
+.drill-row small{font-size:9px;color:#8390a3}
+.drill-meta{font:600 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);text-align:right;white-space:nowrap}
+@media(max-width:1050px){.wirkung-quoten{grid-template-columns:repeat(3,1fr)}.wirkung-oekonomie,.wirkung-qualitaeten{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:760px){.wirkung-quoten,.wirkung-oekonomie,.wirkung-qualitaeten{grid-template-columns:1fr 1fr}.wirkung-filter select,.wirkung-filter input{min-width:0;width:100%}.wirkung-filter label{flex:1 1 44%}.vergleich-row{grid-template-columns:1fr 52px 52px 60px;font-size:10px}.vergleich-row>:nth-child(2),.vergleich-row>:nth-child(3),.vergleich-row>:nth-child(6){display:none}}
