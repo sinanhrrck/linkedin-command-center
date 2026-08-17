@@ -88,21 +88,52 @@ export function transitionCampaignTarget(input: {
   return db.transaction(() => transitionInside(input))();
 }
 
-function activeDraft(campaignId: number, contactId: number) {
+/**
+ * ZWEI ARTEN VON KAMPAGNEN, ZWEI ORTE FÜR DEN NACHWEIS (Sinan 2026-08-17).
+ *
+ * - `event`/Legacy: `campaignTick` schreibt eigene Entwürfe (kind='event', incoming='campaign:<id>').
+ * - `auftrag` (B1/P1/AEC): `campaignTick` fasst diese Ziele bewusst NICHT an, sonst bekämen die
+ *   Kontakte zusätzlich zur normalen Erstnachricht noch eine Kampagnennachricht. Die Arbeit
+ *   erledigt die normale Pipeline (first/followup/message/reaktivierung).
+ *
+ * Der Abgleich suchte bisher IMMER nur nach Kampagnenentwürfen. Für Auftrags-Kampagnen fand er
+ * deshalb nie einen Beleg: 42 Ziele von AEC und P1 standen dauerhaft auf 'queued', obwohl die
+ * Kontakte längst vernetzt und angeschrieben waren. Das Cockpit versprach daraufhin endlos
+ * „42 Kampagnenkontakte als Entwurf vorbereiten" – für Sinan sah die Kampagne tot aus.
+ */
+type CampaignArt = "event" | "auftrag";
+
+export function campaignArt(campaignId: number): CampaignArt {
+  const row = db.prepare("SELECT kind,goal_code FROM campaigns WHERE id=?").get(campaignId) as
+    { kind: string; goal_code: string | null } | undefined;
+  return row && row.goal_code && row.kind !== "event" ? "auftrag" : "event";
+}
+
+/** Alle Entwürfe, die für diese Kampagnenart als Beleg zählen. */
+const BELEG_SQL: Record<CampaignArt, string> = {
+  event: "kind='event' AND incoming=?",
+  auftrag: "kind IN ('first','followup','message','reaktivierung') AND ?<>''",
+};
+
+function belegParam(campaignId: number, art: CampaignArt) {
+  return art === "event" ? `campaign:${campaignId}` : "x";
+}
+
+function activeDraft(campaignId: number, contactId: number, art = campaignArt(campaignId)) {
   return db.prepare(
     `SELECT id,status,created_at,sent_at FROM drafts
-      WHERE contact_id=? AND kind='event' AND incoming=?
+      WHERE contact_id=? AND ${BELEG_SQL[art]}
         AND status IN ('pending','approved','sending','sent')
       ORDER BY CASE status WHEN 'sent' THEN 0 WHEN 'sending' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END,id DESC LIMIT 1`,
-  ).get(contactId, `campaign:${campaignId}`) as { id: number; status: string; created_at: string; sent_at: string | null } | undefined;
+  ).get(contactId, belegParam(campaignId, art)) as { id: number; status: string; created_at: string; sent_at: string | null } | undefined;
 }
 
 export function reconcileCampaignTarget(campaignId: number, contactId: number): CampaignTargetStatus | null {
   const row = db.prepare(
-    `SELECT t.status,t.route,t.attempt_count,t.updated_at,c.accepted_at,c.replied_at,c.automation_status,c.do_not_contact
+    `SELECT t.status,t.route,t.attempt_count,t.updated_at,c.accepted_at,c.replied_at,c.messaged_at,c.automation_status,c.do_not_contact
        FROM campaign_targets t JOIN contacts c ON c.id=t.contact_id
       WHERE t.campaign_id=? AND t.contact_id=?`,
-  ).get(campaignId, contactId) as { status: CampaignTargetStatus; route: "network" | "external"; attempt_count: number; updated_at: string; accepted_at: string | null; replied_at: string | null; automation_status: string | null; do_not_contact: number | null } | undefined;
+  ).get(campaignId, contactId) as { status: CampaignTargetStatus; route: "network" | "external"; attempt_count: number; updated_at: string; accepted_at: string | null; replied_at: string | null; messaged_at: string | null; automation_status: string | null; do_not_contact: number | null } | undefined;
   if (!row) return null;
   if (["completed", "excluded", "cancelled"].includes(row.status)) return row.status;
 
@@ -112,19 +143,36 @@ export function reconcileCampaignTarget(campaignId: number, contactId: number): 
     transitionCampaignTarget({ campaignId, contactId, to: excluded ? "excluded" : "snoozed", reason: policy.reason, source: "reconcile", force: true });
     return excluded ? "excluded" : "snoozed";
   }
-  const draft = activeDraft(campaignId, contactId);
+  const art = campaignArt(campaignId);
+  const draft = activeDraft(campaignId, contactId, art);
   if (draft?.status === "sent") {
     if (row.replied_at && draft.sent_at && row.replied_at > draft.sent_at) {
       transitionCampaignTarget({ campaignId, contactId, to: "completed", reason: "Kontakt hat nach der Kampagnennachricht geantwortet", source: "reconcile", draftId: draft.id, force: true });
       return "completed";
     }
-    transitionCampaignTarget({ campaignId, contactId, to: "sent", reason: "Nachricht nachweislich zugestellt", source: "reconcile", draftId: draft.id, force: true });
+    transitionCampaignTarget({ campaignId, contactId, to: "sent",
+      reason: art === "auftrag" ? "Über die normale Nachrichtenstrecke zugestellt" : "Nachricht nachweislich zugestellt",
+      source: "reconcile", draftId: draft.id, force: true });
     return "sent";
   }
   if (draft) {
     const to = draft.status === "sending" ? "sending" : draft.status === "approved" ? "approved" : "drafted";
-    transitionCampaignTarget({ campaignId, contactId, to, reason: "Aktiver Kampagnenentwurf", source: "reconcile", draftId: draft.id, force: true });
+    transitionCampaignTarget({ campaignId, contactId, to,
+      reason: art === "auftrag" ? "Entwurf liegt in der normalen Nachrichtenstrecke bereit" : "Aktiver Kampagnenentwurf",
+      source: "reconcile", draftId: draft.id, force: true });
     return to;
+  }
+  /**
+   * Zweiter Nachweis für Auftrags-Kampagnen: der Halb-Automatik-Versand (`deliverFirstMessage`)
+   * sendet direkt und setzt nur `contacts.messaged_at` – ohne Entwurfszeile. Ohne diesen Zweig
+   * blieben neun bereits angeschriebene AEC/P1-Kontakte auf 'queued' hängen (Sinan 2026-08-17).
+   */
+  if (art === "auftrag" && row.messaged_at && !["sent", "completed"].includes(row.status)) {
+    const antwortDanach = row.replied_at && row.replied_at > row.messaged_at;
+    transitionCampaignTarget({ campaignId, contactId, to: antwortDanach ? "completed" : "sent",
+      reason: antwortDanach ? "Kontakt hat nach der Nachricht geantwortet" : "Direkt gesendet, ohne Entwurfsschritt",
+      source: "reconcile", force: true });
+    return antwortDanach ? "completed" : "sent";
   }
   if (row.status === "awaiting_connection") {
     if (row.accepted_at) transitionCampaignTarget({ campaignId, contactId, to: "queued", reason: "Vernetzung angenommen", source: "reconcile" });
@@ -144,9 +192,9 @@ export function reconcileCampaignTarget(campaignId: number, contactId: number): 
     return "queued";
   }
   const latest = db.prepare(
-    `SELECT status,rejection_reason FROM drafts WHERE contact_id=? AND kind='event' AND incoming=?
+    `SELECT status,rejection_reason FROM drafts WHERE contact_id=? AND ${BELEG_SQL[art]}
       ORDER BY id DESC LIMIT 1`,
-  ).get(contactId, `campaign:${campaignId}`) as { status: string; rejection_reason: string | null } | undefined;
+  ).get(contactId, belegParam(campaignId, art)) as { status: string; rejection_reason: string | null } | undefined;
   // Ein bewusst gelöschter Entwurf ist eine Nutzerentscheidung, kein technischer Fehler.
   // Ablehnungen mit Feedback dürfen dagegen einen Ersatz erhalten.
   if (["drafted", "approved", "sending", "failed"].includes(row.status) && latest?.status === "discarded") {

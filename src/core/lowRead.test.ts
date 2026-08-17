@@ -44,8 +44,10 @@ test("stellt nicht nutzbare Profile zurück und taktet Leseläufe über Neustart
 });
 
 test("behandelt ein erreichtes Lesebudget als geplantes Warten statt den Job zu starten", async () => {
-  const add = db.prepare("INSERT INTO actions(type,target) VALUES('pageRead','https://linkedin.test/feed')");
-  db.transaction(() => { for (let i = 0; i < 120; i++) add.run(); })();
+  // VERSCHIEDENE Seiten: das Budget zählt seit 2026-08-17 abgerufene Ziele, nicht Protokollzeilen
+  // (dieselbe Seite 120-mal zu laden ist ein Abruf, kein erschöpftes Budget).
+  const add = db.prepare("INSERT INTO actions(type,target) VALUES('pageRead',?)");
+  db.transaction(() => { for (let i = 0; i < 120; i++) add.run(`https://linkedin.test/feed/beitrag-${i}`); })();
   let runs = 0;
   const result = await runReadJobWhenDue("budget-stop", 60, async () => ++runs);
   assert.equal(result, null);

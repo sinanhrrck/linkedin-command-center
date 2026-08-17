@@ -47,6 +47,16 @@ export type Draft = {
   context_memory_version: number | null;
 };
 
+/**
+ * Auftrag UND die im Cockpit gepflegten Kampagnen-Fakten für einen Kontakt. Beides gehört
+ * zusammen in jeden Erstnachricht-Prompt: der Auftragssatz allein ist für alle Kontakte einer
+ * Kampagne identisch und trägt nichts von dem, was der Nutzer eingetragen hat.
+ */
+function auftragMitFakten(contactId: number) {
+  const goal = goalForContact(contactId);
+  return { goal, fakten: goal?.campaignId ? campaignContext(goal.campaignId) : "" };
+}
+
 /** Gemini erzeugt Sinans nächste Antwort aus dem Thread-Verlauf. */
 export async function replyDraft(ctx: ThreadContext): Promise<string> {
   const transcript = ctx.messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
@@ -77,7 +87,8 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
     )
     .get(c.profile_url);
   if (exists) return false;
-  const text = await firstMessage(c, undefined, goalForContact(c.id)).catch((e: Error) => {
+  const auftrag = auftragMitFakten(c.id);
+  const text = await firstMessage(c, undefined, auftrag.goal, auftrag.fakten).catch((e: Error) => {
     console.error(`[first] ⚠ KI-Fehler (Entwurf) fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
     return "";
   });
@@ -236,7 +247,8 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
   // KI-Ausfall NICHT verschlucken: sonst sieht es fuer den Nutzer so aus, als tue der Bot
   // nichts. Real passiert 2026-07-16: Gemini lieferte 503, der Bot ging wortlos weiter.
   // Der Kontakt bleibt 'accepted' und wird beim naechsten stuendlichen Lauf neu versucht.
-  const text = await firstMessage(c, undefined, goalForContact(c.id)).catch((e: Error) => {
+  const auftrag = auftragMitFakten(c.id);
+  const text = await firstMessage(c, undefined, auftrag.goal, auftrag.fakten).catch((e: Error) => {
     console.error(`[first] ⚠ KI konnte keinen Text schreiben fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
     return "";
   });
@@ -492,7 +504,7 @@ async function regenerateText(d: Draft, instruction: string, rejectedTexts: stri
     // Für den richtigen Winkel den Kontakt holen; sonst generischer Fallback.
     const c = db.prepare("SELECT * FROM contacts WHERE profile_url=?").get(d.thread_url) as Contact | undefined;
     if (c) return d.kind === "first"
-      ? firstMessage(c, { instruction, rejectedTexts: rejected }, goalForContact(c.id))
+      ? firstMessage(c, { instruction, rejectedTexts: rejected }, auftragMitFakten(c.id).goal, auftragMitFakten(c.id).fakten)
       : followupMessage(c, 1, { instruction, rejectedTexts: rejected });
   }
   if (d.kind === "comment") {

@@ -369,15 +369,20 @@ function contextEvidenceCard(draft) {
   let evidence = null;
   try { evidence = JSON.parse(draft.context_evidence_json || "null"); } catch { evidence = null; }
   const intentLabels = { later: "Später", busy: "Aktuell beschäftigt", not_interested: "Kein Interesse", do_not_contact: "Nicht mehr anschreiben", interested: "Interessiert", meeting: "Terminwunsch", question: "Offene Frage", neutral: "Neutral" };
-  if (!evidence) return `<section class="context-evidence empty"><div class="context-evidence-head"><span>Gesprächsbeleg</span><b>Kein früherer Gesprächskontext</b></div><p>Die Nachricht stützt sich auf Profil, Kampagnenziel und hinterlegte Fakten.</p></section>`;
+  if (!evidence) return `<section class="context-evidence empty"><div class="context-evidence-head"><span>Gesprächsbeleg</span><b>Erstkontakt: noch nichts gesendet</b></div><p>An diese Person ging bisher keine Nachricht raus. Der Entwurf stützt sich auf Profil, Kampagnenziel und hinterlegte Fakten.</p></section>`;
   const blocked = draft.context_validation === "blocked" || draft.context_validation === "stale";
+  const out = evidence.outbound || { count: 0 };
+  const datum = (wert) => { try { return new Date(String(wert).replace(" ", "T")).toLocaleDateString("de-DE"); } catch { return String(wert); } };
   const facts = [
+    // Zuerst: haben wir überhaupt schon geschrieben? Das entscheidet, ob eine Begrüßung passt.
+    out.count ? ["Bereits gesendet", `${out.count}× · zuletzt ${out.lastKind || "Nachricht"}${out.lastAt ? ` am ${datum(out.lastAt)}` : ""}`] : ["Bereits gesendet", "Noch nichts – das ist der Erstkontakt"],
+    out.lastText ? ["Zuletzt geschrieben", `„${out.lastText}“`] : null,
     evidence.lastStatement ? ["Letzte Aussage", `„${evidence.lastStatement}“`] : null,
     ["Erkannte Absicht", intentLabels[evidence.intent] || evidence.intent],
     evidence.commitment ? ["Zusage", evidence.commitment] : null,
     evidence.openPoint ? ["Offener Punkt", evidence.openPoint] : null,
   ].filter(Boolean);
-  return `<section class="context-evidence ${blocked ? "conflict" : ""}"><div class="context-evidence-head"><span>${blocked ? "Konflikt im Gespräch" : "Warum passt diese Nachricht?"}</span><b>${blocked ? "Nicht freigeben" : "Kontext geprüft"}</b></div><div class="context-evidence-grid">${facts.map(([label, value]) => `<div><span>${esc(label)}</span><p>${esc(value)}</p></div>`).join("")}</div>${evidence.nextContactAt ? `<small>Nächste Ansprache frühestens: ${esc(new Date(evidence.nextContactAt.replace(" ", "T")).toLocaleDateString("de-DE"))}</small>` : ""}</section>`;
+  return `<section class="context-evidence ${blocked ? "conflict" : ""}"><div class="context-evidence-head"><span>${blocked ? "Konflikt im Gespräch" : "Warum passt diese Nachricht?"}</span><b>${blocked ? "Nicht freigeben" : out.count ? "Kein Erstkontakt" : "Kontext geprüft"}</b></div><div class="context-evidence-grid">${facts.map(([label, value]) => `<div><span>${esc(label)}</span><p>${esc(value)}</p></div>`).join("")}</div>${evidence.nextContactAt ? `<small>Nächste Ansprache frühestens: ${esc(new Date(evidence.nextContactAt.replace(" ", "T")).toLocaleDateString("de-DE"))}</small>` : ""}</section>`;
 }
 function bindDraftDelete(draft, reviewer) {
   const button = reviewer.querySelector('[data-review-action="delete"]');

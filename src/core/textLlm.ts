@@ -17,7 +17,21 @@ import { generateClaude, claudeAvailable } from "./claude.js";
  * Gemini-Code bleibt im Repo (gemini.ts) für Tests, wird hier aber nicht mehr aufgerufen.
  * Wirft, wenn kein Claude-Key gesetzt ist – der Aufrufer entscheidet dann (Entwurf/Retry).
  */
+type TextGenerator = (prompt: string) => Promise<string>;
+let testGenerator: TextGenerator | null = null;
+
+/**
+ * NUR FÜR TESTS: ersetzt den KI-Kanal durch eine feste Antwort. Ohne diesen Haken müssten
+ * Tests, die die Entwurfs-Pipeline durchlaufen, entweder echte (kostenpflichtige) Aufrufe
+ * machen oder sich auf einen stillen Fallback verlassen. Genau so ein Fallback hat am
+ * 17.08.2026 unbearbeitete Vorlagen an echte Kontakte durchgelassen.
+ */
+export function setTextGeneratorForTests(fn: TextGenerator | null): void {
+  testGenerator = fn;
+}
+
 export async function generateText(prompt: string): Promise<string> {
+  if (testGenerator) return testGenerator(prompt);
   if (!claudeAvailable())
     throw new Error("Kein ANTHROPIC_API_KEY gesetzt – Textgenerierung braucht jetzt Claude (Gemini wurde entfernt).");
   return generateClaude(prompt);

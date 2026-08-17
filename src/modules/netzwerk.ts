@@ -7,6 +7,8 @@ import { istPlausibleNachricht } from "../core/nachrichtCheck.js";
 import { events } from "../core/events.js";
 import { getDraft } from "./drafts.js";
 import { attachDraftContext } from "./conversationMemory.js";
+import { goalForContact } from "./goals.js";
+import { campaignContext } from "./campaigns.js";
 
 /**
  * BESTEHENDES NETZWERK REAKTIVIEREN.
@@ -121,7 +123,8 @@ export async function generateReaktivierung(limit = 3): Promise<number> {
   const kandidaten = reaktivierbareKontakte(limit);
   let done = 0;
   for (const c of kandidaten) {
-    const text = await reaktivierungMessage(c).catch(() => "");
+    const goal = goalForContact(c.id);
+    const text = await reaktivierungMessage(c, goal, goal?.campaignId ? campaignContext(goal.campaignId) : "").catch(() => "");
     if (!text) continue;
     const chk = istPlausibleNachricht(text);
     if (!chk.ok) {

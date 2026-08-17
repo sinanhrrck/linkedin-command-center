@@ -11,6 +11,12 @@ const { repairContactDuplicates } = await import("../db/dataIntegrity.js");
 const { createCampaign, listCampaigns } = await import("../modules/campaigns.js");
 const { campaignTick } = await import("../modules/campaignRunner.js");
 const { rejectDraft, deleteDraft, createFirstMessageDraft, deliverFirstMessage } = await import("../modules/drafts.js");
+const { setTextGeneratorForTests } = await import("../core/textLlm.js");
+
+// Die Kampagnen-Pipeline schreibt jeden Entwurf per KI. Ohne diesen Stub gaebe es hier gar
+// keinen Entwurf mehr (seit 2026-08-17 wird bei KI-Ausfall bewusst nichts erzeugt, statt die
+// rohe Vorlage samt Platzhaltern zur Freigabe zu legen).
+setTextGeneratorForTests(async () => "Hey, ich melde mich kurz wegen eines Termins bei uns. Sag Bescheid, ob das fuer dich interessant ist.");
 
 test("vereinigt kanonisch gleiche Profile und offene Entwürfe", () => {
   db.prepare("INSERT INTO contacts(profile_url,full_name,status,invited_at) VALUES(?,?,?,datetime('now','-3 days'))")

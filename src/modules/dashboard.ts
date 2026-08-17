@@ -327,9 +327,15 @@ export function getDashboardData() {
         .get(activeJob) as { job: string; detail: string | null; started_at: string } | undefined
     : undefined;
   const approved = approvedCount();
+  /**
+   * NUR Kampagnen zählen, die `campaignTick` auch wirklich abarbeitet (gleiche Bedingung wie
+   * dort). Auftrags-Kampagnen (B1/P1/AEC) laufen über die normale Nachrichtenstrecke; sie hier
+   * mitzuzählen versprach dem Nutzer endlos „42 Kampagnenkontakte in 10 Minuten", während
+   * campaignTick diese Ziele bewusst überspringt (Sinan 2026-08-17).
+   */
   const campaignQueued = (db.prepare(
     `SELECT COUNT(*) n FROM campaign_targets t JOIN campaigns c ON c.id=t.campaign_id
-      WHERE c.active=1 AND t.status='queued'`,
+      WHERE c.active=1 AND t.status='queued' AND (c.goal_code IS NULL OR c.kind='event')`,
   ).get() as { n: number }).n;
   const campaignConnections = (db.prepare(
     `SELECT COUNT(*) n FROM campaign_targets t JOIN campaigns c ON c.id=t.campaign_id

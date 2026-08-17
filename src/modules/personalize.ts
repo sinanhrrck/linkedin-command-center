@@ -56,8 +56,15 @@ Nimm EINEN konkreten Bezug zur Person (z.B. ihre Rolle/Ausbildung). Gib NUR die 
  * Nachricht endet mit der offenen Frage.
  * Bewusst eigenständig (nutzt NICHT promptKontext), damit die strengen Vorgaben 1:1 greifen.
  * Person-Daten (Name + Profil-Headline mit Bank/Lehrjahr/Standort) werden unten als INPUT injiziert.
+ *
+ * `kampagnenFakten` = `campaignContext(campaignId)`. Die im Cockpit gepflegten Angaben
+ * (Zielgruppe, Nutzen, Ziel, Briefing) kamen bisher NUR bei Event-Einladungen an; die
+ * Erstnachrichten der Aufträge P1/AEC liefen mit dem generischen Auftragssatz aus goals.ts.
+ * Deshalb wirkten diese Kampagnen wie „läuft gar nicht“ (Sinan 2026-08-17): der gepflegte
+ * Inhalt hatte keinerlei Wirkung auf den Text. Die Fakten steuern jetzt die ANKNÜPFUNG –
+ * verkauft oder erwähnt wird in Nachricht 1 weiterhin nichts.
  */
-export async function firstMessage(c: Contact, variation?: TextVariation, goal?: ConversationGoal | null): Promise<string> {
+export async function firstMessage(c: Contact, variation?: TextVariation, goal?: ConversationGoal | null, kampagnenFakten?: string): Promise<string> {
   const aufbau = variation
     ? `AUFBAU FÜR DIESE NEUGENERIERUNG:\nFolge der unten genannten neuen Gesprächsrichtung. Du darfst die übliche Reihenfolge Profilbezug, eigene Geschichte, offene Frage ausdrücklich verlassen. Nutze nur Bausteine, die zu dieser Richtung passen.`
     : `AUFBAU (Nutze immer diese 3 Bausteine, genau in dieser Reihenfolge):
@@ -95,6 +102,7 @@ INPUT für diese Person (nutze nur, was da ist; erfinde nichts dazu):
 Name: ${c.full_name ?? "Unbekannt"}
 Profil-Headline (enthält oft Bank, Ausbildungsjahr, Studiengang, Standort): ${c.headline ?? "unbekannt"}
 ${goal ? `\nLANGFRISTIGER GESPRÄCHSAUFTRAG: ${goal.code} – ${goal.label}. ${goal.instruction}\nDie Erstnachricht bleibt trotzdem ein echter Icebreaker ohne Pitch. Wähle nur eine Anknüpfung, die später natürlich zu diesem Ziel passen kann.` : ""}
+${kampagnenFakten ? `\n${kampagnenFakten}\nNutze diese Angaben nur, um die richtige Anknüpfung und Tonlage zu wählen. Erwähne weder Kampagne, Angebot, Event noch Nutzen in dieser ersten Nachricht.` : ""}
 ${learningGuidance(goal?.code ?? null)}
 
 OUTPUT-REGEL: Generiere GENAU EINE Nachricht nach obigem Aufbau. Nichts drumherum, keine Erklärungen davor oder danach, kein "Hier ist die Nachricht:". Gib ausschließlich den Text der Nachricht aus.`;
@@ -113,6 +121,8 @@ export async function eventInvitation(input: {
   headline?: string | null;
   kontext?: string;
   vorlage: string;
+  /** false = es ging bereits eine Nachricht raus. Dann darf die Einladung nicht neu begrüßen. */
+  erstkontakt?: boolean;
 }): Promise<string> {
   const firstName = String(input.name || "").trim().split(/\s+/)[0];
   const prompt = `Du bist Sinan und lädst per LinkedIn-Direktnachricht zu deiner eigenen Veranstaltung ein.
@@ -136,7 +146,12 @@ AUFGABE: Schreibe daraus EINE eigene Einladung an genau diese Person.
   gehört unverändert in die Nachricht, falls er in der Vorlage oder den Fakten steht.
 - Stil: Du-Form, gesprochene Sprache, kurze Sätze, keine Emojis, keine Gedankenstriche als
   Satztrenner, keine Werbesprache, maximal 5 Zeilen, höchstens EINE Frage.
-- Starte mit "Hey ${firstName || "{Vorname}"}".
+${input.erstkontakt === false
+    ? `- Ihr schreibt bereits miteinander. KEINE Begrüßungsfloskel, KEIN "danke fürs Vernetzen",
+  KEIN "schön, dass wir vernetzt sind". Steig so ein, wie man in einem laufenden Chat einsteigt.`
+    : `- Starte mit "Hey ${firstName || "{Vorname}"}".`}
+- Schreibe den fertigen Text. Lass NIEMALS einen Platzhalter wie [Name], {Name} oder <Vorname>
+  stehen. Ist der Vorname unbekannt, formuliere die Anrede ohne Namen.
 
 Gib NUR den Nachrichtentext aus, ohne Anführungszeichen und ohne Erklärung.`;
   return saubern(await generateText(prompt));
@@ -338,12 +353,19 @@ Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
  * REAKTIVIERUNG bestehender Kontakte: Leute, mit denen Sinan schon vernetzt ist, aber nie
  * geschrieben hat. Heikelster Ton im ganzen Tool – die Person kennt ihn evtl. kaum noch,
  * deshalb: kein "wir sind ja vernetzt"-Vorwand, kein Pitch, echter Anlass.
+ *
+ * `goal`/`kampagnenFakten` (Sinan 2026-08-17): Bestehende Verbindungen sind in AEC/P1 die einzige
+ * Gruppe, die NIE eine Erstnachricht bekommt (die läuft nur nach frisch angenommener Anfrage).
+ * Für sie ist diese Nachricht der einzige Berührungspunkt – sie muss den Auftrag kennen, sonst
+ * bleiben diese Kampagnenkontakte für immer unbearbeitet liegen.
  */
-export async function reaktivierungMessage(c: Contact): Promise<string> {
+export async function reaktivierungMessage(c: Contact, goal?: ConversationGoal | null, kampagnenFakten?: string): Promise<string> {
   const prompt = `Schreibe eine kurze, natürliche LinkedIn-Nachricht (2-3 Sätze).
 ${promptKontext()}
 ${personZeile(c)}
-${learningGuidance(null)}
+${learningGuidance(goal?.code ?? null)}
+${goal ? `\nLANGFRISTIGER GESPRÄCHSAUFTRAG: ${goal.code} – ${goal.label}. ${goal.instruction}\nDiese Nachricht bleibt trotzdem ein reiner Gesprächsöffner. Wähle nur eine Anknüpfung, die später natürlich zu diesem Ziel passen kann.` : ""}
+${kampagnenFakten ? `\n${kampagnenFakten}\nNutze diese Angaben nur für die richtige Anknüpfung und Tonlage. Erwähne weder Kampagne noch Angebot oder Event in dieser Nachricht.` : ""}
 Kontext: Ihr seid auf LinkedIn schon vernetzt, aber ihr habt nie miteinander geschrieben.
 Die Person erinnert sich vielleicht nicht mehr an die Vernetzung.
 Regeln:

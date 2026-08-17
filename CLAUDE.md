@@ -174,6 +174,50 @@ NextLead-mac-arm64.dmg` bzw. `-Setup-win.exe`) und der Update-Check (pickt per E
 mehr beim Versionssprung. Release muss VERÖFFENTLICHT sein (nicht Draft), sonst greift `releases/latest`
 weder für Download noch Update-Check.
 
+## UPDATE 2026-08-17 — Kampagnen-Qualität, Erstkontakt-Wahrheit, Lese-Budget-Zählung
+Auslöser: neun wortgleiche Event-Einladungen „Hi [Name], danke fürs Vernetzen!“, acht davon an
+Kontakte, deren Erstnachricht keine sechs Minuten alt war. Dazu „Kampagnen AEC/P1 laufen nicht“.
+- **KEIN STILLER VORLAGEN-VERSAND.** `inviteText` (campaignRunner.ts) wirft jetzt
+  `KiNichtVerfuegbar`, statt bei KI-Ausfall die rohe Vorlage als Entwurf abzulegen. Ursache war ein
+  leeres Anthropic-Guthaben — seit 2026-07-26 laufen ALLE Texte über Claude (`core/textLlm.ts`),
+  ohne Guthaben entsteht kein einziger personalisierter Text. Das Ziel geht ohne Fehlversuch zurück
+  auf `queued`, der Tick bricht ab (jeder weitere Versuch hätte dasselbe Ergebnis). Ein Text mit
+  ungefülltem Platzhalter wird ebenso hart blockiert. REGEL: lieber kein Entwurf als ein
+  wortgleicher Massentext mit sichtbarem Platzhalter.
+- **PLATZHALTER-NORMALISIERUNG.** `normalisierePlatzhalter` übersetzt `[Name]`, `{{Vorname}}`,
+  `<Datum>`, `%Uhrzeit%` (auch deutsche Wörter) auf die Schlüssel, die `renderMessage` kennt.
+  Menschen tippen Serienbrief-Syntax; vorher blieb `[Name]` wörtlich stehen.
+- **ERSTKONTAKT IST NUR EINER OHNE HISTORIE.** `conversationMemory` kannte ausschließlich
+  EINGEHENDE Nachrichten → der Prüfbereich meldete „Kein früherer Gesprächskontext“, obwohl gerade
+  erst geschrieben wurde. Neu: `outboundHistory(contactId)` (gesendete Entwürfe + `messaged_at`,
+  Kommentare zählen nicht) steckt in `DraftContextEvidence.outbound` und im Cockpit.
+  `MINDESTABSTAND_TAGE = 3` in campaignRunner.ts: wer gerade angeschrieben wurde, bekommt keine
+  Einladung. Muss doch geschrieben werden, sagt `outboundContext()` der KI ausdrücklich, dass es
+  KEIN Erstkontakt ist (keine Begrüßung, kein „danke fürs Vernetzen“).
+- **KAMPAGNEN-FAKTEN WIRKEN JETZT AUCH AUF ERSTNACHRICHTEN.** `campaignContext(id)` ging vorher nur
+  in Event-Einladungen; `firstMessage`/`reaktivierungMessage` liefen mit dem generischen
+  Auftragssatz aus goals.ts (bei AEC wörtlich „erfinde keine Bedeutung für AEC“). Deshalb wirkte
+  gepflegter Kampagneninhalt wie wirkungslos. Neuer Parameter `kampagnenFakten`, gesetzt über
+  `auftragMitFakten()` in drafts.ts. Die Fakten steuern die ANKNÜPFUNG; erwähnt wird in Nachricht 1
+  weiterhin nichts.
+- **ZWEI KAMPAGNENARTEN, ZWEI ORTE FÜR DEN NACHWEIS** (`campaignArt()` in campaignWorkflow.ts).
+  `event`/Legacy → eigene Entwürfe (kind='event', incoming='campaign:<id>'). `auftrag` (B1/P1/AEC)
+  → `campaignTick` überspringt diese Ziele bewusst (sonst doppelte Ansprache), die Arbeit macht die
+  normale Strecke (first/followup/message/reaktivierung) PLUS `contacts.messaged_at` für den
+  Halb-Automatik-Versand, der ganz ohne Entwurfszeile sendet. Vorher fand der Abgleich für
+  Auftrags-Kampagnen nie einen Beleg: 42 Ziele von AEC/P1 standen dauerhaft auf `queued`, und
+  `dashboard.ts` versprach daraus endlos „42 Kampagnenkontakte in 10 Minuten“. `campaignQueued`
+  filtert jetzt mit derselben Bedingung wie campaignTick.
+- **LESE-BUDGET ZÄHLTE DOPPELT.** `framenavigated` (session.ts) feuert auch für LinkedIns
+  Weiterleitung `/in/name` → `/in/name/`. Real gemessen: 60 Protokollzeilen für 30 Profile, 113 für
+  72 Seiten → der Bot stand mittags mit „60/60“, obwohl er die Hälfte verbraucht hatte. `heute()`
+  in leseBudget.ts zählt jetzt VERSCHIEDENE Ziele (`schluessel()`, Profile über
+  `canonicalProfileUrl`). Bewusst beim LESEN korrigiert: `actions` bleibt das lückenlose
+  Safety-Protokoll. CAPS UNVERÄNDERT (60/120) — das ist die Linie, an der das Konto gesperrt wurde.
+- **TEST-SEAM:** `setTextGeneratorForTests()` in core/textLlm.ts. Tests, die durch die
+  Entwurfs-Pipeline laufen, brauchen einen KI-Stub — vorher verließen sie sich auf genau den
+  stillen Fallback, der den Vorfall verursacht hat.
+
 ## UPDATE 2026-07-24 — 3-Modul-UI, Netzwerk-Reaktivierung, zweistufige Follow-Ups
 - **NAVIGATION = 3 Module** (`crm.html`, `.nav-group[data-group]` + `.nav-grp` Kopf + `.nav-sub`):
   Lead Engine (leadsuche/vernetzen/contacts) · Sales Agent (erstnachricht/gespraech/followups/

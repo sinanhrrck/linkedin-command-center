@@ -16,6 +16,20 @@ export type ConversationMemory = {
   updated_at: string;
 };
 
+/**
+ * Was WIR dieser Person bereits geschickt haben. Das Gedächtnis kannte bisher nur EINGEHENDE
+ * Nachrichten – deshalb meldete der Prüfbereich „Kein früherer Gesprächskontext“, obwohl die
+ * Person Minuten zuvor eine Erstnachricht bekommen hatte, und die Kampagne begrüßte sie erneut
+ * mit „danke fürs Vernetzen“ (Sinan 2026-08-17). Ein Erstkontakt ist nur einer, wenn wirklich
+ * noch nichts rausging.
+ */
+export type OutboundHistory = {
+  count: number;
+  lastAt: string | null;
+  lastKind: string | null;
+  lastText: string | null;
+};
+
 export type DraftContextEvidence = {
   contactId: number;
   memoryVersion: number;
@@ -26,6 +40,7 @@ export type DraftContextEvidence = {
   nextContactAt: string | null;
   sourceMessageAt: string;
   capturedAt: string;
+  outbound: OutboundHistory;
 };
 
 const sqlTime = (date: Date) => date.toISOString().slice(0, 19).replace("T", " ");
@@ -104,13 +119,50 @@ export function getConversationMemory(contactId: number): ConversationMemory | n
   return (db.prepare("SELECT * FROM conversation_memories WHERE contact_id=?").get(contactId) as ConversationMemory | undefined) || null;
 }
 
+const OUTBOUND_LABEL: Record<string, string> = {
+  first: "Erstnachricht", followup: "Follow-up", message: "Antwort im Chat",
+  reaktivierung: "Reaktivierung", event: "Event-Einladung", comment: "Kommentar",
+};
+
+/** Alles, was NACHWEISLICH rausgegangen ist: gesendete Entwürfe plus `contacts.messaged_at`
+ * (der Halb-Automatik-Versand setzt den Zeitstempel direkt, ohne Entwurf). */
+export function outboundHistory(contactId: number): OutboundHistory {
+  const leer: OutboundHistory = { count: 0, lastAt: null, lastKind: null, lastText: null };
+  if (!Number.isInteger(contactId) || contactId <= 0) return leer;
+  const gesendet = db.prepare(
+    `SELECT COUNT(*) n FROM drafts WHERE contact_id=? AND status='sent' AND kind<>'comment'`,
+  ).get(contactId) as { n: number };
+  const letzter = db.prepare(
+    `SELECT kind,draft,COALESCE(sent_at,created_at) at FROM drafts
+      WHERE contact_id=? AND status='sent' AND kind<>'comment'
+      ORDER BY COALESCE(sent_at,created_at) DESC,id DESC LIMIT 1`,
+  ).get(contactId) as { kind: string; draft: string; at: string } | undefined;
+  const messagedAt = (db.prepare("SELECT messaged_at FROM contacts WHERE id=?").get(contactId) as { messaged_at: string | null } | undefined)?.messaged_at ?? null;
+  if (!gesendet.n && !messagedAt) return leer;
+  // Der Zeitstempel darf nie älter aussehen, als er ist: der jüngste Beleg gewinnt. Den Wortlaut
+  // gibt es nur, wenn er auch zum jüngsten Beleg gehört – sonst zeigt der Prüfbereich einen
+  // veralteten Text als „letzte Nachricht“ an.
+  const ausEntwurf = letzter?.at ?? null;
+  const neuerStempel = messagedAt && (!ausEntwurf || messagedAt > ausEntwurf);
+  return {
+    count: Math.max(gesendet.n, messagedAt ? 1 : 0),
+    lastAt: neuerStempel ? messagedAt : ausEntwurf,
+    lastKind: neuerStempel ? "Nachricht" : (letzter ? OUTBOUND_LABEL[letzter.kind] ?? letzter.kind : null),
+    lastText: neuerStempel || !letzter ? null : clean(letzter.draft, 300),
+  };
+}
+
 export function captureDraftContext(contactId: number): DraftContextEvidence | null {
   const memory = getConversationMemory(contactId);
-  if (!memory) return null;
+  const outbound = outboundHistory(contactId);
+  // Kein Gedächtnis UND noch nie etwas gesendet = echter Erstkontakt, es gibt nichts zu belegen.
+  if (!memory && !outbound.count) return null;
   return {
-    contactId, memoryVersion: memory.version, intent: memory.intent, lastStatement: memory.last_statement,
-    commitment: memory.commitment, openPoint: memory.open_point, nextContactAt: memory.next_contact_at,
-    sourceMessageAt: memory.source_message_at, capturedAt: sqlTime(new Date()),
+    contactId, memoryVersion: memory?.version ?? 0, intent: memory?.intent ?? "neutral",
+    lastStatement: memory?.last_statement ?? null, commitment: memory?.commitment ?? null,
+    openPoint: memory?.open_point ?? null, nextContactAt: memory?.next_contact_at ?? null,
+    sourceMessageAt: memory?.source_message_at ?? outbound.lastAt ?? sqlTime(new Date()),
+    capturedAt: sqlTime(new Date()), outbound,
   };
 }
 
