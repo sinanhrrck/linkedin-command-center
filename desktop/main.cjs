@@ -32,15 +32,9 @@ function sendUpdate(status) {
   if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send("update:status", status);
 }
 
-/** Version a > b ? (numerischer Semver-Vergleich, z.B. "0.1.10" > "0.1.9"). */
-function istNeuer(a, b) {
-  const pa = String(a).split(".").map(Number), pb = String(b).split(".").map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] || 0) - (pb[i] || 0);
-    if (d !== 0) return d > 0;
-  }
-  return false;
-}
+// Versionsvergleich + Release-Auswahl liegen in version.cjs, damit sie testbar sind
+// (main.cjs laedt Electron und laesst sich nicht importieren). Siehe dort die Fehlergeschichte.
+const { istNeuer, neuestesRelease } = require("./version.cjs");
 
 /** GitHub-API abfragen (folgt keinen Redirects – die API antwortet direkt mit JSON). */
 function ghJson(pfad) {
@@ -76,7 +70,10 @@ async function suchNachUpdate(manuell) {
   if (!app.isPackaged) { if (manuell) sendUpdate({ state: "dev" }); return; } // im Dev-Modus kein Update
   try {
     sendUpdate({ state: "checking" });
-    const rel = await ghJson(`/repos/${UPDATE_REPO}/releases/latest`);
+    // Liste statt `/releases/latest`: der Endpunkt blendet Vorabversionen aus und lieferte
+    // deshalb dauerhaft v0.3.0, obwohl laengst Betas veroeffentlicht waren.
+    const rel = neuestesRelease(await ghJson(`/repos/${UPDATE_REPO}/releases?per_page=20`));
+    if (!rel) { sendUpdate({ state: "none", current: app.getVersion() }); return; }
     const tag = String(rel.tag_name || "").replace(/^v/, "");
     const aktuell = app.getVersion();
     if (!tag || !istNeuer(tag, aktuell)) { sendUpdate({ state: "none", current: aktuell }); return; }
