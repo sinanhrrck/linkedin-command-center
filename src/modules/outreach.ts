@@ -2,6 +2,7 @@ import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { governor, GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { humanDelay, humanScroll, humanType, humanTypeInto } from "../core/humanize.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
+import { MESSAGE_BOX_VISIBLE_SELECTOR, SEND_BUTTON_VISIBLE_SELECTOR } from "../core/linkedinMessagingUi.js";
 import { db, getState, setState } from "../db/index.js";
 import { deferProfile, recordReadSaving } from "./lowRead.js";
 import { recordCrmStage } from "./crmStages.js";
@@ -99,8 +100,8 @@ const SEL = {
    * (Kopfbereich + Sticky-Header), beide mit identischer URN → .first() ist immer richtig.
    */
   messageBtn: 'main a[href*="/messaging/compose"]:not([aria-label])',
-  messageBox: '.msg-form__contenteditable',
-  sendButton: '.msg-form__send-button',
+  messageBox: MESSAGE_BOX_VISIBLE_SELECTOR,
+  sendButton: SEND_BUTTON_VISIBLE_SELECTOR,
   // Einzelne Nachricht im Verlauf – dient als BELEG, dass wirklich gesendet wurde.
   threadItem: ".msg-s-event-listitem",
   // Ein einzelnes Chat-Fenster im Overlay. Nötig, um Prüfungen auf UNSER Fenster zu scopen

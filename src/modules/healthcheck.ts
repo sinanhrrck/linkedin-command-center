@@ -2,6 +2,7 @@ import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { humanDelay } from "../core/humanize.js";
 import { setState, getState } from "../db/index.js";
 import { events } from "../core/events.js";
+import { MESSAGE_BOX_VISIBLE_SELECTOR, SEND_BUTTON_VISIBLE_SELECTOR } from "../core/linkedinMessagingUi.js";
 
 /**
  * SELBST-CHECK gegen STILLE Fehler – der wichtigste Verlässlichkeits-Baustein.
@@ -20,11 +21,12 @@ import { events } from "../core/events.js";
  */
 
 const MESSAGING_URL = "https://www.linkedin.com/messaging/";
-// Kritische Selektoren des SENDE-Wegs (gespiegelt aus inbox.ts/outreach.ts – bei Änderung dort auch hier).
+// Kritische Selektoren des Sendewegs. Sie werden mit dem echten Versand geteilt, damit
+// Selbsttest und Versand nach einer LinkedIn-Aenderung nie unterschiedliche Wahrheiten haben.
 const SEL = {
   listItem: "li.msg-conversation-listitem",
-  messageBox: ".msg-form__contenteditable",
-  sendButton: ".msg-form__send-button",
+  messageBox: MESSAGE_BOX_VISIBLE_SELECTOR,
+  sendButton: SEND_BUTTON_VISIBLE_SELECTOR,
   threadTitle: "h2.msg-entity-lockup__entity-title",
 };
 
@@ -77,17 +79,36 @@ export async function selbstCheck(): Promise<HealthReport> {
       return r;
     }
 
-    // Ersten Thread öffnen und die Sende-Elemente prüfen (rein lesend, kein Versand).
-    await page.locator(SEL.listItem).first().click();
-    await humanDelay(1800, 3000);
-    await page.locator(SEL.messageBox).first().waitFor({ state: "visible", timeout: 12_000 }).catch(() => {});
-    r.messageBox = (await page.locator(SEL.messageBox).count().catch(() => 0)) > 0;
-    r.sendButton = (await page.locator(SEL.sendButton).count().catch(() => 0)) > 0;
-    // threadTitle nur informativ (Empfänger-Absicherung hängt daran).
-    const titelOk = (await page.locator(SEL.threadTitle).count().catch(() => 0)) > 0;
+    /**
+     * Nicht blind nur den ersten Thread testen: Oben koennen LinkedIn-Systemmeldungen,
+     * gesperrte Konten oder nicht beantwortbare Unterhaltungen stehen. Der alte Check
+     * erklaerte dann den KOMPLETTEN Versand faelschlich fuer defekt. Wir pruefen bis zu
+     * sechs vorhandene Threads und akzeptieren den ersten mit sichtbarem Nachrichtenfeld.
+     * Rein lesend: Es wird weder Text eingegeben noch gesendet.
+     */
+    const threads = page.locator(SEL.listItem);
+    const pruefAnzahl = Math.min(await threads.count().catch(() => 0), 6);
+    let titelOk = false;
+    for (let i = 0; i < pruefAnzahl; i++) {
+      const thread = threads.nth(i);
+      if (!(await thread.click().then(() => true).catch(() => false))) continue;
+      await humanDelay(900, 1600);
 
-    if (!r.messageBox) r.grund = "Eingabefeld nicht gefunden (messageBox-Selektor greift nicht).";
-    else if (!r.sendButton) r.grund = "Senden-Knopf nicht gefunden (sendButton-Selektor greift nicht).";
+      // Nur der Haupt-Thread zaehlt. Eventuell offene Overlay-Chats duerfen den Test
+      // nicht versehentlich gruen machen.
+      const hauptbereich = page.locator("main").first();
+      const box = hauptbereich.locator(SEL.messageBox);
+      const sichtbar = await box.first().waitFor({ state: "visible", timeout: 4_000 }).then(() => true).catch(() => false);
+      if (!sichtbar) continue;
+
+      r.messageBox = true;
+      r.sendButton = (await hauptbereich.locator(SEL.sendButton).count().catch(() => 0)) > 0;
+      titelOk = (await hauptbereich.locator(SEL.threadTitle).count().catch(() => 0)) > 0;
+      break;
+    }
+
+    if (!r.messageBox) r.grund = "Kein beantwortbarer Chat mit sichtbarem Eingabefeld gefunden (mehrere Layout-Varianten geprüft).";
+    else if (!r.sendButton) r.grund = "Senden-Knopf nicht gefunden (mehrere Layout-Varianten geprüft).";
     else if (!titelOk) r.grund = "Thread-Titel nicht lesbar (Empfänger-Absicherung eingeschränkt).";
     finalisieren(r);
     return r;
