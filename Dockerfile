@@ -16,9 +16,9 @@ ENV NODE_ENV=production \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 # better-sqlite3 hat für Node 24/Linux kein fertiges Binärpaket und wird bei `npm ci` kompiliert.
-# Dafür braucht es python3, make, g++ (live gescheitert 2026-09-22: "gyp ERR! not ok").
+# Dafür braucht es python3, make, g++; procps liefert pkill für Engine-Stop (live gescheitert 2026-09-22: "gyp ERR! not ok").
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 make g++ \
+ && apt-get install -y --no-install-recommends python3 make g++ procps \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -27,7 +27,9 @@ WORKDIR /app
 # devDependencies bleiben drin, weil `tsx` den TypeScript-Code direkt ausführt (wie `npm run crm`).
 # Electron wird bewusst NICHT gebraucht → Download unterbinden, spart ~100 MB und Zeit.
 COPY package.json package-lock.json ./
-RUN ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --no-audit --no-fund \
+# --include=dev ist PFLICHT: NODE_ENV=production lässt npm ci sonst die devDependencies weg,
+# und damit fehlt `tsx` (live gescheitert 2026-09-22: "sh: 1: tsx: not found").
+RUN ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --include=dev --no-audit --no-fund \
  && npm cache clean --force
 
 # Nur der Anwendungscode. Datenbank, Sitzung und .env kommen NIE ins Image (siehe .dockerignore),
