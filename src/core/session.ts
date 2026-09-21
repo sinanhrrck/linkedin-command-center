@@ -52,7 +52,7 @@ const STEALTH = `
 `;
 
 /** Pfad der Live-Ansicht fürs Dashboard (Engine schreibt, CRM-Server liest). */
-export const LIVE_SHOT_PATH = join(process.cwd(), ".live", "screen.jpg");
+export const LIVE_SHOT_PATH = join(config.paths.liveDir, "screen.jpg");
 
 /**
  * Öffnet einen PERSISTENTEN Browser-Kontext mit deinen echten Cookies.
@@ -90,6 +90,9 @@ export async function getContext(opts: { visible?: boolean } = {}): Promise<Brow
       "--disable-renderer-backgrounding",
       "--disable-background-timer-throttling",
       "--disable-backgrounding-occluded-windows",
+      // Server-Modus (Docker): /dev/shm ist im Container klein, Chromium stürzt sonst bei großen
+      // Seiten ab. Nur dort, damit die Mac-App unverändert bleibt.
+      ...(config.server.serverModus ? ["--disable-dev-shm-usage"] : []),
     ],
   });
   await context.addInitScript(STEALTH);
@@ -160,7 +163,7 @@ export async function saveLiveShot(): Promise<void> {
   try {
     const page = context.pages()[0];
     if (!page) return;
-    mkdirSync(join(process.cwd(), ".live"), { recursive: true });
+    mkdirSync(config.paths.liveDir, { recursive: true });
     await page.screenshot({ path: LIVE_SHOT_PATH, type: "jpeg", quality: 55, timeout: 5000 });
   } catch {
     /* Live-Bild ist Komfort, nie kritisch */

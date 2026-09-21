@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
+import { config } from "./config.js";
 import { join } from "node:path";
 
 /**
@@ -73,8 +74,9 @@ const DEFAULT_PROFIL: Profil = {
 };
 
 function ladeProfil(): Profil {
-  for (const datei of ["profil.local.json", "profil.example.json"]) {
-    const pfad = join(process.cwd(), datei);
+  // Das persönliche Profil liegt am konfigurierten Ort (Datenordner im Server-Modus, sonst wie
+  // bisher im Arbeitsverzeichnis); die Beispiel-Vorlage bleibt im Projektordner.
+  for (const pfad of [config.paths.profilPath, join(process.cwd(), "profil.example.json")]) {
     if (!existsSync(pfad)) continue;
     try {
       const roh = JSON.parse(readFileSync(pfad, "utf8")) as Partial<Profil>;
@@ -84,11 +86,11 @@ function ladeProfil(): Profil {
         ...roh,
         winkel: { ...DEFAULT_PROFIL.winkel, ...(roh.winkel ?? {}) },
       };
-      if (datei === "profil.example.json")
+      if (pfad.endsWith("profil.example.json"))
         console.info("[profil] Kein profil.local.json gefunden – nutze die Beispiel-Vorlage. Leg dein eigenes Profil an (profil.example.json kopieren → profil.local.json).");
       return p;
     } catch (e) {
-      console.error(`[profil] ${datei} ist fehlerhaft (kein gültiges JSON):`, (e as Error).message);
+      console.error(`[profil] ${pfad} ist fehlerhaft (kein gültiges JSON):`, (e as Error).message);
     }
   }
   console.warn("[profil] Kein Profil gefunden – nutze den neutralen Default. Nachrichten werden generisch.");

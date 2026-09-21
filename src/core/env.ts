@@ -1,6 +1,9 @@
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { config } from "../config.js";
 
-const ENV_PATH = ".env";
+// Dieselbe Datei, die config.ts beim Start geladen hat (Datenordner im Server-Modus, sonst ./.env).
+const ENV_PATH = config.paths.envPath;
 
 /**
  * Schreibt/aktualisiert Schlüssel in der .env-Datei, ohne den Rest zu zerstören.
@@ -15,5 +18,6 @@ export function upsertEnv(vars: Record<string, string>) {
     content = re.test(content) ? content.replace(re, line) : content.trimEnd() + `\n${line}\n`;
     process.env[key] = value;
   }
+  mkdirSync(dirname(ENV_PATH), { recursive: true });
   writeFileSync(ENV_PATH, content);
 }

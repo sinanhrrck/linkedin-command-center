@@ -158,6 +158,39 @@ braucht den Governor NICHT.
   ACHTUNG bei langen Seiten: der In-App-Browser-Pane paintet weit unten nach Scroll teils
   nicht (Artefakt) — DOM/oberer Bereich sind maßgeblich, nicht der Leerscreenshot.
 
+## SERVER-MODUS / DOCKER (2026-09-21) — Heimserver ohne Bildschirm
+Anleitung für Laien: `MIGRATION.md`. Alles hängt an `NEXTLEAD_SERVER=1` (`npm run server`, Dockerfile);
+ohne das Flag sind Mac-App und Dev-Modus byte-identisch zu vorher (verifiziert: `config.paths` liefert
+ohne DATA_DIR exakt die alten Defaults, 94/94 Tests grün).
+- **EIN Datenordner.** `config.paths` (config.ts) leitet ALLE Pfade aus `DATA_DIR` ab (Standard
+  `./data` im Server-Modus): DB+Backups, `.session`, `.env`, `profil.local.json`, `.uploads`, `.live`,
+  `engine.log`. Spezifische Variablen (`DB_PATH`, `SESSION_DIR`, `ENV_PATH`, `PROFIL_PATH`, `LIVE_DIR`,
+  `ENGINE_LOG`) gewinnen immer. `dotenv` lädt `.env` aus dem Datenordner. Neue Pfade NIE mehr über
+  `process.cwd()` hart verdrahten, immer `config.paths`.
+- **`core/serverMode.ts`:** Startverweigerung (Exit 78) ohne `DASHBOARD_TOKEN` (min. 12 Zeichen);
+  Basic-Auth (`anmeldungOk`, zeitkonstanter Vergleich, gilt in JEDEM Modus sobald ein Token gesetzt
+  ist, vor jeder Route); `logZeitzone()` (Governor-Arbeitszeiten!); `serverErststart()` = einmal je
+  Datenordner Not-Aus AN (`send_stop=1`) + `start_date=jetzt` (Warm-up zurück auf Tag 1, LinkedIn
+  sieht ein neues Gerät) + Warnung, wenn `data.db` jünger ist als `umzug-info.json.exportedAt`.
+- **Engine-Autostart + Watchdog** nur im Server-Modus (crmServer.ts, nach `listen`): Engine startet
+  1,5 s nach dem Dashboard, sofern `engine_gewollt` ≠ 0; alle 2 Min Neustart ohne Heartbeat.
+  Start/Stop-Knopf setzt `engine_gewollt`. `modules/sitzungsCheck.ts` läuft als erster Engine-Job:
+  Feed aufrufen, bei Login/Checkpoint/Authwall → `governor.pause()` + `linkedin_connected=0`.
+  NICHT live gegen LinkedIn getestet (Mac-App lief parallel) – beim ersten Serverstart Log prüfen.
+- **Sitzungs-Umzug = storageState, NICHT Profilordner-Kopie** (`scripts/umzug.ts`, `npm run umzug --
+  export|import`). Grund, gemessen in playwright-core: Chromium läuft auf dem Mac mit
+  `--use-mock-keychain`, auf Linux mit `--password-store=basic` → die Cookie-DB ist je Plattform
+  anders verschlüsselt, kopierte Dateien ergäben eine leere Anmeldung. Der Export ist eigenständig
+  (importiert weder config.ts noch db), liest den userData-Ordner der App, filtert auf
+  `*.linkedin.com`, verlangt `li_at`, verweigert bei laufender App (`--trotzdem`). Import entfernt
+  Mac-Pfadzeilen aus der `.env` (dort standen `SESSION_DIR`/`DB_PATH`), überschreibt Vorhandenes nur
+  mit `--ueberschreiben`, prüft die Sitzung mit EINEM Feed-Aufruf (`--ohne-pruefung` für Tests).
+- **Docker:** `mcr.microsoft.com/playwright:v1.61.1-noble` (Node 24, exakt die Playwright-Version aus
+  package.json – bei Playwright-Update Tag mitziehen). Läuft als root, Playwright setzt `--no-sandbox`
+  selbst. `shm_size` 512m + `--disable-dev-shm-usage` (nur Server-Modus, session.ts). `env_file:
+  ./data/.env`, Volume `./data:/data`, `TZ=Europe/Berlin`. Image enthält NIE Daten (.dockerignore).
+  Docker ist auf dem Mac nicht installiert → Build wurde NICHT lokal geprüft.
+
 ## In-App-Update (desktop/main.cjs + desktop/preload.cjs + Dashboard-Banner)
 Bewusst OHNE electron-updater/Squirrel: lautloses Auto-Update auf macOS bräuchte ein bezahltes
 Apple-Developer-Zertifikat (Squirrel.Mac verifiziert die Signatur; unsere Ad-hoc-Signatur reicht

@@ -20,3 +20,8 @@ services/report-relay-site/
 
 # Installer-Ausgabe von electron-builder (build.directories.output)
 release/
+
+# Server-Modus: kompletter Datenordner (DB, Sitzung, .env, Uploads) + Umzugspakete
+data/
+nextlead-umzug*.tar.gz
+nextlead-sitzung*.json

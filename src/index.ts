@@ -33,6 +33,8 @@ import { backfillConversationMemories, backfillDraftContexts } from "./modules/c
 import { LeseBudgetErschoepft } from "./core/leseBudget.js";
 import { jobRunPermission, recordJobFailure, recordJobSuccess } from "./core/jobReliability.js";
 import { JobTimeoutError, JOB_TIMEOUT_MS, DEFAULT_JOB_TIMEOUT_MS, runWithJobTimeout } from "./core/jobTimeout.js";
+import { istServerModus, logZeitzone, serverErststart } from "./core/serverMode.js";
+import { pruefeSitzungBeimStart } from "./modules/sitzungsCheck.js";
 
 backfillCrmStages();
 const identityBackfill = backfillContactIdentities();
@@ -228,6 +230,10 @@ const ENGINE_CODE_VERSION = (() => {
   try { return String(createRequire(import.meta.url)("../package.json").version || "?"); }
   catch { return "?"; }
 })();
+if (istServerModus()) {
+  logZeitzone("engine");
+  serverErststart(); // idempotent – greift nur, falls das Dashboard es noch nicht getan hat
+}
 setState("engine_heartbeat", new Date().toISOString());
 setState("engine_started", new Date().toISOString());
 setState("engine_pid", String(process.pid)); // fürs saubere Stoppen vom Dashboard
@@ -248,6 +254,9 @@ setTimeout(async () => {
   // Lokale Wiederherstellbarkeit: Datenbank einmal täglich konsistent sichern. Dieser Job nutzt
   // kein LinkedIn/Browser und bleibt bewusst sehr niedrig priorisiert.
   await einzeln("backup", () => ensureDailyBackup(), 5);
+  // SERVER-MODUS: Ist die übertragene Sitzung überhaupt eingeloggt? Wenn nicht (Login-Seite,
+  // Checkpoint, Authwall), pausiert der Governor SOFORT – bevor irgendein Job LinkedIn anfasst.
+  if (istServerModus()) await einzeln("sitzung", () => pruefeSitzungBeimStart(), 90);
   // ZUERST der Selbst-Check: Funktioniert der Sende-Weg überhaupt? Ist er defekt, blockiert der
   // Governor Nachrichten von vornherein (statt still zu scheitern) und meldet es dir.
   await einzeln("healthcheck", () => runReadJobWhenDue("healthcheck", 360, () => selbstCheck()), 75);

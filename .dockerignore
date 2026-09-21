@@ -1,0 +1,35 @@
+# Nichts Persönliches ins Image – Laufzeitdaten leben nur im Volume ./data
+data/
+.data/
+.session/
+.env
+.env.*
+!.env.example
+data.db
+data.db-*
+*.db
+*.db-wal
+*.db-shm
+profil.local.json
+.uploads/
+.live/
+*.log
+nextlead-umzug*.tar.gz
+nextlead-sitzung*.json
+backups/
+
+# Build-/Entwicklungsballast
+node_modules/
+dist/
+release/
+.git/
+.github/
+.claude/
+desktop/
+docs/
+deploy/
+services/
+build/
+*.command
+*.bat
+.DS_Store

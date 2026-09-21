@@ -1,0 +1,26 @@
+# NextLead auf dem Heimserver. Start: docker compose up -d   (Anleitung: MIGRATION.md)
+services:
+  nextlead:
+    build: .
+    image: nextlead:local
+    container_name: nextlead
+    restart: unless-stopped
+    ports:
+      - "4321:4321"            # Dashboard: http://<server-ip>:4321 (Basic-Auth mit DASHBOARD_TOKEN)
+    env_file:
+      - ./data/.env            # API-Keys, Telegram, DASHBOARD_TOKEN – liegt NUR im Datenordner
+    environment:
+      TZ: Europe/Berlin        # Arbeitszeitfenster des Safety-Governors rechnen in dieser Zeit
+      NEXTLEAD_SERVER: "1"
+      DATA_DIR: /data
+      HOST: 0.0.0.0
+      PORT: "4321"
+    volumes:
+      - ./data:/data           # Datenbank, Backups, Sitzung, .env, Profil, Uploads, engine.log
+    shm_size: "512m"           # Chromium braucht Shared Memory; Docker-Standard (64 MB) ist zu klein
+    mem_limit: 1800m           # 2-GB-Server: Rest fürs System lassen
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

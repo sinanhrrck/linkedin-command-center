@@ -1,4 +1,31 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import { mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+/**
+ * SERVER-MODUS (2026-09-21): `NEXTLEAD_SERVER=1` = Betrieb ohne App-Hülle auf einem Heimserver
+ * (Docker, kein Bildschirm). Alles, was hier abweicht, ist bewusst an dieses Flag gebunden, damit
+ * die Mac-App und der Entwickler-Modus byte-identisch weiterlaufen.
+ */
+const SERVER_MODUS = process.env.NEXTLEAD_SERVER === "1";
+
+/**
+ * EIN DATENORDNER. Im Server-Modus liegen ALLE Laufzeitdaten unter `DATA_DIR` (Standard ./data):
+ * Datenbank + Backups, Browser-Sitzung, .env, profil.local.json, Uploads, Live-Bild, engine.log.
+ * Ohne DATA_DIR bleibt jeder Pfad exakt wie bisher (relativ zum Arbeitsverzeichnis) – die Mac-App
+ * setzt DB_PATH/SESSION_DIR selbst und arbeitet in ihrem userData-Ordner. Die spezifischen
+ * Variablen (DB_PATH, SESSION_DIR, …) gewinnen immer gegen DATA_DIR.
+ */
+const DATA_DIR = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : SERVER_MODUS ? resolve("./data") : null;
+// Ordner sofort anlegen: db/index.ts öffnet die Datenbank beim Import, ein fehlender Ordner
+// würde sonst mit „unable to open database file“ abbrechen, bevor irgendeine Prüfung läuft.
+if (DATA_DIR) mkdirSync(DATA_DIR, { recursive: true });
+const imDatenordner = (name: string, sonst: string) => (DATA_DIR ? join(DATA_DIR, name) : sonst);
+
+// .env laden – aus dem Datenordner, wenn es einen gibt, sonst wie bisher aus dem Arbeitsverzeichnis.
+// Muss VOR dem Lesen aller anderen process.env-Werte passieren.
+const ENV_PATH = process.env.ENV_PATH ?? imDatenordner(".env", ".env");
+dotenv.config({ path: ENV_PATH });
 
 /**
  * Zentrale Konfiguration. Die Safety-Limits sind bewusst konservativ.
@@ -6,10 +33,29 @@ import "dotenv/config";
  */
 export const config = {
   paths: {
-    sessionDir: process.env.SESSION_DIR ?? "./.session",
-    dbPath: process.env.DB_PATH ?? "./data.db",
+    dataDir: DATA_DIR,
+    envPath: ENV_PATH,
+    sessionDir: process.env.SESSION_DIR ?? imDatenordner(".session", "./.session"),
+    dbPath: process.env.DB_PATH ?? imDatenordner("data.db", "./data.db"),
     // Kampagnen-Material (Flyer, Agenda, Bilder). Bleibt lokal wie die Session, nie im Repo.
-    uploadDir: process.env.UPLOAD_DIR ?? "./.uploads",
+    uploadDir: process.env.UPLOAD_DIR ?? imDatenordner(".uploads", "./.uploads"),
+    // Persönliches Nutzerprofil für alle KI-Texte (gitignored).
+    profilPath: process.env.PROFIL_PATH ?? imDatenordner("profil.local.json", "profil.local.json"),
+    // Live-Ansicht (Screenshot des versteckten Browsers) und Engine-Protokoll.
+    liveDir: process.env.LIVE_DIR ?? imDatenordner(".live", ".live"),
+    engineLog: process.env.ENGINE_LOG ?? imDatenordner("engine.log", "engine.log"),
+  },
+
+  /**
+   * DASHBOARD-SERVER. Standard bleibt 127.0.0.1:4321 (nur dieser Rechner). Im Server-Modus
+   * 0.0.0.0 (ganzes Heimnetz) – dann ist ein DASHBOARD_TOKEN PFLICHT (Basic-Auth), sonst
+   * verweigert der Server den Start. Ist ein Token gesetzt, wird es in jedem Modus verlangt.
+   */
+  server: {
+    serverModus: SERVER_MODUS,
+    host: process.env.HOST ?? (SERVER_MODUS ? "0.0.0.0" : "127.0.0.1"),
+    port: Number(process.env.PORT ?? process.env.CRM_PORT ?? 4321),
+    token: process.env.DASHBOARD_TOKEN ?? "",
   },
 
   gemini: {

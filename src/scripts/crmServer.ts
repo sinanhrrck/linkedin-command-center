@@ -32,6 +32,11 @@ import { backfillContactIdentities, resolveIdentityConflict } from "../modules/c
 import { backfillContactTimeline } from "../modules/contactTimeline.js";
 import { backfillCampaignWorkflows, retryCampaignTarget, retryFailedCampaignTargets } from "../modules/campaignWorkflow.js";
 import { backfillConversationMemories, backfillDraftContexts } from "../modules/conversationMemory.js";
+import { config } from "../config.js";
+import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
+
+// Server-Modus: ohne DASHBOARD_TOKEN gar nicht erst starten (siehe core/serverMode.ts).
+pruefeServerStartbedingungen();
 
 // Die Desktop-App startet zuerst das Cockpit; die eigentliche Engine kann bewusst ausgeschaltet
 // bleiben. Historische Beziehungssignale muessen deshalb bereits hier uebernommen werden, sonst
@@ -64,9 +69,13 @@ const PROJECT_ROOT = join(__dirname, "..", "..");
 // der Projekt-Ordner; in der gepackten App der beschreibbare userData-Ordner (main.cjs setzt
 // cwd=userData). Vorher zeigten diese auf PROJECT_ROOT = app.asar (schreibgeschützt) → die App
 // fand nie eine Konfig und der Setup-Assistent kam immer wieder / Speichern schlug fehl.
-const ENV_PATH = join(process.cwd(), ".env");
-const PROFIL_PATH = join(process.cwd(), "profil.local.json");
-const PORT = Number(process.env.CRM_PORT ?? 4321);
+// Pfade kommen zentral aus config.ts: Datenordner im Server-Modus, sonst wie bisher cwd.
+const ENV_PATH = config.paths.envPath;
+const PROFIL_PATH = config.paths.profilPath;
+const ENGINE_LOG = config.paths.engineLog;
+const SESSION_LOCK = join(config.paths.sessionDir, "SingletonLock");
+const PORT = config.server.port;
+const HOST = config.server.host;
 
 /** .env als Key→Value lesen (frisch von Platte, damit Änderungen ohne Neustart sichtbar sind). */
 function readEnvFile(): Record<string, string> {
@@ -159,6 +168,36 @@ function nacheinander<T>(fn: () => Promise<T>): Promise<T> {
   return naechster;
 }
 
+const ENGINE_MUSTER = PACKAGED ? "dist/index.js" : "tsx src/index.ts";
+
+/**
+ * Engine starten. NEUESTER START GEWINNT (Fix 2026-07-29): eine evtl. noch laufende – auch
+ * VERWAISTE, veraltete – Engine ZUERST killen, dann frisch starten. Sonst blockiert eine Alt-Waise
+ * (Parent-PID 1 aus einer Vorversion) über den Portlock dauerhaft die neue Engine, und Updates
+ * greifen nie (genau das Symptom "Nachrichten gehen nicht raus"). pkill ist versionsunabhängig;
+ * der frische Spawn lädt garantiert den aktuellen Code.
+ */
+function starteEngine(): void {
+  setState("engine_heartbeat", ""); // während des Neustarts als offline markieren
+  execFile("pkill", ["-f", ENGINE_MUSTER], () => {
+    setTimeout(() => {
+      // Loop-Ausgabe in engine.log schreiben (statt still) – fürs Debuggen.
+      const logFd = openSync(ENGINE_LOG, "a");
+      // keepAwake: hält den Rechner im Dev via caffeinate wach (Mac), damit der Loop nicht stirbt.
+      const child = spawnJob("engine", { detached: true, logFd, keepAwake: true });
+      child.unref();
+    }, 1200); // kurz warten, bis der alte Prozess weg ist und Port 43217 frei wird
+  });
+}
+
+/** Engine stoppen: Loop-Prozess per Muster killen (egal wie gestartet), Lock aufräumen. */
+function stoppeEngine(): void {
+  execFile("pkill", ["-f", ENGINE_MUSTER], () => {
+    try { rmSync(SESSION_LOCK, { force: true }); } catch { /* egal */ }
+  });
+  setState("engine_heartbeat", ""); // sofort als offline markieren
+}
+
 /** Läuft der Engine-Loop? (Heartbeat < 150s alt) */
 function engineAlive(): boolean {
   const hb = getState("engine_heartbeat");
@@ -166,6 +205,13 @@ function engineAlive(): boolean {
 }
 
 const server = createServer((req, res) => {
+  // BASIC-AUTH (nur wenn DASHBOARD_TOKEN gesetzt; im Server-Modus Pflicht). Vor JEDER Route,
+  // auch vor statischen Dateien – es gibt keinen anonymen Pfad.
+  if (!anmeldungOk(req)) {
+    res.writeHead(401, { "WWW-Authenticate": 'Basic realm="NextLead", charset="UTF-8"', "Content-Type": "text/plain; charset=utf-8" })
+      .end("Anmeldung nötig: Benutzername beliebig, Passwort = DASHBOARD_TOKEN aus der .env.");
+    return;
+  }
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
 
   // Fehlerberichte und allgemeines Feedback gehen über den zentralen Relay. Die Browserseite
@@ -318,7 +364,7 @@ const server = createServer((req, res) => {
   // LinkedIn verbinden: öffnet ein SICHTBARES Browserfenster zum Einloggen (wie `npm run login`).
   if (url.pathname === "/api/setup/login" && req.method === "POST") {
     try {
-      const logFd = openSync(join(process.cwd(), "engine.log"), "a");
+      const logFd = openSync(ENGINE_LOG, "a");
       const child = spawnJob("login", { detached: true, logFd, extraEnv: { BROWSER_MODE: "visible" } });
       child.unref();
       res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
@@ -331,7 +377,7 @@ const server = createServer((req, res) => {
   // Login prüfen: schließt das Login-Fenster, öffnet versteckt den Feed und prüft, ob eingeloggt.
   if (url.pathname === "/api/setup/verify-login" && req.method === "POST") {
     execFile("pkill", ["-f", PACKAGED ? "dist/scripts/login.js" : "tsx src/scripts/login.ts"], () => {
-      try { rmSync(join(process.cwd(), ".session", "SingletonLock"), { force: true }); } catch { /* egal */ }
+      try { rmSync(SESSION_LOCK, { force: true }); } catch { /* egal */ }
       setTimeout(() => {
         const child = spawnJob("checkLogin", { pipe: true });
         let ausgabe = "";
@@ -967,33 +1013,12 @@ const server = createServer((req, res) => {
       try {
         const { action } = JSON.parse(body || "{}");
         if (action === "start") {
-          // NEUESTER START GEWINNT (Fix 2026-07-29): eine evtl. noch laufende – auch VERWAISTE,
-          // veraltete – Engine ZUERST killen, dann frisch starten. Sonst blockiert eine Alt-Waise
-          // (Parent-PID 1 aus einer Vorversion) über den Portlock dauerhaft die neue Engine, und
-          // Updates greifen nie (genau das Symptom "Nachrichten gehen nicht raus"). pkill ist
-          // versionsunabhängig; der frische Spawn lädt garantiert den aktuellen Code aus app.asar.
-          const muster = PACKAGED ? "dist/index.js" : "tsx src/index.ts";
-          setState("engine_heartbeat", ""); // während des Neustarts als offline markieren
-          execFile("pkill", ["-f", muster], () => {
-            setTimeout(() => {
-              // Loop-Ausgabe in engine.log schreiben (statt still) – fürs Debuggen.
-              const logFd = openSync(join(process.cwd(), "engine.log"), "a");
-              // keepAwake: hält den Rechner im Dev via caffeinate wach (Mac), damit der Loop nicht stirbt.
-              const child = spawnJob("engine", { detached: true, logFd, keepAwake: true });
-              child.unref();
-            }, 1200); // kurz warten, bis der alte Prozess weg ist und Port 43217 frei wird
-          });
+          setState("engine_gewollt", "1"); // Server-Modus: Watchdog + Autostart nach Neustart
+          starteEngine();
           res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, restarting: true }));
         } else if (action === "stop") {
-          // Robust: Loop-Prozess per Muster killen (egal wie gestartet), Lock aufräumen.
-          execFile("pkill", ["-f", PACKAGED ? "dist/index.js" : "tsx src/index.ts"], () => {
-            try {
-              rmSync(join(process.cwd(), ".session", "SingletonLock"), { force: true });
-            } catch {
-              /* egal */
-            }
-          });
-          setState("engine_heartbeat", ""); // sofort als offline markieren
+          setState("engine_gewollt", "0");
+          stoppeEngine();
           res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
         } else {
           res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad action" }));
@@ -1160,9 +1185,30 @@ const server = createServer((req, res) => {
   res.writeHead(404, { "Content-Type": "text/plain" }).end("Nicht gefunden");
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.info(`\n  CRM-Cockpit läuft →  http://localhost:${PORT}\n`);
+server.listen(PORT, HOST, () => {
+  console.info(`\n  CRM-Cockpit läuft →  http://${HOST === "0.0.0.0" ? "<server-ip>" : "localhost"}:${PORT}\n`);
   console.info("  Beenden mit STRG+C.\n");
+  if (istServerModus()) {
+    logZeitzone("server");
+    console.info(`[server] Datenordner: ${config.paths.dataDir} · Basic-Auth aktiv (DASHBOARD_TOKEN).`);
+    serverErststart(); // Not-Aus AN + Warm-up zurück – nur beim allerersten Start je Datenordner
+    /**
+     * AUTOSTART + WATCHDOG (nur Server-Modus). Auf dem Mac startet der Nutzer die Engine per Knopf;
+     * ein Server hat keinen Nutzer, der nach einem Neustart klickt. Deshalb: Engine starten, wenn
+     * sie zuletzt gewollt war (Standard: ja – sie sitzt ohnehin hinter dem Not-Aus). Stirbt sie,
+     * startet der Watchdog sie alle 2 Minuten neu, solange `engine_gewollt` nicht 0 ist.
+     */
+    if (getState("engine_gewollt") !== "0") {
+      setState("engine_gewollt", "1");
+      setTimeout(starteEngine, 1500);
+      setInterval(() => {
+        if (getState("engine_gewollt") === "1" && !engineAlive()) {
+          console.warn("[server] Engine antwortet nicht (kein Heartbeat) – Watchdog startet sie neu.");
+          starteEngine();
+        }
+      }, 120_000).unref();
+    }
+  }
 });
 
 // Funktioniert auch bei ausgeschalteter Engine: Der Dashboard-Prozess versucht Offline-Meldungen
