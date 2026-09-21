@@ -15,6 +15,12 @@ ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
+# better-sqlite3 hat für Node 24/Linux kein fertiges Binärpaket und wird bei `npm ci` kompiliert.
+# Dafür braucht es python3, make, g++ (live gescheitert 2026-09-22: "gyp ERR! not ok").
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 make g++ \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Erst nur die Abhängigkeiten (Docker-Cache: ändert sich der Code, muss npm nicht neu laufen).
