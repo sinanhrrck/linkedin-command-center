@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { config } from "../config.js";
@@ -88,7 +88,9 @@ export function serverErststart(): void {
  * Warnung, wenn die eingespielte Datenbank NACH dem Export auf dem Mac noch verändert wurde:
  * dann lief die Mac-App weiter, und beide Datenbanken sind auseinandergelaufen. Die Prüfung
  * vergleicht die Datei-Änderungszeit (tar erhält sie beim Entpacken) mit dem Export-Zeitpunkt
- * aus umzug-info.json. Nur beim Erststart sinnvoll – danach schreibt der Server selbst.
+ * aus umzug-info.json. WICHTIG: die Änderungszeit stammt aus config.ts, gemessen BEVOR die DB
+ * geöffnet wurde – nach dem Öffnen trägt die Datei die Startzeit dieses Prozesses (Fehlalarm
+ * beim ersten echten Serverstart 2026-09-22). Nur beim Erststart sinnvoll.
  */
 function warneWennDbNachExportGeaendert(): void {
   try {
@@ -97,8 +99,8 @@ function warneWennDbNachExportGeaendert(): void {
     if (!existsSync(infoPfad) || !existsSync(config.paths.dbPath)) return;
     const info = JSON.parse(readFileSync(infoPfad, "utf8")) as { exportedAt?: string; dbMtime?: string };
     const exportZeit = info.exportedAt ? new Date(info.exportedAt).getTime() : 0;
-    const dbZeit = statSync(config.paths.dbPath).mtimeMs;
-    if (exportZeit && dbZeit > exportZeit + 60_000) {
+    const dbZeit = config.paths.dbMtimeBeimStart;
+    if (exportZeit && dbZeit && dbZeit > exportZeit + 60_000) {
       console.warn(
         `[server] WARNUNG: data.db wurde nach dem Export (${info.exportedAt}) noch verändert (${new Date(dbZeit).toISOString()}).\n` +
           "         Vermutlich lief die Mac-App weiter. Prüfe, ob du den aktuellen Stand exportiert hast – zwei Instanzen am selben Konto sind nicht erlaubt.",

@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 /**
@@ -44,6 +44,12 @@ export const config = {
     // Live-Ansicht (Screenshot des versteckten Browsers) und Engine-Protokoll.
     liveDir: process.env.LIVE_DIR ?? imDatenordner(".live", ".live"),
     engineLog: process.env.ENGINE_LOG ?? imDatenordner("engine.log", "engine.log"),
+    // Änderungszeit der DB-Datei BEVOR irgendein Modul sie öffnet (config.ts lädt als erstes).
+    // Nötig für die Umzugs-Warnung in core/serverMode.ts: nach dem Öffnen trägt die Datei die
+    // Startzeit des Servers selbst – so entstand am 2026-09-22 ein Fehlalarm beim Erststart.
+    dbMtimeBeimStart: (() => {
+      try { return statSync(process.env.DB_PATH ?? imDatenordner("data.db", "./data.db")).mtimeMs; } catch { return 0; }
+    })(),
   },
 
   /**
