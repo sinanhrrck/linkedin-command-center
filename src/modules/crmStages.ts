@@ -119,10 +119,15 @@ export function replyQualityFromIntent(intent: string | null | undefined): Reply
 /** Bestehende Zeitstempel/Ergebnisse einmalig in die neue, anonymisierte Stufenhistorie übernehmen. */
 export function backfillCrmStages(): void {
   if (backfillDone) return;
+  // WHERE NOT EXISTS: Hat der Live-Pfad (`contact:<id>:<stufe>`) die Stufe schon protokolliert,
+  // darf die Übernahme KEINE zweite Zeile anlegen. Vorher entstand je Versand ein Doppel
+  // (contact:… + backfill:…), das die Funnel-Zählung nur dank DISTINCT nicht verfälschte
+  // und den Tagesbericht verdoppelte (2026-09-22). Regel 1 aus CLAUDE.md: ein Ereignis zählt einmal.
   const add = db.prepare(
     `INSERT OR IGNORE INTO crm_stage_events
        (dedupe_key,contact_id,goal_code,stage,source,created_at,campaign_id,source_id,occurred_at,reply_quality)
-     VALUES(?,?,?,?,?,?,?,?,?,?)`,
+     SELECT ?,?,?,?,?,?,?,?,?,?
+      WHERE NOT EXISTS (SELECT 1 FROM crm_stage_events x WHERE x.contact_id=? AND x.stage=?)`,
   );
   const contacts = db.prepare(
     `SELECT c.id,c.created_at,c.invited_at,c.accepted_at,c.messaged_at,c.replied_at,c.status,
@@ -139,7 +144,7 @@ export function backfillCrmStages(): void {
   const tx = db.transaction(() => {
     for (const c of contacts) {
       const at = (key: string, stage: CrmStage, when: string | null, quality: ReplyQuality | null = null) => {
-        if (when) add.run(`backfill:${c.id}:${key}`, c.id, c.goal, stage, "backfill", when, c.campaign_id, c.source_id, when, quality);
+        if (when) add.run(`backfill:${c.id}:${key}`, c.id, c.goal, stage, "backfill", when, c.campaign_id, c.source_id, when, quality, c.id, stage);
       };
       // „Gefunden“ ist der Eintritt in den Datenbestand; „geeignet“ heißt: nicht als zu schwach
       // aussortiert. Beides ist aus dem Altbestand belegbar, ohne irgendetwas zu schätzen.
@@ -157,14 +162,14 @@ export function backfillCrmStages(): void {
     const outcomes = db.prepare("SELECT contact_id,stage,updated_at FROM sales_outcomes").all() as Array<{ contact_id: number; stage: CrmStage; updated_at: string }>;
     for (const o of outcomes) {
       const c = contactById(o.contact_id);
-      if (c) add.run(`backfill:${o.contact_id}:${o.stage}`, o.contact_id, c.goal, o.stage, "backfill", o.updated_at, c.campaign_id, c.source_id, o.updated_at, null);
+      if (c) add.run(`backfill:${o.contact_id}:${o.stage}`, o.contact_id, c.goal, o.stage, "backfill", o.updated_at, c.campaign_id, c.source_id, o.updated_at, null, o.contact_id, o.stage);
     }
     try {
       const booked = db.prepare("SELECT thread_url,participant,updated_at FROM conversations WHERE status='booked'").all() as Array<{ thread_url: string; participant: string; updated_at: string }>;
       for (const row of booked) {
         const c = contactForConversation(row.thread_url, row.participant || "");
         if (c) {
-          add.run(`backfill:conversation:${c.id}:meeting`, c.id, c.goal, "meeting", "backfill", row.updated_at, c.campaign_id, c.source_id, row.updated_at, null);
+          add.run(`backfill:conversation:${c.id}:meeting`, c.id, c.goal, "meeting", "backfill", row.updated_at, c.campaign_id, c.source_id, row.updated_at, null, c.id, "meeting");
           recordCrmStage(c.id, "meeting", "backfill", `backfill:conversation:${c.id}:meeting`, { occurredAt: row.updated_at });
         }
       }
@@ -173,7 +178,7 @@ export function backfillCrmStages(): void {
         const c = contactForConversation(row.thread_url, row.teilnehmer || "");
         if (c) {
           const stage: CrmStage = row.ergebnis === "gebucht" ? "meeting" : "lost";
-          add.run(`backfill:agent:${row.id}`, c.id, c.goal, stage, "backfill", row.ts, c.campaign_id, c.source_id, row.ts, null);
+          add.run(`backfill:agent:${row.id}`, c.id, c.goal, stage, "backfill", row.ts, c.campaign_id, c.source_id, row.ts, null, c.id, stage);
           recordCrmStage(c.id, stage, "backfill", `backfill:agent:${row.id}`, { occurredAt: row.ts });
         }
       }

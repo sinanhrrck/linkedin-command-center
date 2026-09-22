@@ -59,6 +59,17 @@ export type Bericht = {
 
 const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const POSITIV = "('interested','question','meeting')";
+/**
+ * EIN EREIGNIS JE PERSON UND STUFE. In `crm_stage_events` kann dieselbe Stufe eines Kontakts
+ * zweimal stehen (Live-Schlüssel `contact:<id>:<stufe>` UND Altbestands-Schlüssel
+ * `backfill:<id>:<stufe>`). Die Wirkungs-Auswertung zählt deshalb DISTINCT contact_id; der Bericht
+ * muss dasselbe tun, sonst verdoppeln sich die Zahlen (live passiert 2026-09-22: 3 gesendete
+ * Nachrichten, 6 „Angeschrieben“). Gezählt wird der FRÜHESTE Zeitpunkt je Person und Stufe.
+ */
+const ERST = `erst AS (
+  SELECT contact_id, stage, campaign_id, source_id, MAX(reply_quality) reply_quality,
+         MIN(COALESCE(occurred_at, created_at)) t
+    FROM crm_stage_events GROUP BY contact_id, stage)`;
 
 /** ISO-Datum (YYYY-MM-DD) in lokaler Zeit. */
 export function isoLokal(d: Date): string {
@@ -113,7 +124,8 @@ function zahlenFuer(z: Zeitraum): BerichtZahlen {
      FROM actions WHERE status='done' AND date(created_at,'localtime') BETWEEN ? AND ?`,
   ).get(z.von, z.bis);
   const e = db.prepare(
-    `SELECT
+    `WITH ${ERST}
+     SELECT
        SUM(CASE WHEN stage='found' THEN 1 ELSE 0 END) neueKontakte,
        SUM(CASE WHEN stage='accepted' THEN 1 ELSE 0 END) angenommen,
        SUM(CASE WHEN stage='messaged' THEN 1 ELSE 0 END) angeschrieben,
@@ -122,7 +134,7 @@ function zahlenFuer(z: Zeitraum): BerichtZahlen {
        SUM(CASE WHEN stage='qualified' THEN 1 ELSE 0 END) qualifiziert,
        SUM(CASE WHEN stage='meeting' THEN 1 ELSE 0 END) termine,
        SUM(CASE WHEN stage='won' THEN 1 ELSE 0 END) gewonnen
-     FROM crm_stage_events WHERE date(COALESCE(occurred_at,created_at),'localtime') BETWEEN ? AND ?`,
+     FROM erst WHERE date(t,'localtime') BETWEEN ? AND ?`,
   ).get(z.von, z.bis);
   const d = db.prepare(
     `SELECT
@@ -142,11 +154,12 @@ function tageFuer(z: Zeitraum): TagesZeile[] {
   for (let iso = z.von; iso <= z.bis; iso = plusTage(iso, 1)) {
     const a = db.prepare("SELECT COUNT(*) n FROM actions WHERE type='connect' AND status='done' AND date(created_at,'localtime')=?").get(iso);
     const e = db.prepare(
-      `SELECT
+      `WITH ${ERST}
+       SELECT
          SUM(CASE WHEN stage='accepted' THEN 1 ELSE 0 END) angenommen,
          SUM(CASE WHEN stage='messaged' THEN 1 ELSE 0 END) angeschrieben,
          SUM(CASE WHEN stage='replied' THEN 1 ELSE 0 END) geantwortet
-       FROM crm_stage_events WHERE date(COALESCE(occurred_at,created_at),'localtime')=?`,
+       FROM erst WHERE date(t,'localtime')=?`,
     ).get(iso);
     rows.push({ datum: iso, wochentag: WD[parse(iso).getDay()], anfragen: n(a, "n"), angenommen: n(e, "angenommen"), angeschrieben: n(e, "angeschrieben"), geantwortet: n(e, "geantwortet") });
   }
@@ -155,19 +168,21 @@ function tageFuer(z: Zeitraum): TagesZeile[] {
 
 function topFuer(z: Zeitraum): Bericht["top"] {
   const k = db.prepare(
-    `SELECT ca.name,
+    `WITH ${ERST}
+     SELECT ca.name,
             SUM(CASE WHEN e.stage='replied' THEN 1 ELSE 0 END) geantwortet,
             SUM(CASE WHEN e.stage='messaged' THEN 1 ELSE 0 END) angeschrieben
-       FROM crm_stage_events e JOIN campaigns ca ON ca.id=e.campaign_id
-      WHERE date(COALESCE(e.occurred_at,e.created_at),'localtime') BETWEEN ? AND ?
+       FROM erst e JOIN campaigns ca ON ca.id=e.campaign_id
+      WHERE date(e.t,'localtime') BETWEEN ? AND ?
       GROUP BY ca.id ORDER BY geantwortet DESC, angeschrieben DESC LIMIT 1`,
   ).get(z.von, z.bis) as { name: string; geantwortet: number; angeschrieben: number } | undefined;
   const q = db.prepare(
-    `SELECT COALESCE(s.label, 'Quelle ' || s.id) label,
+    `WITH ${ERST}
+     SELECT COALESCE(s.label, 'Quelle ' || s.id) label,
             SUM(CASE WHEN e.stage='accepted' THEN 1 ELSE 0 END) angenommen,
             SUM(CASE WHEN e.stage='invited' THEN 1 ELSE 0 END) anfragen
-       FROM crm_stage_events e JOIN lead_sources s ON s.id=e.source_id
-      WHERE date(COALESCE(e.occurred_at,e.created_at),'localtime') BETWEEN ? AND ?
+       FROM erst e JOIN lead_sources s ON s.id=e.source_id
+      WHERE date(e.t,'localtime') BETWEEN ? AND ?
       GROUP BY s.id ORDER BY angenommen DESC, anfragen DESC LIMIT 1`,
   ).get(z.von, z.bis) as { label: string; angenommen: number; anfragen: number } | undefined;
   return {
@@ -225,7 +240,7 @@ export function bericht(art: BerichtArt, datum: string = isoLokal(new Date())): 
   const zahlen = zahlenFuer(zeitraum);
   const vorher = zahlenFuer(vergleich);
   const invited = n(db.prepare(
-    "SELECT COUNT(*) n FROM crm_stage_events WHERE stage='invited' AND date(COALESCE(occurred_at,created_at),'localtime') BETWEEN ? AND ?",
+    `WITH ${ERST} SELECT COUNT(*) n FROM erst WHERE stage='invited' AND date(t,'localtime') BETWEEN ? AND ?`,
   ).get(zeitraum.von, zeitraum.bis), "n");
   const offen = {
     entwuerfe: n(db.prepare("SELECT COUNT(*) n FROM drafts WHERE status='pending' AND phase='message'").get(), "n"),

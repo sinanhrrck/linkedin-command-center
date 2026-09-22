@@ -60,3 +60,16 @@ test("Wochenstart ist immer ein Montag", () => {
   assert.equal(wochenstart("2026-09-27"), "2026-09-21"); // Sonntag → derselbe Montag
   assert.equal(wochenstart("2026-09-21"), "2026-09-21");
 });
+
+test("Doppelte Ereigniszeilen (live + backfill) zählen im Bericht nur einmal", () => {
+  const c = kontakt("bernd");
+  recordCrmStage(c, "messaged", "bot");
+  // So sah der Altbestand aus: dieselbe Stufe noch einmal unter dem Backfill-Schlüssel.
+  db.prepare(
+    "INSERT INTO crm_stage_events(dedupe_key,contact_id,stage,source,created_at,occurred_at) VALUES(?,?,'messaged','backfill',datetime('now'),datetime('now'))",
+  ).run(`backfill:${c}:messaged`, c);
+  const vorher = bericht("tag").zahlen.angeschrieben;
+  const zeilen = Number((db.prepare("SELECT COUNT(*) n FROM crm_stage_events WHERE contact_id=? AND stage='messaged'").get(c) as { n: number }).n);
+  assert.equal(zeilen, 2, "Testaufbau: zwei Zeilen für dieselbe Person");
+  assert.equal(vorher, 2, "anna + bernd = zwei Personen, nicht drei Zeilen");
+});
