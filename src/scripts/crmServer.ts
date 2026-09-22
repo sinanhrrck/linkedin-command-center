@@ -1192,7 +1192,9 @@ const server = createServer((req, res) => {
     }
     // In dev bei jedem Request frisch lesen, damit Design-Änderungen sofort greifen.
     const html = readFileSync(HTML_PATH, "utf-8");
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(html);
+    // no-store: nach einem Server-Update darf der Browser nie die alte Seite zeigen (2026-09-22:
+    // neues Bericht-Panel war im Cockpit unsichtbar, bis hart neu geladen wurde).
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }).end(html);
     return;
   }
 
