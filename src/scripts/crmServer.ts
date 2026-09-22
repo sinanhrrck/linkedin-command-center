@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { spawn, execFile } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync, openSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, openSync, rmSync, statSync, renameSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { getDashboardData } from "../modules/dashboard.js";
@@ -16,6 +16,7 @@ import {
 } from "../modules/campaigns.js";
 import { addSalesTask, completeSalesTask, deleteSalesTask } from "../modules/salesDesk.js";
 import { addContactNote, deleteContactNote } from "../modules/contactNotes.js";
+import { heartbeatAlter, protokolliereNeustart } from "../modules/engineWatch.js";
 import { createDatabaseBackup } from "../core/backups.js";
 import { governor } from "../core/safetyGovernor.js";
 import { createExperiment, setExperimentStatus, EXPERIMENT_METRICS, type ExperimentMetric } from "../modules/experiments.js";
@@ -179,11 +180,26 @@ const ENGINE_MUSTER = PACKAGED ? "dist/index.js" : "tsx src/index.ts";
  * greifen nie (genau das Symptom "Nachrichten gehen nicht raus"). pkill ist versionsunabhängig;
  * der frische Spawn lädt garantiert den aktuellen Code.
  */
+/**
+ * ROTATION FÜR engine.log. docker-compose.yml begrenzt sorgfältig `max-size: 10m / max-file: 3` –
+ * das gilt aber nur für stdout, und die Engine schreibt praktisch alles in DIESE Datei. Ohne
+ * Rotation wächst sie unbegrenzt auf einem 16-GB-Server. Eine Vorgängerdatei reicht: älteres
+ * als den letzten Lauf hat noch nie jemand gebraucht.
+ */
+const ENGINE_LOG_MAX = 8 * 1024 * 1024;
+function rotiereEngineLog(): void {
+  try {
+    if (!existsSync(ENGINE_LOG) || statSync(ENGINE_LOG).size < ENGINE_LOG_MAX) return;
+    renameSync(ENGINE_LOG, `${ENGINE_LOG}.1`);
+  } catch { /* Rotation darf den Start nie verhindern */ }
+}
+
 function starteEngine(): void {
   setState("engine_heartbeat", ""); // während des Neustarts als offline markieren
   execFile("pkill", ["-f", ENGINE_MUSTER], () => {
     setTimeout(() => {
       // Loop-Ausgabe in engine.log schreiben (statt still) – fürs Debuggen.
+      rotiereEngineLog();
       const logFd = openSync(ENGINE_LOG, "a");
       // keepAwake: hält den Rechner im Dev via caffeinate wach (Mac), damit der Loop nicht stirbt.
       const child = spawnJob("engine", { detached: true, logFd, keepAwake: true });
@@ -1266,7 +1282,19 @@ server.listen(PORT, HOST, () => {
       setTimeout(starteEngine, 1500);
       setInterval(() => {
         if (getState("engine_gewollt") === "1" && !engineAlive()) {
-          console.warn("[server] Engine antwortet nicht (kein Heartbeat) – Watchdog startet sie neu.");
+          const alter = heartbeatAlter();
+          const job = getState("engine_active_job") || null;
+          // IN DIE DATENBANK, nicht nur nach stdout: stdout ist `docker logs` und wird bei
+          // jedem `docker compose up` weggeworfen. Genau deshalb waren am 22.09. zwei
+          // Neustarts (08:14, 11:48) nirgends begründet. Die Engine meldet das beim
+          // nächsten Start per Telegram nach – Telegram läuft in ihrem Prozess, nicht hier.
+          protokolliereNeustart({
+            grund: "watchdog",
+            detail: `Kein Heartbeat seit ${alter == null ? "unbekannt" : `${Math.round(alter)}s`}.`,
+            letzterJob: job,
+            heartbeatAlterSek: alter,
+          });
+          console.warn(`[server] Engine antwortet nicht (kein Heartbeat seit ${alter == null ? "?" : Math.round(alter)}s${job ? `, zuletzt: ${job}` : ""}) – Watchdog startet sie neu.`);
           starteEngine();
         }
       }, 120_000).unref();

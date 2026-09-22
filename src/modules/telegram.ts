@@ -8,6 +8,7 @@ import { pendingDrafts, sendDraft, setDraftStatus, type Draft } from "./drafts.j
 import { computeBilanz } from "./bilanz.js";
 import { tagesbericht, letzteWoche, wochenbericht } from "./berichte.js";
 import { pendingPosts, approvePost, discardPost } from "./content.js";
+import { stillstandGrund, type Stillstand } from "./engineWatch.js";
 
 /**
  * Telegram-Steuerung: Entwürfe freigeben/senden, offene Nachrichten sehen, Tages-Status.
@@ -72,6 +73,20 @@ async function notifyDraft(d: Draft) {
     .catch(() => {});
 }
 
+/**
+ * Eine Antwort auf "läuft der Bot?". Bewusst mit der DAUER vorweg: die Frage entsteht immer aus
+ * "ich habe seit X nichts gehört", also muss die Antwort genau daran andocken.
+ */
+function stillstandText(stand: Stillstand): string {
+  const seit = stand.seitSek == null
+    ? "Bisher wurde nichts gesendet."
+    : stand.seitSek < 3600
+      ? `Letzte Aktion vor ${Math.round(stand.seitSek / 60)} Minuten.`
+      : `Letzte Aktion vor ${(stand.seitSek / 3600).toFixed(1)} Stunden.`;
+  if (!stand.steht) return `✅ *Alles frei*\n\n${seit}\nEs gibt gerade keinen Hinderungsgrund – der nächste Durchlauf arbeitet normal.`;
+  return `⏸ *Es geht gerade nichts raus*\n\n${seit}\n\n*Grund:* ${stand.grund}` + (stand.tun ? `\n*Das hilft:* ${stand.tun}` : "\n\nDas löst sich von selbst – kein Eingriff nötig.");
+}
+
 function statusText(): string {
   const s = governor.snapshot();
   const crm = countByStatus();
@@ -117,13 +132,19 @@ export function startTelegram() {
   bot.command("start", (ctx) =>
     ctx.reply(
       `👋 LinkedIn Command Center verbunden.\nDeine Chat-ID: ${ctx.chat.id}\n\n` +
-        `/status – Tages-Status & Zahlen\n/tag – Tagesbericht · /woche – Wochenbericht · /vorwoche\n/entwuerfe – offene Nachrichten freigeben\n/leads – Hot Leads (haben geantwortet)\n/pause – Outreach anhalten\n/resume – fortsetzen`,
+        `/status – Tages-Status & Zahlen\n/warum – warum geht gerade nichts raus?\n/tag – Tagesbericht · /woche – Wochenbericht · /vorwoche\n/entwuerfe – offene Nachrichten freigeben\n/leads – Hot Leads (haben geantwortet)\n/pause – Outreach anhalten\n/resume – fortsetzen`,
     ),
   );
 
   bot.command("status", (ctx) => {
     if (!allowed(ctx.chat.id)) return;
     ctx.reply(statusText());
+  });
+
+  // "Läuft der Bot?" auf Zuruf beantworten, statt bis zum stündlichen Check zu warten.
+  bot.command(["warum", "stillstand"], (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    ctx.reply(stillstandText(stillstandGrund()), { parse_mode: "Markdown" });
   });
 
   bot.command(["entwuerfe", "offen", "drafts"], async (ctx) => {
@@ -221,6 +242,30 @@ export function startTelegram() {
    */
   // SELBST-CHECK: der Sende-Weg ist technisch defekt (Selektor gebrochen, nicht eingeloggt …).
   // Der Bot pausiert Nachrichten von selbst; hier die Warnung, damit du es sofort weißt.
+  /**
+   * Die Engine ist neu gestartet und der Grund stand nur im Dashboard-Prozess. Genau diese
+   * Meldung fehlte am 22.09., als die Engine zweimal ohne jede Begründung neu anlief.
+   */
+  events.on("engine:neustart", (liste: Array<{ at: string; grund: string; detail: string | null; letzter_job: string | null }>) => {
+    if (!bot || !config.telegram.chatId || !liste?.length) return;
+    const zeilen = liste.map((n) => {
+      const zeit = new Date(`${n.at.replace(" ", "T")}Z`).toLocaleString("de-DE", { timeZone: "Europe/Berlin", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const was = n.grund === "absturz" ? "Absturz" : "Watchdog-Neustart";
+      return `• ${zeit} – ${was}${n.letzter_job ? ` (zuletzt: ${n.letzter_job})` : ""}\n  \`${(n.detail || "ohne Detail").split("\n")[0].slice(0, 180)}\``;
+    });
+    bot.api.sendMessage(
+      config.telegram.chatId,
+      `🔁 *Engine war neu gestartet*\n\n${zeilen.join("\n")}\n\nSie läuft wieder. Kommt das mehrmals am Tag, stimmt etwas Grundsätzliches nicht.`,
+      { parse_mode: "Markdown" },
+    ).catch(() => {});
+  });
+
+  /** Seit Stunden geht nichts raus – und es gibt einen benennbaren Grund. */
+  events.on("engine:stillstand", (stand: Stillstand) => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api.sendMessage(config.telegram.chatId, stillstandText(stand), { parse_mode: "Markdown" }).catch(() => {});
+  });
+
   events.on("health:broken", (d: { grund: string }) => {
     if (!bot || !config.telegram.chatId) return;
     bot.api

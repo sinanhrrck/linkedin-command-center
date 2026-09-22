@@ -471,3 +471,21 @@ CREATE TABLE IF NOT EXISTS contact_notes (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_contact_notes ON contact_notes(contact_id, created_at);
+
+-- ENGINE-NEUSTARTS (2026-09-22). Vorher schrieb der Watchdog seinen Grund mit console.warn nach
+-- stdout – und stdout wird bei jedem `docker compose up` weggeworfen. engine.log überlebt zwar,
+-- sah die Meldung aber nie. Ergebnis: die Engine startete am 22.09. fünfmal, und für zwei dieser
+-- Neustarts gab es NIRGENDS eine Begründung. Deshalb liegt der Grund jetzt in der Datenbank:
+-- sie überlebt Container-Neubau und ist der einzige Ort, den beide Prozesse teilen.
+-- `berichtet_at` NULL = noch nicht per Telegram gemeldet; die Engine holt das beim Start nach
+-- (Telegram läuft im Engine-Prozess, der Watchdog im Dashboard-Prozess).
+CREATE TABLE IF NOT EXISTS engine_neustarts (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  at              TEXT NOT NULL DEFAULT (datetime('now')),
+  grund           TEXT NOT NULL,   -- watchdog | absturz | autostart | manuell
+  detail          TEXT,            -- Klartext oder Kopf des Stacktrace
+  letzter_job     TEXT,            -- was zuletzt lief (engine_active_job)
+  heartbeat_alter INTEGER,         -- Sekunden seit dem letzten Heartbeat
+  berichtet_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_engine_neustarts_offen ON engine_neustarts(berichtet_at, at);

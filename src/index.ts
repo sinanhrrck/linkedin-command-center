@@ -18,6 +18,7 @@ import { agentTick } from "./agent/runtime/agentRunner.js";
 import { selbstCheck } from "./modules/healthcheck.js";
 import { config } from "./config.js";
 import { startTelegram } from "./modules/telegram.js";
+import { heartbeatAlter, kuerzeNeustartProtokoll, markiereNeustartsBerichtet, offeneNeustartMeldungen, protokolliereNeustart, stillstandGrund } from "./modules/engineWatch.js";
 import { countByStatus, resetHaengendeInvites } from "./modules/crm.js";
 import { closeSession, saveLiveShot } from "./core/session.js";
 import { SerialJobQueue } from "./core/jobQueue.js";
@@ -234,6 +235,29 @@ const ENGINE_CODE_VERSION = (() => {
   try { return String(createRequire(import.meta.url)("../package.json").version || "?"); }
   catch { return "?"; }
 })();
+/**
+ * ABSTURZ HINTERLÄSST EINE SPUR (2026-09-22). Node beendet den Prozess bei einer unbehandelten
+ * Promise – vorher gab es dafür keinen Handler, und der Watchdog startete die Engine wortlos
+ * neu. Der Grund muss in die Datenbank, BEVOR der Prozess geht: engine.log überlebt zwar, ist
+ * aber nicht das, was der Nutzer sieht, und stdout wird beim Container-Neubau weggeworfen.
+ * Danach wird bewusst beendet – eine Engine mit unklarem Zustand darf nicht weitersenden.
+ */
+for (const signal of ["unhandledRejection", "uncaughtException"] as const) {
+  process.on(signal, (fehler: unknown) => {
+    const text = fehler instanceof Error ? `${fehler.message}\n${fehler.stack ?? ""}` : String(fehler);
+    try {
+      protokolliereNeustart({
+        grund: "absturz",
+        detail: `${signal}: ${text}`,
+        letzterJob: getState("engine_active_job") || null,
+        heartbeatAlterSek: heartbeatAlter(),
+      });
+    } catch { /* Protokoll darf den Absturz nie verschlucken */ }
+    console.error(`[engine] ABSTURZ (${signal}):`, text);
+    process.exit(1);
+  });
+}
+
 if (istServerModus()) {
   logZeitzone("engine");
   serverErststart(); // idempotent – greift nur, falls das Dashboard es noch nicht getan hat
@@ -519,6 +543,31 @@ cron.schedule(`5 ${START_STUNDE} * * 1`, () => events.emit("bilanz:woche"));
 cron.schedule("5 22 * * *", () => events.emit("bericht:tag"));
 cron.schedule(`10 ${START_STUNDE} * * 1`, () => events.emit("bericht:woche"));
 
+/**
+ * STILLSTANDS-MELDUNG (2026-09-22). Telegram meldete bisher nur GESENDETES – also schwieg es
+ * ausgerechnet dann, wenn man eine Erklärung braucht ("seit 2h nichts gehört, läuft der Bot?").
+ * Alle Daten lagen vor: Cap, Warm-up, offene Entwürfe. Niemand hat sie zusammengesetzt.
+ *
+ * Stündlich in der Geschäftszeit prüfen; gemeldet wird nur, wenn seit STILLSTAND_STUNDEN nichts
+ * rausging UND es einen benennbaren Grund gibt. Einmal je Grund pro Tag, damit die Meldung nicht
+ * zur Tapete wird: wer dieselbe Zeile viermal liest, liest sie beim fünften Mal nicht mehr.
+ */
+const STILLSTAND_STUNDEN = 3;
+cron.schedule(`20 ${START_STUNDE}-21 * * *`, () => {
+  try {
+    const stand = stillstandGrund();
+    if (!stand.steht) return;
+    if (stand.seitSek != null && stand.seitSek < STILLSTAND_STUNDEN * 3600) return;
+    // EIN Merker, nicht einer pro Tag: ein Schlüssel je Datum würde `state` dauerhaft zumüllen.
+    const merker = `${new Date().toISOString().slice(0, 10)}|${stand.grund}`;
+    if (getState("stillstand_gemeldet") === merker) return; // heute schon mit diesem Grund gemeldet
+    setState("stillstand_gemeldet", merker);
+    events.emit("engine:stillstand", stand);
+  } catch (e) {
+    console.warn("[stillstand] Prüfung fehlgeschlagen:", (e as Error).message);
+  }
+});
+
 // Statusausgabe alle 15 Min (später via Telegram)
 cron.schedule("*/15 * * * *", () => {
   const { rate, sample } = governor.acceptanceRate();
@@ -530,6 +579,24 @@ cron.schedule("*/15 * * * *", () => {
 
 // Telegram-Steuerung starten (falls Token gesetzt).
 startTelegram();
+
+/**
+ * NEUSTARTS NACHMELDEN. Der Watchdog sitzt im Dashboard-Prozess und hat kein Telegram; die
+ * frisch gestartete Engine holt seine Meldung deshalb nach. Kurz verzögert, damit der Bot
+ * seine Verbindung aufgebaut hat. Gemeldet wird nur, was noch niemand gesehen hat.
+ */
+setTimeout(() => {
+  try {
+    const offen = offeneNeustartMeldungen();
+    if (offen.length) {
+      events.emit("engine:neustart", offen);
+      markiereNeustartsBerichtet(offen.map((n) => n.id));
+    }
+    kuerzeNeustartProtokoll();
+  } catch (e) {
+    console.warn("[engine] Neustart-Meldung fehlgeschlagen:", (e as Error).message);
+  }
+}, 8_000).unref();
 
 console.info("LinkedIn Command Center läuft. Posting-Scheduler + Outreach-Loop aktiv.");
 console.info(governor.isPaused() ? "⚠ Governor ist pausiert." : "✓ Governor aktiv.");

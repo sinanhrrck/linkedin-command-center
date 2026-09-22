@@ -202,6 +202,39 @@ Cockpit-Panel „Bericht“ in der Auswertung (eigener Ladepfad `ladeBericht` mi
 Befehle /tag /woche /vorwoche; die KI-Trefferquoten-Bilanz heißt jetzt /bilanz bzw. /kibilanz.
 Geschäftszeit seit 2026-09-22: 7–22 Uhr; alle Morgen-Crons hängen an `START_STUNDE` in index.ts.
 
+## UPDATE 2026-09-22 (2) — Lautlose Neustarts sichtbar, „warum steht der Bot?"
+Auslöser: „Läuft der Bot? Ich habe seit 2h nichts auf Telegram bekommen." Die Diagnose dauerte
+eine SSH-Sitzung, obwohl alle Daten im System lagen. Zwei getrennte Ursachen, beide behoben.
+- **DER GRUND EINES NEUSTARTS LANDETE IM MÜLL.** Der Watchdog (crmServer.ts) killt die Engine per
+  Signal — das hinterlässt keinen Stacktrace — und schrieb seine Begründung mit `console.warn`
+  nach STDOUT. stdout ist `docker logs` und wird bei jedem `docker compose up` weggeworfen;
+  `engine.log` überlebt, sah die Meldung aber nie. Real gemessen: am 22.09. lief die Engine
+  FÜNFMAL an (00:29, 08:14, 11:48, 12:05, 14:27), und für 08:14 + 11:48 gab es NIRGENDS eine
+  Begründung. Jetzt: Tabelle `engine_neustarts` + `modules/engineWatch.ts`. Die Datenbank ist der
+  einzige Ort, den Dashboard-Prozess (Watchdog) und Engine-Prozess (Telegram) teilen UND der
+  einen Container-Neubau überlebt. Ablauf: Watchdog schreibt `grund/detail/letzter_job/
+  heartbeat_alter` → die frisch gestartete Engine liest `offeneNeustartMeldungen()` und pusht sie
+  per Event `engine:neustart` nach Telegram → `markiereNeustartsBerichtet`. `autostart` wird
+  bewusst NICHT gemeldet (ein gewollter Start ist keine Störung).
+- **ABSTÜRZE HINTERLASSEN JETZT EINE SPUR.** `index.ts` hatte KEINEN `unhandledRejection`-Handler —
+  in Node 24 beendet eine einzige unbehandelte Promise den Prozess, und der Watchdog startete
+  wortlos neu. Jetzt wird der Grund VOR dem Beenden in `engine_neustarts` geschrieben. Danach
+  wird bewusst beendet: eine Engine mit unklarem Zustand darf nicht weitersenden.
+- **`engine.log` ROTIERT** (8 MB, eine Vorgängerdatei). docker-compose begrenzt sorgfältig
+  `max-size: 10m` — das gilt aber nur für stdout, also für die Hälfte, die nicht zählt.
+- **STILLSTANDS-MELDUNG.** `stillstandGrund()` setzt zusammen, warum nichts rausgeht, in der
+  Reihenfolge, in der die Sperren wirklich greifen: Not-Aus → Pause → Zeitfenster → Lese-Budget →
+  offene Entwürfe → Caps. Die erste zutreffende Erklärung gewinnt. WICHTIG: offene Entwürfe
+  kommen VOR den Caps, sobald Nachrichten-Kontingent frei ist — sonst liest der Nutzer
+  „Cap erreicht" und wartet auf den Bot, obwohl der auf IHN wartet. Richtungswahlen
+  (`phase='approach'`) zählen nicht mit, die sind nicht sendbar.
+  Cron `20 <START_STUNDE>-21` meldet, wenn seit 3 h nichts rausging; EIN Merker `stillstand_gemeldet`
+  (Datum|Grund) verhindert Wiederholung, statt pro Tag einen State-Schlüssel anzulegen.
+  Dazu Telegram `/warum` (Alias `/stillstand`) für die Antwort auf Zuruf.
+  An echten Daten geprüft: „125 Entwürfe warten auf deine Freigabe (3/16 Nachrichten heute)" —
+  genau die Antwort, die gefehlt hat.
+- Tests: `src/core/engineWatch.test.ts` (7 Fälle). Gesamt 111/111 grün, `tsc --noEmit` sauber.
+
 ## UPDATE 2026-09-22 — Kampagnen stillgelegt, CRM wird zum Arbeitsplatz
 Sinans Vorgabe: Kampagnen raus, Leads in EINE Liste, alles penibel tracken wie in HubSpot,
 angeschrieben wird weiter individuell über die bestehende Strecke.
