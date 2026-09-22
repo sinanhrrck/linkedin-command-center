@@ -1,6 +1,8 @@
 import { db } from "../db/index.js";
 import { getUnifiedContactTimeline } from "./contactTimeline.js";
 import { getConversationMemory } from "./conversationMemory.js";
+import { listContactNotes } from "./contactNotes.js";
+import { FUNNEL_STAGES, MANUELLE_STUFEN } from "./crmStages.js";
 
 /** Eine gemeinsame Arbeitsansicht pro Person. Sie verwendet ausschließlich die zentrale
  * Kontakt-ID; Namen dienen hier nicht mehr als versteckter Join zwischen getrennten Tabellen. */
@@ -37,10 +39,23 @@ export function getConversationWorkspace(contactId: number) {
     "SELECT id,title,due_at,status FROM sales_tasks WHERE contact_id=? ORDER BY status,COALESCE(due_at,'9999-12-31'),created_at",
   ).all(contactId);
 
+  // Erreichte Stufen kommen AUSSCHLIESSLICH aus crm_stage_events – der einzigen Wahrheit für
+  // Funnel-Zahlen. Hier wird nur gelesen, nie aus contacts.* rekonstruiert.
+  const erreichteStufen = db.prepare(
+    "SELECT stage, MIN(occurred_at) AS seit, source FROM crm_stage_events WHERE contact_id=? GROUP BY stage",
+  ).all(contactId) as Array<{ stage: string; seit: string; source: string }>;
+
   return {
     contact,
     memory: getConversationMemory(contactId),
     timeline: getUnifiedContactTimeline(contactId),
+    notes: listContactNotes(contactId),
+    stufen: {
+      alle: FUNNEL_STAGES,
+      erreicht: erreichteStufen,
+      manuell: MANUELLE_STUFEN,
+      aktuell: (contact.outcome_stage as string | null) || null,
+    },
     tasks,
     identities,
     conflicts,

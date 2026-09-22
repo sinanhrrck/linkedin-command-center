@@ -95,6 +95,35 @@ export function recordCrmStage(
   return inserted;
 }
 
+/**
+ * Stufen, die ein MENSCH beurteilt und deshalb im Cockpit setzbar sind. Bewusst NICHT dabei:
+ * found/suitable/invited/accepted/messaged/replied. Das sind beobachtete Tatsachen des Bots
+ * (eine Einladung ging raus oder nicht) – wären sie von Hand setzbar, liessen sich Annahme- und
+ * Antwortquote per Klick schönen und die Auswertung wäre wertlos. Was hier steht, ist genau die
+ * Einschätzung, die kein Automat treffen kann: passt der Kontakt, steht ein Termin, ist es
+ * gewonnen oder verloren.
+ */
+export const MANUELLE_STUFEN: readonly CrmStage[] = ["qualified", "meeting", "won", "lost", "not_fit"] as const;
+
+/** Stufen, die NIE von Hand entstehen dürfen: sie kosteten eine echte Einladung (Regel 3). */
+const NIE_MANUELL = new Set<CrmStage>(["invited", "accepted"]);
+
+/**
+ * Setzt eine Vertriebsstufe von Hand. Schreibt über denselben Weg wie der Bot (`recordCrmStage`,
+ * Quelle `manual`), damit der fachliche Dedupe-Schlüssel, das Einfrieren der Zuordnung und die
+ * Fortschreibung von `sales_outcomes` unverändert gelten. Rückwärts geht es bewusst nicht:
+ * `recordCrmStage` lässt `sales_outcomes` nur vorwärts laufen und nie aus einem Endstatus heraus.
+ */
+export function setStageManually(contactId: number, stage: CrmStage): { ok: boolean; grund?: string } {
+  if (!Number.isInteger(contactId) || contactId <= 0) return { ok: false, grund: "Bitte wähle einen Kontakt." };
+  if (!FUNNEL_STAGES.includes(stage)) return { ok: false, grund: "Unbekannte Stufe." };
+  if (NIE_MANUELL.has(stage)) return { ok: false, grund: "Einladung und Annahme belegt nur der Bot – sonst stimmt die Annahmequote nicht mehr." };
+  if (!MANUELLE_STUFEN.includes(stage)) return { ok: false, grund: "Diese Stufe entsteht aus dem Gesprächsverlauf und ist nicht von Hand setzbar." };
+  if (!contactById(contactId)) return { ok: false, grund: "Kontakt nicht gefunden." };
+  recordCrmStage(contactId, stage, "manual");
+  return { ok: true };
+}
+
 export function recordConversationStage(
   threadUrl: string,
   participant: string,

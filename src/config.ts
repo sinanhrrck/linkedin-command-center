@@ -246,6 +246,19 @@ export const config = {
    * ohne Freigabe – governor-gedrosselt. Erkennt Termin-Zusagen → Handoff via Telegram.
    * Eskaliert Einwände/Unsicheres an den Menschen statt selbst Mist zu bauen.
    */
+  /**
+   * KAMPAGNEN (Event-Einladungen + Auftrags-Zielgruppen) sind STILLGELEGT (2026-09-22, Sinans
+   * Entscheidung). Der komplette Code, die Tabellen und `crm_stage_events.campaign_id` bleiben
+   * unangetastet – die Zuordnung ist beim Schreiben eingefroren und darf nie rückwirkend
+   * verschwinden. `enabled: false` schaltet nur ZWEI Dinge ab: den campaignTick im Loop und den
+   * Kampagnen-Bereich im Cockpit. Angeschrieben wird ausschliesslich über die normale,
+   * individuelle Strecke (first/followup/message/reaktivierung). Auf true zurückstellen
+   * reaktiviert alles ohne weitere Änderung.
+   */
+  campaigns: {
+    enabled: false,
+  },
+
   autopilot: {
     enabled: false,
     maxMessagesPerThread: 6, // danach an den Menschen eskalieren (kein Endlos-Loop)

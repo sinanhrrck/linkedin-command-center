@@ -202,6 +202,53 @@ Cockpit-Panel „Bericht“ in der Auswertung (eigener Ladepfad `ladeBericht` mi
 Befehle /tag /woche /vorwoche; die KI-Trefferquoten-Bilanz heißt jetzt /bilanz bzw. /kibilanz.
 Geschäftszeit seit 2026-09-22: 7–22 Uhr; alle Morgen-Crons hängen an `START_STUNDE` in index.ts.
 
+## UPDATE 2026-09-22 — Kampagnen stillgelegt, CRM wird zum Arbeitsplatz
+Sinans Vorgabe: Kampagnen raus, Leads in EINE Liste, alles penibel tracken wie in HubSpot,
+angeschrieben wird weiter individuell über die bestehende Strecke.
+- **KAMPAGNEN STILLGELEGT, NICHT ENTFERNT** (`config.campaigns.enabled=false`). EIN Schalter,
+  sonst nichts: er gated den `campaignTick` (Start-Tick + Cron in index.ts) und über
+  `dashboard.kampagnenAktiv` den Kampagnen-Bereich im Cockpit (Navigation weg, `showView`
+  leitet auf „Heute" um, `renderCampaigns` läuft gar nicht erst). Module, Tabellen und vor
+  allem `crm_stage_events.campaign_id` bleiben UNANGETASTET — die Zuordnung ist beim Schreiben
+  eingefroren (Messregel 2) und darf nie rückwirkend verschwinden. Auf `true` zurückstellen
+  reaktiviert alles ohne weitere Änderung. Geprüft: keine `kind='event'`-Entwürfe und keine
+  offenen `incoming='campaign:*'` vorhanden, es wird also nichts im versteckten Bereich gefangen.
+  Auch `campaignQueued`/`campaignConnections` in dashboard.ts hängen am Schalter — geplante
+  Arbeit anzukündigen, die der abgeschaltete Tick nie erledigt, ist derselbe Fehler wie 2026-08-17,
+  nur andersherum.
+- **KONTAKTE = DIE EINE LISTE.** `view-contacts` ist jetzt die HubSpot-artige Tabelle:
+  Kontakt · Status · Stufe · Score · Quelle · Letzte Berührung · Nächster Schritt · Offen ·
+  Aktionen, klickbare Sortierung je Spalte (`contactSort`), waagerechter Scroll statt Quetschen.
+  OHNE Klick bleibt bewusst die serverseitige Dringlichkeit (Antworten zuerst) stehen —
+  ein fester Standard-Sortierschlüssel hätte genau die Priorisierung zerstört, für die „Heute" da ist.
+  Neue Felder in der Kontaktabfrage (dashboard.ts): `quelle` (JOIN lead_sources), `letzte_beruehrung`,
+  `offene_aufgaben`, `naechste_faelligkeit`, `notizen`.
+- **ARBEITSBEREICH JE KONTAKT** (`#contact-desk`, `zeichneKontaktArbeitsbereich`) sitzt im
+  vorhandenen Kontaktspur-Dialog ÜBER der Timeline — wer etwas festhält, hat den Verlauf daneben.
+  Drei Blöcke: Stufe, Aufgaben, Notizen. `getConversationWorkspace` liefert dafür zusätzlich
+  `notes` und `stufen` (erreichte Stufen kommen AUSSCHLIESSLICH aus `crm_stage_events`).
+- **STUFE VON HAND: NUR, WAS KEIN AUTOMAT WEISS.** `setStageManually` (crmStages.ts) erlaubt
+  ausschliesslich `MANUELLE_STUFEN` = qualified/meeting/won/lost/not_fit und weist
+  found/suitable/invited/accepted/messaged/replied hart ab. GRUND: wer `accepted` klicken darf,
+  schönt die Annahmequote, und die ganze Auswertung wäre wertlos. Geschrieben wird über
+  `recordCrmStage(..., "manual")` — gleicher fachlicher Dedupe-Schlüssel, gleiches Einfrieren
+  der Zuordnung, gleiches Vorwärts-Only auf `sales_outcomes`. API `POST /api/stage` gibt den
+  Ablehnungsgrund unter `reason` zurück, weil der Cockpit-`post()` bei HTTP 400 wirft und
+  genau diesen Schlüssel liest (sonst stünde dort nur „HTTP 400").
+- **NOTIZEN** = neue Tabelle `contact_notes` + `modules/contactNotes.ts` + `POST /api/note`.
+  Bewusst eigene Tabelle statt weiterer Spalte: eine Notiz ist ein EREIGNIS mit Zeitpunkt.
+  `contacts.notes` (Einzelfeld aus dem Import) bleibt unangetastet. Notizen laufen über
+  `backfillContactTimeline` (dedupe `note:<id>`) in die Kontaktspur.
+- **AUFGABEN** waren komplett fertig, aber tot: `sales_tasks`, `salesDesk.ts` und `POST /api/task`
+  existierten seit Längerem, wurden im Cockpit aber NIRGENDS aufgerufen (0 Treffer in
+  command-center.js). Jetzt angebunden, inkl. Fälligkeit und rot markierter Überfälligkeit.
+- **`kurzDatum()`** im Cockpit: reine Tagesangaben (`due_at` = "2026-09-25") dürfen NICHT durch
+  `localDate` laufen — das hängt ein "Z" an und ergibt ein ungültiges Datum.
+- Tests: `src/core/crmArbeitsbereich.test.ts` (6 Fälle, u. a. dass Bot-Tatsachen nicht setzbar
+  sind und Notizen die Spur nicht verdoppeln). Gesamt 104/104 grün, `tsc --noEmit` sauber.
+- Live am echten Datenbestand geprüft (Kopie via `VACUUM INTO`, nie gegen die laufende DB):
+  1224 Kontakte, Sortierung, Stufe setzen, Notiz und Aufgabe schreiben, Ablehnungsgründe.
+
 ## In-App-Update (desktop/main.cjs + desktop/preload.cjs + Dashboard-Banner)
 Bewusst OHNE electron-updater/Squirrel: lautloses Auto-Update auf macOS bräuchte ein bezahltes
 Apple-Developer-Zertifikat (Squirrel.Mac verifiziert die Signatur; unsere Ad-hoc-Signatur reicht

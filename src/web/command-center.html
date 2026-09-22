@@ -101,7 +101,7 @@
     <section class="view" id="view-contacts">
       <section class="page-intro compact"><div><span class="eyebrow">Eine Kontaktbasis</span><h2>Kontakte und Gespräche</h2><p>Jede Person erscheint nur einmal. Filter zeigen, wo der Kontakt gerade steht.</p></div></section>
       <div class="contact-toolbar"><input id="contact-search" type="search" placeholder="Name oder Headline suchen"/><select id="contact-filter"><option value="all">Alle Kontakte</option><option value="attention">Braucht Entscheidung</option><option value="paused">Wiedervorlagen</option><option value="excluded">Nicht mehr anschreiben</option><option value="new">Noch nicht kontaktiert</option><option value="invited">Anfrage offen</option><option value="accepted">Angenommen</option><option value="messaged">Angeschrieben</option><option value="replied">Hat geantwortet</option><option value="closed">Abgeschlossen</option></select><span id="identity-quality" class="identity-quality"></span><span id="contact-count"></span></div>
-      <div class="contact-table"><div class="contact-row contact-head"><span>Kontakt</span><span>Status</span><span>Nächster Schritt</span><span></span></div><div id="contact-rows"></div></div>
+      <div class="contact-table"><div class="contact-scroll"><div class="contact-row contact-head"><button type="button" data-sort="name">Kontakt</button><button type="button" data-sort="status">Status</button><button type="button" data-sort="stufe">Stufe</button><button type="button" data-sort="score">Score</button><button type="button" data-sort="quelle">Quelle</button><button type="button" data-sort="beruehrung">Letzte Berührung</button><span>Nächster Schritt</span><span>Offen</span><span></span></div><div id="contact-rows"></div></div></div>
     </section>
 
     <section class="view" id="view-insights">
@@ -211,6 +211,7 @@
   <section class="report-card contact-workspace-card">
     <div class="report-head"><div><span class="eyebrow">Kontaktspur</span><h2 id="contact-workspace-title">Kontaktverlauf</h2><p id="contact-workspace-subtitle"></p></div><button id="contact-workspace-close" class="icon-btn" aria-label="Schließen">×</button></div>
     <div id="contact-identity-state" class="contact-identity-state"></div>
+    <div id="contact-desk" class="contact-desk"></div>
     <div id="contact-timeline" class="contact-timeline" aria-live="polite"></div>
   </section>
 </div>

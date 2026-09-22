@@ -276,7 +276,7 @@ setTimeout(async () => {
   // Beim Start einmal Nachschub holen: wer Quellen angelegt + den Bot gestartet hat, bekommt
   // gleich Leads, statt bis zum nächsten festen Fütter-Termin zu warten.
   await einzeln("feed", () => runReadJobWhenDue("feed", 300, () => feedTick()), 20);
-  await einzeln("campaign", () => campaignTick(), 50);
+  if (config.campaigns.enabled) await einzeln("campaign", () => campaignTick(), 50);
   // Post-Ideen: nur nachlegen, wenn KEINE offen sind (schont das Gemini-Limit). So sieht der
   // Nutzer gleich beim ersten Start Beitrags-Entwürfe zum Freigeben, statt bis Montag zu warten.
   await einzeln("content", async () => {
@@ -348,9 +348,10 @@ cron.schedule(`5 ${START_STUNDE}-21/2 * * *`, () => einzeln("acceptance", () => 
 // Hält die Pipeline gefüllt, damit der Outreach nicht trockenläuft.
 cron.schedule("0 10,16 * * *", () => einzeln("feed", () => runReadJobWhenDue("feed", 300, () => feedTick()), 20));
 
-// Aktive Event-Kampagnen arbeiten parallel zum normalen Outreach. Die eigentliche Nachricht
-// bleibt ein normaler Entwurf und durchlaeuft denselben Freigabe- und Governor-Weg.
-cron.schedule("*/10 * * * *", () => einzeln("campaign", () => campaignTick(), 50));
+// Kampagnen sind stillgelegt (config.campaigns.enabled=false, siehe config.ts). Angeschrieben
+// wird ausschliesslich individuell über die normale Strecke. Der Cron bleibt bewusst stehen,
+// damit ein Zurückstellen des Schalters genügt – ohne ihn hier wieder einzubauen.
+if (config.campaigns.enabled) cron.schedule("*/10 * * * *", () => einzeln("campaign", () => campaignTick(), 50));
 
 // SOFORT-NACHSCHUB auf Knopfdruck: das Dashboard setzt "feed_now"=1 (neue Quelle oder
 // "Jetzt Nachschub holen"). Der Loop prüft alle 2 Min und füttert dann gleich – so wirkt der

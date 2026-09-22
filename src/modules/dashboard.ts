@@ -70,6 +70,11 @@ type ContactRow = {
   campaign_id: number | null;
   campaign_name: string | null;
   outcome_stage: string | null;
+  quelle: string | null;
+  letzte_beruehrung: string | null;
+  offene_aufgaben: number;
+  naechste_faelligkeit: string | null;
+  notizen: number;
   outcome_note: string | null;
   outcome_value_cents: number | null;
   open_draft_id: number | null;
@@ -91,12 +96,18 @@ export function getDashboardData() {
               c.messaged_at,c.replied_at,c.aus_netzwerk,c.created_at,c.lead_score,c.campaign_id,ca.name AS campaign_name,
               c.automation_status,c.snoozed_until,c.snooze_label,c.snooze_reason,c.do_not_contact,
               o.stage AS outcome_stage,o.note AS outcome_note,o.value_cents AS outcome_value_cents,
+              ls.label AS quelle,
+              COALESCE(c.last_meaningful_contact_at,c.replied_at,c.messaged_at,c.accepted_at,c.invited_at,c.created_at) AS letzte_beruehrung,
+              (SELECT COUNT(*) FROM sales_tasks t WHERE t.contact_id=c.id AND t.status='open') AS offene_aufgaben,
+              (SELECT MIN(t.due_at) FROM sales_tasks t WHERE t.contact_id=c.id AND t.status='open' AND t.due_at IS NOT NULL) AS naechste_faelligkeit,
+              (SELECT COUNT(*) FROM contact_notes n WHERE n.contact_id=c.id) AS notizen,
               (SELECT d.id FROM drafts d WHERE d.thread_url=c.profile_url AND d.status IN ('pending','approved','sending') ORDER BY CASE d.status WHEN 'sending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,d.created_at DESC LIMIT 1) AS open_draft_id,
               (SELECT d.kind FROM drafts d WHERE d.thread_url=c.profile_url AND d.status IN ('pending','approved','sending') ORDER BY CASE d.status WHEN 'sending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,d.created_at DESC LIMIT 1) AS open_draft_kind,
               (SELECT d.status FROM drafts d WHERE d.thread_url=c.profile_url AND d.status IN ('pending','approved','sending') ORDER BY CASE d.status WHEN 'sending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,d.created_at DESC LIMIT 1) AS open_draft_status
        FROM contacts c
        LEFT JOIN campaigns ca ON ca.id=c.campaign_id
        LEFT JOIN sales_outcomes o ON o.contact_id=c.id
+       LEFT JOIN lead_sources ls ON ls.id=c.source_id
        ORDER BY
          CASE c.status WHEN 'replied' THEN 0 WHEN 'messaged' THEN 1 WHEN 'accepted' THEN 2
                      WHEN 'invited' THEN 3 WHEN 'new' THEN 4 ELSE 5 END,
@@ -333,11 +344,14 @@ export function getDashboardData() {
    * mitzuzählen versprach dem Nutzer endlos „42 Kampagnenkontakte in 10 Minuten", während
    * campaignTick diese Ziele bewusst überspringt (Sinan 2026-08-17).
    */
-  const campaignQueued = (db.prepare(
+  // Kampagnen stillgelegt (config.campaigns.enabled): dann gibt es NICHTS zu versprechen.
+  // Eine geplante Arbeit anzuzeigen, die der abgeschaltete Tick nie erledigt, ist genau der
+  // Fehler von oben – nur andersherum.
+  const campaignQueued = !config.campaigns.enabled ? 0 : (db.prepare(
     `SELECT COUNT(*) n FROM campaign_targets t JOIN campaigns c ON c.id=t.campaign_id
       WHERE c.active=1 AND t.status='queued' AND (c.goal_code IS NULL OR c.kind='event')`,
   ).get() as { n: number }).n;
-  const campaignConnections = (db.prepare(
+  const campaignConnections = !config.campaigns.enabled ? 0 : (db.prepare(
     `SELECT COUNT(*) n FROM campaign_targets t JOIN campaigns c ON c.id=t.campaign_id
       WHERE c.active=1 AND t.status='awaiting_connection'`,
   ).get() as { n: number }).n;
@@ -392,6 +406,10 @@ export function getDashboardData() {
     leseBudget: leseStand(),
     lowRead: readSavingsToday(),
     leadSources,
+    // Kampagnen sind stillgelegt (config.campaigns.enabled). Die Liste bleibt im State, damit
+    // ein Zurückstellen des Schalters genügt; das Cockpit blendet den Bereich anhand des
+    // Flags aus, statt die Daten wegzuwerfen.
+    kampagnenAktiv: config.campaigns.enabled,
     campaigns: listCampaigns(),
     identityQuality: contactIdentityHealth(),
     goalAlerts,

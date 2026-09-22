@@ -41,6 +41,18 @@ const JOBS = {
 };
 const jobText = (job) => JOBS[job] || [String(job || "Bereit"), "Nächste Aufgabe wird automatisch priorisiert"];
 const localDate = (value) => new Date(String(value || "").includes("T") ? value : `${String(value || "").replace(" ", "T")}Z`);
+/** Kurzes Datum für Arbeitsbereich und Kontaktspur. Reine Tagesangaben (`due_at` = "2026-09-25")
+ * dürfen NICHT durch localDate laufen: das hängt ein "Z" an und ergibt ein ungültiges Datum. */
+const kurzDatum = (value) => {
+  const roh = String(value || "");
+  if (!roh) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(roh)) {
+    const [jahr, monat, tag] = roh.split("-");
+    return new Date(Number(jahr), Number(monat) - 1, Number(tag)).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" });
+  }
+  const datum = localDate(roh);
+  return Number.isNaN(datum.getTime()) ? roh : datum.toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" });
+};
 const relativeTime = (value) => {
   const seconds = Math.max(0, Math.round((Date.now() - localDate(value).getTime()) / 1000));
   if (!Number.isFinite(seconds)) return "gerade eben";
@@ -55,8 +67,12 @@ const VIEW_META = {
   contacts: ["DEINE KONTAKTBASIS", "Kontakte"], insights: ["ZAHLEN MIT KONTEXT", "Auswertung"],
   settings: ["ARBEITSWEISE", "Einstellungen"],
 };
+/** Kampagnen sind stillgelegt (config.campaigns.enabled). Solange der Schalter aus ist, ist der
+ * Bereich weder in der Navigation noch über einen alten Link erreichbar. Der Code bleibt. */
+const kampagnenAus = () => state && state.kampagnenAktiv === false;
 function showView(view) {
   activeView = VIEW_META[view] ? view : "today";
+  if (activeView === "campaigns" && kampagnenAus()) activeView = "today";
   document.querySelectorAll(".view").forEach((el) => el.classList.toggle("active", el.id === `view-${activeView}`));
   document.querySelectorAll(".nav[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === activeView));
   $("page-kicker").textContent = VIEW_META[activeView][0]; $("page-title").textContent = VIEW_META[activeView][1];
@@ -715,6 +731,87 @@ function openRelationshipModal(contact) {
 }
 function closeContactWorkspace() { contactWorkspaceId = null; $("contact-workspace-modal").classList.add("hidden"); }
 const timelineDate = (value) => localDate(value).toLocaleString("de-DE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+/**
+ * ARBEITSBEREICH JE KONTAKT (2026-09-22): Stufe, Aufgaben und Notizen an EINEM Ort, direkt über
+ * der Kontaktspur. Bewusst im selben Dialog wie die Spur – wer etwas festhält, hat den Verlauf
+ * daneben und muss nicht zwischen Ansichten wechseln.
+ */
+function zeichneKontaktArbeitsbereich(contact, workspace) {
+  const stufen = workspace.stufen || {};
+  const manuell = stufen.manuell || [];
+  const erreicht = new Map((stufen.erreicht || []).map((row) => [row.stage, row]));
+  const aktuell = stufen.aktuell;
+  const kette = (stufen.alle || []).filter((stage) => stage !== "lost" && stage !== "not_fit");
+  const heute = new Date().toISOString().slice(0, 10);
+  const aufgaben = workspace.tasks || [], notizen = workspace.notes || [];
+  const offeneAufgaben = aufgaben.filter((task) => task.status === "open");
+  const erledigte = aufgaben.filter((task) => task.status !== "open");
+
+  $("contact-desk").innerHTML = `
+    <section class="desk-block">
+      <div class="desk-head"><b>Stufe</b><span>Beobachtetes vom Bot ist fest. Setzbar ist, was nur du beurteilen kannst.</span></div>
+      <ol class="stage-chain">${kette.map((stage) => {
+        const treffer = erreicht.get(stage);
+        return `<li class="${treffer ? "erreicht" : ""} ${aktuell === stage ? "aktuell" : ""}"><b>${esc(STUFE[stage] || stage)}</b>${treffer ? `<time>${esc(kurzDatum(treffer.seit))}</time>` : ""}</li>`;
+      }).join("")}</ol>
+      <div class="stage-actions">${manuell.map((stage) => `<button type="button" data-stage="${esc(stage)}" class="${aktuell === stage ? "aktiv" : ""}">${esc(STUFE[stage] || stage)}</button>`).join("")}</div>
+      <p class="desk-note" id="stage-note" role="status"></p>
+    </section>
+    <section class="desk-block">
+      <div class="desk-head"><b>Aufgaben</b><span>${offeneAufgaben.length} offen</span></div>
+      <form class="desk-form" id="task-form"><input id="task-title" maxlength="220" placeholder="Nächster Schritt, z. B. Montag anrufen" required /><input id="task-due" type="date" /><button type="submit" class="primary">Merken</button></form>
+      <ul class="desk-list">${offeneAufgaben.map((task) => `<li class="${task.due_at && task.due_at <= heute ? "faellig" : ""}"><span>${esc(task.title)}${task.due_at ? ` <time>fällig ${esc(kurzDatum(task.due_at))}</time>` : ""}</span><span class="desk-row-actions"><button type="button" data-task-done="${task.id}">Erledigt</button><button type="button" data-task-del="${task.id}" aria-label="Aufgabe löschen">×</button></span></li>`).join("") || `<li class="desk-empty">Nichts offen.</li>`}
+      ${erledigte.slice(-3).map((task) => `<li class="erledigt"><span>${esc(task.title)}</span><span class="desk-row-actions"><button type="button" data-task-del="${task.id}" aria-label="Aufgabe löschen">×</button></span></li>`).join("")}</ul>
+    </section>
+    <section class="desk-block">
+      <div class="desk-head"><b>Notizen</b><span>${notizen.length} gespeichert</span></div>
+      <form class="desk-form spalte" id="note-form"><textarea id="note-text" rows="2" maxlength="4000" placeholder="Was war wichtig? z. B. Ergebnis des Telefonats" required></textarea><button type="submit" class="primary">Notiz speichern</button></form>
+      <ul class="desk-list">${notizen.map((note) => `<li><span>${esc(note.text)}<time>${esc(kurzDatum(note.created_at))}</time></span><span class="desk-row-actions"><button type="button" data-note-del="${note.id}" aria-label="Notiz löschen">×</button></span></li>`).join("") || `<li class="desk-empty">Noch keine Notiz.</li>`}</ul>
+    </section>`;
+
+  const neuLaden = async () => { await load(true); await openContactWorkspace(contact); };
+  const desk = $("contact-desk");
+
+  desk.querySelectorAll("[data-stage]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      // post() wirft bei einer Ablehnung mit dem Klartext-Grund aus der API.
+      await post("/api/stage", { contactId: contact.id, stage: button.dataset.stage });
+      toast(`Stufe gesetzt: ${STUFE[button.dataset.stage] || button.dataset.stage}`);
+      await neuLaden();
+    } catch (error) { $("stage-note").textContent = error.message; button.disabled = false; }
+  }));
+
+  $("task-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const title = $("task-title").value.trim(); if (!title) return;
+    try { await post("/api/task", { action: "create", contactId: contact.id, title, dueAt: $("task-due").value || undefined }); await neuLaden(); toast("Aufgabe gemerkt."); }
+    catch (error) { toast(`Nicht gespeichert: ${error.message}`); }
+  });
+  desk.querySelectorAll("[data-task-done]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try { await post("/api/task", { action: "complete", id: Number(button.dataset.taskDone) }); await neuLaden(); }
+    catch (error) { toast(error.message); button.disabled = false; }
+  }));
+  desk.querySelectorAll("[data-task-del]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try { await post("/api/task", { action: "delete", id: Number(button.dataset.taskDel) }); await neuLaden(); }
+    catch (error) { toast(error.message); button.disabled = false; }
+  }));
+
+  $("note-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = $("note-text").value.trim(); if (!text) return;
+    try { await post("/api/note", { action: "create", contactId: contact.id, text }); await neuLaden(); toast("Notiz gespeichert."); }
+    catch (error) { toast(`Nicht gespeichert: ${error.message}`); }
+  });
+  desk.querySelectorAll("[data-note-del]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try { await post("/api/note", { action: "delete", id: Number(button.dataset.noteDel) }); await neuLaden(); }
+    catch (error) { toast(error.message); button.disabled = false; }
+  }));
+}
+
 async function openContactWorkspace(contact) {
   contactWorkspaceId = contact.id;
   $("contact-workspace-title").textContent = contact.full_name || "Kontaktverlauf";
@@ -745,16 +842,55 @@ async function openContactWorkspace(contact) {
         } catch (error) { button.disabled = false; toast(`Zuordnung nicht möglich: ${error.message}`); }
       });
     });
+    zeichneKontaktArbeitsbereich(contact, workspace);
     const timeline = [...(workspace.timeline || [])].reverse();
     $("contact-timeline").innerHTML = timeline.length ? timeline.map((item) => `<article class="timeline-item ${esc(item.kind)}"><span class="timeline-mark"></span><div class="timeline-body"><div><b>${esc(item.title)}</b><time>${esc(timelineDate(item.ts))}</time></div>${item.text ? `<p>${esc(item.text)}</p>` : ""}<small>${esc(item.source || "NextLead")}</small></div></article>`).join("") : `<div class="timeline-empty"><b>Noch keine Aktivität gespeichert.</b><span>Sobald NextLead eine Aktion oder Nachricht zuordnet, erscheint sie hier.</span></div>`;
   } catch (error) {
+    $("contact-desk").innerHTML = "";
     $("contact-timeline").innerHTML = `<div class="timeline-empty"><b>Kontaktspur konnte nicht geladen werden.</b><span>${esc(error.message)}</span></div>`;
   }
 }
+/** Vertriebsstufen in Klartext. Reihenfolge = Fortschritt; `lost`/`not_fit` sind Endpunkte. */
+const STUFE = {
+  found: "Gefunden", suitable: "Geeignet", invited: "Eingeladen", accepted: "Angenommen",
+  messaged: "Angeschrieben", replied: "Geantwortet", qualified: "Passt", meeting: "Termin",
+  won: "Gewonnen", lost: "Verloren", not_fit: "Passt nicht",
+};
+const STUFE_RANG = { found: 1, suitable: 2, invited: 3, accepted: 4, messaged: 5, replied: 6, qualified: 7, meeting: 8, won: 9, lost: 0, not_fit: 0 };
+const STATUS_RANG = { replied: 0, messaged: 1, accepted: 2, invited: 3, new: 4 };
+/** Kein Standard-Sortierschlüssel: ohne Klick bleibt die serverseitige Dringlichkeit erhalten
+ * (Antworten zuerst). Erst ein Klick auf die Kopfzeile ordnet nach einer Spalte um. */
+let contactSort = { key: null, dir: "asc" };
+
+function contactSortValue(contact, key) {
+  if (key === "name") return (contact.full_name || "").toLowerCase();
+  if (key === "status") return STATUS_RANG[contact.status] ?? 9;
+  if (key === "stufe") return STUFE_RANG[contact.outcome_stage] ?? -1;
+  if (key === "score") return contact.lead_score ?? -1;
+  if (key === "quelle") return (contact.quelle || "").toLowerCase();
+  if (key === "beruehrung") return contact.letzte_beruehrung || "";
+  return "";
+}
+
 function renderContacts() {
   const query = $("contact-search").value.toLowerCase().trim(), filter = $("contact-filter").value;
-  let rows = state.contacts || []; if (query) rows = rows.filter((contact) => `${contact.full_name || ""} ${contact.headline || ""}`.toLowerCase().includes(query)); if (filter === "attention") rows = rows.filter((contact) => contact.open_draft_id || contact.status === "replied" || contact.automation_status === "paused"); else if (filter === "paused" || filter === "excluded") rows = rows.filter((contact) => contact.automation_status === filter); else if (filter !== "all") rows = rows.filter((contact) => contact.status === filter);
+  let rows = state.contacts || [];
+  if (query) rows = rows.filter((contact) => `${contact.full_name || ""} ${contact.headline || ""} ${contact.quelle || ""}`.toLowerCase().includes(query));
+  if (filter === "attention") rows = rows.filter((contact) => contact.open_draft_id || contact.status === "replied" || contact.automation_status === "paused");
+  else if (filter === "paused" || filter === "excluded") rows = rows.filter((contact) => contact.automation_status === filter);
+  else if (filter !== "all") rows = rows.filter((contact) => contact.status === filter);
+  if (contactSort.key) {
+    const richtung = contactSort.dir === "desc" ? -1 : 1;
+    rows = rows.slice().sort((a, b) => {
+      const links = contactSortValue(a, contactSort.key), rechts = contactSortValue(b, contactSort.key);
+      if (links === rechts) return 0;
+      return (links > rechts ? 1 : -1) * richtung;
+    });
+  }
   $("contact-count").textContent = `${rows.length} Kontakte`;
+  document.querySelectorAll(".contact-head [data-sort]").forEach((el) => {
+    if (el.dataset.sort === contactSort.key) el.dataset.dir = contactSort.dir; else delete el.dataset.dir;
+  });
   const quality = state.identityQuality || {};
   $("identity-quality").className = `identity-quality ${quality.ambiguous ? "needs-review" : ""}`;
   $("identity-quality").textContent = quality.ambiguous
@@ -762,7 +898,17 @@ function renderContacts() {
     : quality.orphaned
       ? `${quality.threads_linked || 0} verbunden · ${quality.orphaned} alte Chats getrennt`
       : `${quality.threads_linked || 0} Gespräche sicher verbunden`;
-  $("contact-rows").innerHTML = rows.slice(0, 300).map((contact) => { const protectedState = relationshipLabel(contact); return `<div class="contact-row"><div class="contact-person"><b>${esc(contact.full_name || "Unbekannt")}</b><span>${esc(contact.headline || "Keine Headline")}</span>${protectedState ? `<i class="relationship-state ${contact.automation_status === "excluded" ? "excluded" : ""}">${esc(protectedState)}</i>` : ""}</div><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span><span class="next-step">${esc(nextStep(contact))}</span><span class="contact-actions"><button class="contact-history" data-contact-history="${contact.id}">Verlauf</button><button class="contact-policy ${protectedState ? "resume" : ""}" data-contact-policy="${contact.id}">${protectedState ? "Freigeben" : "Pausieren"}</button><a href="${esc(contact.profile_url)}" target="_blank" rel="noopener">Profil ↗</a></span></div>`; }).join("") || `<div class="empty-work">Keine Kontakte in diesem Filter.</div>`;
+  const heute = new Date().toISOString().slice(0, 10);
+  $("contact-rows").innerHTML = rows.slice(0, 300).map((contact) => {
+    const protectedState = relationshipLabel(contact);
+    const stufe = contact.outcome_stage ? `<span class="contact-stage">${esc(STUFE[contact.outcome_stage] || contact.outcome_stage)}</span>` : `<span class="contact-stage leer">–</span>`;
+    const faellig = contact.naechste_faelligkeit && contact.naechste_faelligkeit <= heute;
+    const offen = [
+      contact.offene_aufgaben ? `<i class="${faellig ? "faellig" : ""}" title="offene Aufgaben">${contact.offene_aufgaben}✓</i>` : "",
+      contact.notizen ? `<i title="Notizen">${contact.notizen}✎</i>` : "",
+    ].join("");
+    return `<div class="contact-row"><div class="contact-person"><b>${esc(contact.full_name || "Unbekannt")}</b><span>${esc(contact.headline || "Keine Headline")}</span>${protectedState ? `<i class="relationship-state ${contact.automation_status === "excluded" ? "excluded" : ""}">${esc(protectedState)}</i>` : ""}</div><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span>${stufe}<span class="contact-score">${contact.lead_score ?? "–"}</span><span class="contact-meta" title="${esc(contact.quelle || "")}">${esc(contact.quelle || "–")}</span><span class="contact-meta">${contact.letzte_beruehrung ? esc(relativeTime(contact.letzte_beruehrung)) : "–"}</span><span class="next-step">${esc(nextStep(contact))}</span><span class="contact-open">${offen}</span><span class="contact-actions"><button class="contact-history" data-contact-history="${contact.id}">Verlauf</button><button class="contact-policy ${protectedState ? "resume" : ""}" data-contact-policy="${contact.id}">${protectedState ? "Freigeben" : "Pausieren"}</button><a href="${esc(contact.profile_url)}" target="_blank" rel="noopener">Profil ↗</a></span></div>`;
+  }).join("") || `<div class="empty-work">Keine Kontakte in diesem Filter.</div>`;
   $("contact-rows").querySelectorAll("[data-contact-history]").forEach((button) => button.addEventListener("click", () => {
     const contact = (state.contacts || []).find((item) => item.id === Number(button.dataset.contactHistory));
     if (contact) openContactWorkspace(contact);
@@ -773,6 +919,13 @@ function renderContacts() {
     else openRelationshipModal(contact);
   }));
 }
+
+// Sortierung: derselbe Schlüssel schaltet die Richtung um, ein neuer beginnt aufsteigend.
+document.querySelectorAll(".contact-head [data-sort]").forEach((kopf) => kopf.addEventListener("click", () => {
+  const key = kopf.dataset.sort;
+  contactSort = contactSort.key === key ? { key, dir: contactSort.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" };
+  renderContacts();
+}));
 
 const plannerFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 });
 function plannerPrefs() { try { return JSON.parse(localStorage.getItem("nextlead-planner") || "{}"); } catch { return {}; } }
@@ -1200,7 +1353,12 @@ function renderTechnischeFaelle() {
  * Der Prüfer selbst darf sich nicht unter den Fingern verändern, alles andere schon.
  */
 function render(reviewerBehalten = false) {
-  renderStatus(); renderToday(); renderCampaigns(); renderContacts(); renderInsights(); renderSettings();
+  // Kampagnen stillgelegt: Navigationspunkt weg und, falls der Bereich gerade offen war,
+  // zurück auf "Heute". renderCampaigns() läuft dann gar nicht erst.
+  const kampagnen = !kampagnenAus();
+  document.querySelectorAll('[data-view="campaigns"]').forEach((el) => el.classList.toggle("hidden", !kampagnen));
+  if (!kampagnen && activeView === "campaigns") showView("today");
+  renderStatus(); renderToday(); if (kampagnen) renderCampaigns(); renderContacts(); renderInsights(); renderSettings();
   $("updated-at").textContent = `Stand ${new Date(state.generatedAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`; $("footer-count").textContent = `${state.totals?.contacts || 0} eindeutige Kontakte`;
   if (!reviewerBehalten && (reviewKinds || reviewCampaign)) renderReviewer();
 }

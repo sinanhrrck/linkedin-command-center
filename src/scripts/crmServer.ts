@@ -15,6 +15,7 @@ import {
   addCampaignAsset, updateCampaignAsset, deleteCampaignAsset, getCampaignAsset, campaignAssetPath,
 } from "../modules/campaigns.js";
 import { addSalesTask, completeSalesTask, deleteSalesTask } from "../modules/salesDesk.js";
+import { addContactNote, deleteContactNote } from "../modules/contactNotes.js";
 import { createDatabaseBackup } from "../core/backups.js";
 import { governor } from "../core/safetyGovernor.js";
 import { createExperiment, setExperimentStatus, EXPERIMENT_METRICS, type ExperimentMetric } from "../modules/experiments.js";
@@ -24,7 +25,7 @@ import { LIVE_SHOT_PATH } from "../core/session.js";
 import { createMission } from "../modules/missions.js";
 import { resolveGoalAlert, GOAL_CODES } from "../modules/goals.js";
 import { contactsForStage, funnelByCampaign, funnelBySource, funnelReport, type FunnelFilter } from "../modules/funnel.js";
-import { FUNNEL_STAGES } from "../modules/crmStages.js";
+import { FUNNEL_STAGES, setStageManually } from "../modules/crmStages.js";
 import { flushPendingReports, queueUserReport } from "../modules/reporting.js";
 import { retryJob } from "../core/jobReliability.js";
 import { backfillRelationshipSignals, setRelationshipPolicy } from "../modules/relationshipPolicy.js";
@@ -980,6 +981,52 @@ const server = createServer((req, res) => {
         }
       } catch (e) {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // NOTIZEN: alles, was nach einem Telefonat festgehalten werden muss. Landet mit Zeitstempel
+  // in der Kontaktspur, damit später nachvollziehbar ist, WANN es notiert wurde.
+  if (url.pathname === "/api/note" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { action, id, contactId, text } = JSON.parse(body || "{}");
+        if (action === "create") {
+          const noteId = addContactNote(Number(contactId), text);
+          res.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, id: noteId }));
+        } else if (action === "delete") {
+          const ok = deleteContactNote(Number(id));
+          res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "bad action" }));
+        }
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // VERTRIEBSSTUFE VON HAND. Geht durch setStageManually und damit durch recordCrmStage: gleicher
+  // fachlicher Dedupe-Schlüssel, gleiches Einfrieren der Zuordnung. Beobachtete Bot-Tatsachen
+  // (invited/accepted/...) lehnt die Funktion ab – sonst liessen sich die Quoten schönklicken.
+  if (url.pathname === "/api/stage" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { contactId, stage } = JSON.parse(body || "{}");
+        const result = setStageManually(Number(contactId), stage);
+        // `reason` mitgeben: der Client wirft bei HTTP 400 und liest genau diesen Schlüssel –
+        // sonst sähe der Nutzer nur "HTTP 400" statt des eigentlichen Grundes.
+        const payload = result.ok ? result : { ...result, reason: result.grund };
+        res.writeHead(result.ok ? 200 : 400, { "Content-Type": "application/json" }).end(JSON.stringify(payload));
+      } catch (e) {
+        const grund = String((e as Error).message || e);
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, grund, reason: grund }));
       }
     });
     return;

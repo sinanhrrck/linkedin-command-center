@@ -460,3 +460,14 @@ CREATE TABLE IF NOT EXISTS state (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- NOTIZEN JE KONTAKT (2026-09-22). `contacts.notes` bleibt als einzelnes Importfeld bestehen;
+-- hier landet jede von Hand festgehaltene Notiz MIT Zeitstempel. Ohne das gibt es keinen Ort
+-- für das, was nach einem Telefonat wichtig ist, und die Kontaktspur bliebe lückenhaft.
+CREATE TABLE IF NOT EXISTS contact_notes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id INTEGER NOT NULL,
+  text       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_contact_notes ON contact_notes(contact_id, created_at);

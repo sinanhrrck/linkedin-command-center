@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { db } from "../db/index.js";
 
 export type ContactTimelineItem = {
-  kind: "incoming" | "outgoing" | "draft" | "status" | "campaign" | "relationship" | "task";
+  kind: "incoming" | "outgoing" | "draft" | "status" | "campaign" | "relationship" | "task" | "note";
   title: string;
   text: string;
   ts: string;
@@ -85,6 +85,13 @@ export function backfillContactTimeline(contactId?: number): number {
       if (recordContactTimelineEvent({ contactId: Number(row.contact_id), eventType: "status", title: `Vertriebsergebnis: ${row.stage}`, detail, source: "sales", sourceId: row.contact_id, occurredAt: String(row.updated_at), dedupeKey: `sales:${row.contact_id}:${row.stage}:${row.updated_at}` })) added++;
     }
   }
+  if (exists("contact_notes")) {
+    const rows = db.prepare(`SELECT id,contact_id,text,created_at FROM contact_notes${filter}`)
+      .all(...(contactId ? [contactId] : [])) as Array<Record<string, string | number | null>>;
+    for (const row of rows) {
+      if (recordContactTimelineEvent({ contactId: Number(row.contact_id), eventType: "note", title: "Notiz", detail: String(row.text), source: "note", sourceId: row.id, occurredAt: String(row.created_at), dedupeKey: `note:${row.id}` })) added++;
+    }
+  }
   if (exists("sales_tasks")) {
     const rows = db.prepare(`SELECT id,contact_id,title,due_at,status,created_at,completed_at FROM sales_tasks${filter}`)
       .all(...(contactId ? [contactId] : [])) as Array<Record<string, string | number | null>>;
@@ -129,7 +136,7 @@ export function getUnifiedContactTimeline(contactId: number): ContactTimelineIte
     "SELECT event_type,title,detail,source,occurred_at FROM contact_timeline_events WHERE contact_id=? ORDER BY occurred_at",
   ).all(contactId) as Array<{ event_type: string; title: string; detail: string | null; source: string; occurred_at: string }>;
   const systemItems = system.map((row): ContactTimelineItem => ({
-    kind: row.event_type === "campaign" ? "campaign" : row.event_type === "relationship" ? "relationship" : row.event_type === "task" ? "task" : "status",
+    kind: row.event_type === "campaign" ? "campaign" : row.event_type === "relationship" ? "relationship" : row.event_type === "task" ? "task" : row.event_type === "note" ? "note" : "status",
     title: row.title,
     text: row.detail || "",
     ts: row.occurred_at,
