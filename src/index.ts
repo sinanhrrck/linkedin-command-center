@@ -36,6 +36,10 @@ import { JobTimeoutError, JOB_TIMEOUT_MS, DEFAULT_JOB_TIMEOUT_MS, runWithJobTime
 import { istServerModus, logZeitzone, serverErststart } from "./core/serverMode.js";
 import { pruefeSitzungBeimStart } from "./modules/sitzungsCheck.js";
 
+// Beginn der Geschäftszeit (config.safety.workingHours.start). Alle Morgen-Jobs hängen daran,
+// damit „ab 7 Uhr“ nicht nur im Governor, sondern auch in den Cron-Zeiten gilt.
+const START_STUNDE = config.safety.workingHours.start;
+
 backfillCrmStages();
 const identityBackfill = backfillContactIdentities();
 backfillContactTimeline();
@@ -328,7 +332,7 @@ cron.schedule("* * * * *", () =>
 // SELBST-CHECK alle 3 Stunden (rein lesend): prüft, ob der Sende-Weg (Login/Postfach/Eingabefeld/
 // Senden-Knopf) technisch funktioniert. Bricht ein Selektor, wird der Sende-Weg als defekt markiert
 // → Governor pausiert Nachrichten + Telegram-/Dashboard-Alarm, statt still Fehler zu produzieren.
-cron.schedule("15 9-21/6 * * *", () => einzeln("healthcheck", () => runReadJobWhenDue("healthcheck", 360, () => selbstCheck()), 75));
+cron.schedule(`15 ${START_STUNDE}-21/6 * * *`, () => einzeln("healthcheck", () => runReadJobWhenDue("healthcheck", 360, () => selbstCheck()), 75));
 
 // Outreach-Tick alle 12 Minuten. Der Governor drosselt intern (Caps/Warm-up/Zeitfenster/Delays).
 cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick(), 30));
@@ -338,7 +342,7 @@ cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick(), 30
 // Rein lesend, kein Senden, kein Governor → kostet KEINE Sicherheit, spart aber Wartezeit:
 // Jede erkannte Annahme erzeugt sofort den Erstnachricht-Entwurf. Vorher lag zwischen
 // "hat angenommen" und "Entwurf liegt bereit" bis zu 8 Stunden, jetzt maximal 2.
-cron.schedule("5 9-21/2 * * *", () => einzeln("acceptance", () => runReadJobWhenDue("acceptance", 120, () => checkAcceptances()), 60));
+cron.schedule(`5 ${START_STUNDE}-21/2 * * *`, () => einzeln("acceptance", () => runReadJobWhenDue("acceptance", 120, () => checkAcceptances()), 60));
 
 // Lead-Fütterung 2x täglich: gespeicherte Such-Quellen abgrasen (rein lesend).
 // Hält die Pipeline gefüllt, damit der Outreach nicht trockenläuft.
@@ -411,7 +415,7 @@ cron.schedule("*/2 * * * *", () =>
     await offeneAntwortenScan(25);
   }, 85),
 );
-cron.schedule("5 9 * * *", () => einzeln("offene", () => offeneAntwortenScan(25), 80));
+cron.schedule(`5 ${START_STUNDE} * * *`, () => einzeln("offene", () => offeneAntwortenScan(25), 80));
 
 // PITCH Stufe 2 auf Knopfdruck: Dashboard setzt "pitch_now"={id,idee} → der Loop generiert aus dem
 // gewählten Ansatz die Nachricht (neuer 'message'-Entwurf zur zweiten Freigabe). Nur LLM, kein Browser.
@@ -463,17 +467,17 @@ cron.schedule("*/2 * * * *", () =>
  * bereits verworfen wurde. Die Kosten hängen also an der Zahl NEUER Nachrichten, nicht am Takt.
  * Ist das Gratis-Kontingent leer, springt Claude ein und meldet sich vorher (core/textLlm.ts).
  */
-cron.schedule("*/30 9-22 * * *", () =>
+cron.schedule(`*/30 ${START_STUNDE}-22 * * *`, () =>
   einzeln("drafts", async () => {
     // Sobald der Sales-Agent aktiv ist (Test/Live), macht ER die Antworten – dann keine Alt-Entwürfe.
     if (getAgentMode() === "off") await runReadJobWhenDue("inbox", 30, () => generateInboxDrafts(8));
   }, 80),
 );
 
-// MORGEN-ROUTINE (9:00, Sinans Vorgabe): erst alle offenen Chats beantworten (Entwürfe
+// MORGEN-ROUTINE (zu Beginn der Geschäftszeit, seit 2026-09-22 7:00; Sinans Vorgabe): erst alle offenen Chats beantworten (Entwürfe
 // erzeugen), dann die vom Nutzer freigegebenen Entwürfe abarbeiten (senden). So liegt morgens
 // als Erstes die frische Antwort-Liste bereit und gestern Genehmigtes geht sofort raus.
-cron.schedule("0 9 * * *", () =>
+cron.schedule(`0 ${START_STUNDE} * * *`, () =>
   einzeln("morgen", async () => {
     if (getAgentMode() === "off") await runReadJobWhenDue("inbox", 30, () => generateInboxDrafts(10));
     await sendApprovedDrafts(20);

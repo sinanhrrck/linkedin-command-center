@@ -197,10 +197,11 @@ export const config = {
     // Kompromiss aus Tempo und Ban-Sicherheit. Höher = sicherer, niedriger = schneller/riskanter.
     delayBetweenActionsMs: { min: 20_000, max: 75_000 },
 
-    // Nur in diesen Zeitfenstern arbeiten (lokale Uhrzeit, 24h). Bis 22 Uhr, damit Anfragen +
-    // Nachrichten auch abends rausgehen (Sinans Vorgabe 2026-07-23). Alle übrigen Schutz-
-    // Mechanismen (Caps, Pausen, Circuit-Breaker) bleiben unverändert scharf.
-    workingHours: { start: 9, end: 22 },
+    // Nur in diesen Zeitfenstern arbeiten (lokale Uhrzeit, 24h). Ab 7 Uhr (Sinans Vorgabe
+    // 2026-09-22, vorher 9) bis 22 Uhr, damit Anfragen + Nachrichten morgens früh und abends
+    // rausgehen. Die Cron-Zeiten in index.ts, die morgens starten, hängen an START_STUNDE.
+    // Alle übrigen Schutz-Mechanismen (Caps, Pausen, Circuit-Breaker) bleiben unverändert scharf.
+    workingHours: { start: 7, end: 22 },
     // Am SONNTAG NUR diese Aktionstypen (Sinans Vorgabe 2026-07-25: Nachrichten Mo–Sa, Sonntag
     // Ruhetag). Vernetzen/Liken/Profilbesuche laufen 7 Tage; Direktnachrichten & Kommentare gehen
     // Mo–Sa, am Sonntag nicht. (Der Name „weekendActions" bleibt aus Kompatibilität; gemeint ist

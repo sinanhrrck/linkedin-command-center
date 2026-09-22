@@ -23,16 +23,36 @@ function draftKeyboard(id: number): InlineKeyboard {
   return new InlineKeyboard().text("✅ Passt, senden", `send:${id}`).text("🗑 Verwerfen", `discard:${id}`);
 }
 
+/**
+ * Profil-Zeilen zum Entwurf (Sinans Vorgabe 2026-09-22): Bei Erstnachrichten und Follow-ups
+ * muss man am Handy sehen, WER das ist, um zu beurteilen, ob der Text passt. Vorher stand nur
+ * der Name da. Headline, Lead-Score und Profil-Link kommen aus dem CRM (thread_url = Profil).
+ */
+function profilZeilen(d: Draft): string {
+  const c = db
+    .prepare("SELECT headline, profile_url, lead_score FROM contacts WHERE profile_url = ? LIMIT 1")
+    .get(d.thread_url) as { headline: string | null; profile_url: string; lead_score: number | null } | undefined;
+  if (!c) return "";
+  const zeilen = [
+    c.headline ? `👤 ${c.headline}` : "",
+    c.lead_score != null ? `⭐ Lead-Score ${c.lead_score}/100` : "",
+    `🔗 ${c.profile_url}`,
+  ].filter(Boolean);
+  return zeilen.length ? `${zeilen.join("\n")}\n\n` : "";
+}
+
 function draftText(d: Draft): string {
   if (d.kind === "first") {
     return (
       `✅ ${d.participant || "Jemand"} hat deine Vernetzungsanfrage angenommen!\n\n` +
+      profilZeilen(d) +
       `Diese Nachricht geht an ${d.participant || "ihn/sie"} raus:\n\n${d.draft}\n\n👉 Senden?`
     );
   }
   if (d.kind === "followup") {
     return (
       `📩 Follow-up an ${d.participant || "—"} (noch keine Antwort auf deine Erstnachricht)\n\n` +
+      profilZeilen(d) +
       `${d.draft}\n\n👉 Senden?`
     );
   }
