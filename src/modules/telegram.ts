@@ -6,6 +6,7 @@ import { governor } from "../core/safetyGovernor.js";
 import { countByStatus, hotLeads } from "./crm.js";
 import { pendingDrafts, sendDraft, setDraftStatus, type Draft } from "./drafts.js";
 import { computeBilanz } from "./bilanz.js";
+import { tagesbericht, letzteWoche, wochenbericht } from "./berichte.js";
 import { pendingPosts, approvePost, discardPost } from "./content.js";
 
 /**
@@ -116,7 +117,7 @@ export function startTelegram() {
   bot.command("start", (ctx) =>
     ctx.reply(
       `👋 LinkedIn Command Center verbunden.\nDeine Chat-ID: ${ctx.chat.id}\n\n` +
-        `/status – Tages-Status & Zahlen\n/entwuerfe – offene Nachrichten freigeben\n/leads – Hot Leads (haben geantwortet)\n/pause – Outreach anhalten\n/resume – fortsetzen`,
+        `/status – Tages-Status & Zahlen\n/tag – Tagesbericht · /woche – Wochenbericht · /vorwoche\n/entwuerfe – offene Nachrichten freigeben\n/leads – Hot Leads (haben geantwortet)\n/pause – Outreach anhalten\n/resume – fortsetzen`,
     ),
   );
 
@@ -423,8 +424,31 @@ export function startTelegram() {
     bot.api.sendMessage(config.telegram.chatId, text, { parse_mode: "Markdown", ...(kb ? { reply_markup: kb } : {}) }).catch(() => {});
   });
 
-  // Bilanz auch auf Zuruf.
-  bot.command(["bilanz", "woche"], (ctx) => {
+  // TAGES-/WOCHENBERICHT: automatisch (Cron in index.ts) und auf Zuruf. Klartext ohne Markdown,
+  // damit Kampagnen- oder Quellennamen mit Sonderzeichen den Versand nie kaputt machen.
+  events.on("bericht:tag", () => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api.sendMessage(config.telegram.chatId, tagesbericht().text).catch(() => {});
+  });
+  events.on("bericht:woche", () => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api.sendMessage(config.telegram.chatId, letzteWoche().text).catch(() => {});
+  });
+  bot.command(["tag", "heute"], (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    ctx.reply(tagesbericht().text);
+  });
+  bot.command("woche", (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    ctx.reply(wochenbericht().text); // laufende Woche; die Vorwoche kommt montags automatisch
+  });
+  bot.command("vorwoche", (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    ctx.reply(letzteWoche().text);
+  });
+
+  // KI-Bilanz (Trefferquote je Kategorie) auf Zuruf.
+  bot.command(["bilanz", "kibilanz"], (ctx) => {
     if (!allowed(ctx.chat.id)) return;
     const { text, kb } = bilanzText();
     ctx.reply(text, { parse_mode: "Markdown", ...(kb ? { reply_markup: kb } : {}) });

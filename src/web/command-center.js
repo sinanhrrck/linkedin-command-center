@@ -849,6 +849,7 @@ function renderInsights() {
   // Ansicht nicht ständig unter den Händen neu aufbauen.
   fuelleWirkungFilter();
   if (!wirkungDaten) ladeWirkung();
+  if (!berichtDaten) ladeBericht();
   const actions = Object.entries(state.actionsToday || {}); $("today-actions").innerHTML = actions.length ? actions.map(([key, value]) => `<span><b>${value}</b> ${esc({ connect: "Anfragen", message: "Nachrichten", reply: "Antworten", like: "Likes", comment: "Kommentare" }[key] || key)}</span>`).join("") : `<span>Noch keine Aktionen heute.</span>`;
   const learning = state.learning || {}, rules = learning.rules || [], byGoal = learning.byGoal || [];
   $("learning-privacy").textContent = learning.privacy?.localOnly ? "Nur auf diesem PC" : "Anonym geteilt";
@@ -904,6 +905,58 @@ function fuelleWirkungFilter() {
   setze("wf-campaign", (state.campaigns || []).map((c) => ({ id: c.id, label: c.name })), "Alle Kampagnen");
   setze("wf-source", (state.leadSources || []).map((s) => ({ id: s.id, label: s.label || s.search_url || `Quelle ${s.id}` })), "Alle Quellen");
 }
+
+/* ===== TAGES-/WOCHENBERICHT ===== */
+let berichtArt = "tag", berichtDatum = null, berichtAnfrage = 0, berichtDaten = null;
+const heuteIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const isoPlus = (iso, tage) => { const [y, m, d] = iso.split("-").map(Number); const x = new Date(y, m - 1, d + tage); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+async function ladeBericht() {
+  const meine = ++berichtAnfrage;
+  const datum = berichtDatum || heuteIso();
+  $("bericht-datum").value = datum;
+  try {
+    const response = await fetch(`/api/bericht?art=${berichtArt}&datum=${datum}`, { cache: "no-store" });
+    const daten = await response.json();
+    if (meine !== berichtAnfrage) return; // überholt
+    if (!response.ok || daten.error) throw new Error(daten.error || "Bericht nicht ladbar");
+    berichtDaten = daten; renderBericht();
+  } catch (error) {
+    if (meine !== berichtAnfrage) return;
+    $("bericht-inhalt").innerHTML = `<div class="empty-work">${esc(error.message)}</div>`;
+  }
+}
+function renderBericht() {
+  const b = berichtDaten; if (!b) return;
+  $("bericht-titel").textContent = b.art === "tag" ? "Tagesbericht" : "Wochenbericht";
+  $("bericht-zeitraum").textContent = `${b.zeitraum.label} · Vergleich: ${b.vergleich.label}`;
+  const kachel = (label, key, hinweis) => {
+    const jetzt = b.zahlen[key] || 0, vorher = b.vorher[key] || 0, d = jetzt - vorher;
+    const cls = d > 0 ? "plus" : d < 0 ? "minus" : "gleich";
+    return `<div class="bericht-kachel"><span>${label}</span><b>${jetzt}</b><small class="${cls}">${d > 0 ? "+" : ""}${d} zum Vergleich</small>${hinweis ? `<span>${esc(hinweis)}</span>` : ""}</div>`;
+  };
+  const kacheln = [
+    kachel("Anfragen", "anfragen"), kachel("Neue Kontakte", "neueKontakte"), kachel("Angenommen", "angenommen"),
+    kachel("Angeschrieben", "angeschrieben"), kachel("Geantwortet", "geantwortet", b.zahlen.geantwortet ? `davon positiv ${b.zahlen.positiv}` : ""),
+    kachel("Qualifiziert", "qualifiziert"), kachel("Termine", "termine"), kachel("Nachrichten gesendet", "nachrichten"),
+  ].join("");
+  const tage = b.art === "woche" ? `<table class="bericht-tage"><thead><tr><th>Tag</th><th>Anfragen</th><th>Angenommen</th><th>Angeschrieben</th><th>Geantwortet</th></tr></thead><tbody>${b.tage.map((t) => `<tr><td>${t.wochentag} ${t.datum.slice(8)}.${t.datum.slice(5, 7)}.</td><td>${t.anfragen}</td><td>${t.angenommen}</td><td>${t.angeschrieben}</td><td>${t.geantwortet}</td></tr>`).join("")}</tbody></table>` : "";
+  const fuss = [
+    b.quoten.annahme != null ? `Annahme im Zeitraum <b>${b.quoten.annahme}%</b>` : "",
+    b.quoten.antwort != null ? `Antwort <b>${b.quoten.antwort}%</b>` : "",
+    b.top.kampagne ? `Beste Kampagne <b>${esc(b.top.kampagne.name)}</b> (${b.top.kampagne.geantwortet} Antworten)` : "",
+    b.top.quelle ? `Beste Quelle <b>${esc(b.top.quelle.label)}</b> (${b.top.quelle.angenommen} Annahmen)` : "",
+    `Offen: <b>${b.offen.entwuerfe}</b> Entwürfe · <b>${b.offen.hotLeads}</b> Hot Leads`,
+  ].filter(Boolean).map((x) => `<span>${x}</span>`).join("");
+  $("bericht-inhalt").innerHTML = `<div class="bericht-kacheln">${kacheln}</div>${tage}<div class="bericht-fuss">${fuss}</div>`;
+}
+document.querySelectorAll("[data-bericht]").forEach((button) => button.addEventListener("click", () => {
+  document.querySelectorAll("[data-bericht]").forEach((el) => el.classList.toggle("active", el === button));
+  berichtArt = button.dataset.bericht; ladeBericht();
+}));
+$("bericht-datum")?.addEventListener("change", () => { berichtDatum = $("bericht-datum").value || null; ladeBericht(); });
+$("bericht-zurueck")?.addEventListener("click", () => { berichtDatum = isoPlus(berichtDatum || heuteIso(), berichtArt === "woche" ? -7 : -1); ladeBericht(); });
+$("bericht-vor")?.addEventListener("click", () => { berichtDatum = isoPlus(berichtDatum || heuteIso(), berichtArt === "woche" ? 7 : 1); ladeBericht(); });
+$("bericht-heute")?.addEventListener("click", () => { berichtDatum = null; ladeBericht(); });
 
 async function ladeWirkung() {
   const meine = ++wirkungAnfrage;

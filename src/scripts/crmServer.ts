@@ -33,6 +33,7 @@ import { backfillContactTimeline } from "../modules/contactTimeline.js";
 import { backfillCampaignWorkflows, retryCampaignTarget, retryFailedCampaignTargets } from "../modules/campaignWorkflow.js";
 import { backfillConversationMemories, backfillDraftContexts } from "../modules/conversationMemory.js";
 import { config } from "../config.js";
+import { bericht, type BerichtArt } from "../modules/berichte.js";
 import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
 
 // Server-Modus: ohne DASHBOARD_TOKEN gar nicht erst starten (siehe core/serverMode.ts).
@@ -268,6 +269,19 @@ const server = createServer((req, res) => {
   // Rein lesend. `/api/funnel` liefert die Kette und die Quoten, `/api/funnel/contacts` genau die
   // Kontakte hinter einem einzelnen Wert. Beide nutzen dieselben Filter und dieselbe Tabelle,
   // damit die Liste nie von der Kennzahl abweichen kann.
+  // TAGES-/WOCHENBERICHT: art=tag|woche, datum=YYYY-MM-DD (ein Tag im Zeitraum, Standard heute).
+  if (url.pathname === "/api/bericht") {
+    try {
+      const art = (url.searchParams.get("art") === "woche" ? "woche" : "tag") as BerichtArt;
+      const datum = url.searchParams.get("datum") || undefined;
+      if (datum && !/^\d{4}-\d{2}-\d{2}$/.test(datum)) throw new Error("datum muss YYYY-MM-DD sein");
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify(bericht(art, datum)));
+    } catch (e) {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify({ error: String((e as Error).message || e) }));
+    }
+    return;
+  }
+
   if (url.pathname === "/api/funnel" || url.pathname === "/api/funnel/contacts") {
     try {
       const zahl = (name: string) => {

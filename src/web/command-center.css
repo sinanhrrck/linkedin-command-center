@@ -157,3 +157,21 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 .drill-meta{font:600 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);text-align:right;white-space:nowrap}
 @media(max-width:1050px){.wirkung-quoten{grid-template-columns:repeat(3,1fr)}.wirkung-oekonomie,.wirkung-qualitaeten{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.wirkung-quoten,.wirkung-oekonomie,.wirkung-qualitaeten{grid-template-columns:1fr 1fr}.wirkung-filter select,.wirkung-filter input{min-width:0;width:100%}.wirkung-filter label{flex:1 1 44%}.vergleich-row{grid-template-columns:1fr 52px 52px 60px;font-size:10px}.vergleich-row>:nth-child(2),.vergleich-row>:nth-child(3),.vergleich-row>:nth-child(6){display:none}}
+
+/* Tages-/Wochenbericht (2026-09-22) */
+.bericht-nav{display:flex;align-items:center;gap:8px;margin:14px 0 4px;flex-wrap:wrap}
+.bericht-nav button{border:1px solid var(--line);background:#fff;border-radius:9px;padding:6px 11px;font-weight:750;font-size:12px;cursor:pointer}
+.bericht-nav input{border:1px solid var(--line);border-radius:9px;padding:6px 9px;font-size:12px}
+.bericht-zeitraum{color:var(--muted);font-size:11px;margin-left:6px}
+.bericht-kacheln{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}
+.bericht-kachel{border:1px solid var(--line);border-radius:13px;padding:13px;background:#fff}
+.bericht-kachel span{display:block;font-size:10px;color:var(--muted)}
+.bericht-kachel b{display:block;font-size:22px;letter-spacing:-.02em;margin:3px 0 2px}
+.bericht-kachel small{font-size:10px;font-weight:750}
+.bericht-kachel small.plus{color:var(--green)}.bericht-kachel small.minus{color:var(--red)}.bericht-kachel small.gleich{color:var(--muted)}
+.bericht-tage{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+.bericht-tage th{text-align:left;color:var(--muted);font-size:10px;font-weight:750;padding:6px 8px;border-bottom:1px solid var(--line)}
+.bericht-tage td{padding:7px 8px;border-bottom:1px solid var(--line)}
+.bericht-tage td:not(:first-child),.bericht-tage th:not(:first-child){text-align:right}
+.bericht-fuss{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;color:var(--muted);font-size:11px}
+.bericht-fuss b{color:var(--ink)}

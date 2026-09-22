@@ -191,6 +191,17 @@ ohne DATA_DIR exakt die alten Defaults, 94/94 Tests grün).
   ./data/.env`, Volume `./data:/data`, `TZ=Europe/Berlin`. Image enthält NIE Daten (.dockerignore).
   Docker ist auf dem Mac nicht installiert → Build wurde NICHT lokal geprüft.
 
+## TAGES-/WOCHENBERICHT (2026-09-22) — `modules/berichte.ts`
+`bericht("tag"|"woche", datum)` rechnet EINEN Zeitraum (Tag bzw. Kalenderwoche Mo–So, lokale Zeit)
+plus Vergleichszeitraum davor, nichts wird gespeichert. Quellen: `actions` (Anfragen/Nachrichten/
+Kommentare), `crm_stage_events` (found/accepted/messaged/replied+reply_quality/qualified/meeting/won),
+`drafts`. Quoten darin sind EREIGNIS-Quoten im Zeitraum (Annahmen der Woche ÷ Anfragen der Woche),
+bewusst nicht die Kohorten-Quoten der Wirkungs-Auswertung. API `GET /api/bericht?art=&datum=`;
+Cockpit-Panel „Bericht“ in der Auswertung (eigener Ladepfad `ladeBericht` mit laufender Nummer wie
+`ladeWirkung`). Telegram: Cron 22:05 `bericht:tag`, Montag START_STUNDE+10 `bericht:woche` (Vorwoche),
+Befehle /tag /woche /vorwoche; die KI-Trefferquoten-Bilanz heißt jetzt /bilanz bzw. /kibilanz.
+Geschäftszeit seit 2026-09-22: 7–22 Uhr; alle Morgen-Crons hängen an `START_STUNDE` in index.ts.
+
 ## In-App-Update (desktop/main.cjs + desktop/preload.cjs + Dashboard-Banner)
 Bewusst OHNE electron-updater/Squirrel: lautloses Auto-Update auf macOS bräuchte ein bezahltes
 Apple-Developer-Zertifikat (Squirrel.Mac verifiziert die Signatur; unsere Ad-hoc-Signatur reicht

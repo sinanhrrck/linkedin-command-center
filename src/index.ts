@@ -510,7 +510,13 @@ cron.schedule("0 8 * * 1", () => einzeln("content", () => generatePostIdeas(3), 
 // WOCHEN-BILANZ automatisch: Montag 9:05 Uhr per Telegram, ohne dass Sinan etwas tippt.
 // "sowas muss automatisch passieren" – der Report kommt von allein, reife Kategorien
 // mit Tap-Button zum Freischalten. events statt Direktaufruf (kein Import-Zyklus zu telegram).
-cron.schedule("5 9 * * 1", () => events.emit("bilanz:woche"));
+cron.schedule(`5 ${START_STUNDE} * * 1`, () => events.emit("bilanz:woche"));
+
+// TAGES- UND WOCHENBERICHT (Sinans Vorgabe 2026-09-22): Zahlen kommen von allein per Telegram.
+// Tagesbericht nach Ende der Geschäftszeit (22:05), Wochenbericht Montag früh über die Vorwoche.
+// Die Berechnung liegt in modules/berichte.ts, der Text wird dort gebaut; Telegram sendet nur.
+cron.schedule("5 22 * * *", () => events.emit("bericht:tag"));
+cron.schedule(`10 ${START_STUNDE} * * 1`, () => events.emit("bericht:woche"));
 
 // Statusausgabe alle 15 Min (später via Telegram)
 cron.schedule("*/15 * * * *", () => {
