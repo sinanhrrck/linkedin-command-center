@@ -1064,8 +1064,23 @@ async function ladeVarianten() {
 }
 $("varianten-reload").onclick = ladeVarianten;
 
+/** KI-WOCHENANALYSE (2026-09-23): gespeichertes Ergebnis anzeigen, auf Knopfdruck neu erzeugen. */
+let analyseGeladen = false;
+function zeigeAnalyse(a) {
+  if (!a) { $("ki-analyse-body").innerHTML = `<p class="muted">Noch keine Analyse. Läuft automatisch jeden Montag, oder jetzt per Knopf.</p>`; return; }
+  $("ki-analyse-body").innerHTML = `<p class="ki-fazit">${esc(a.kurzfazit)}</p><ol class="ki-empf">${a.empfehlungen.map((r) => `<li><b>${esc(r.titel)}</b><span>${esc(r.warum)}</span><small>→ ${esc(r.wo)}</small></li>`).join("")}</ol><p class="muted">Stand ${new Date(a.at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</p>`;
+}
+async function ladeAnalyse() { try { analyseGeladen = true; zeigeAnalyse((await (await fetch("/api/ki-analyse", { cache: "no-store" })).json()).analyse); } catch { analyseGeladen = false; } }
+$("ki-analyse-run").onclick = async () => {
+  const b = $("ki-analyse-run"); b.disabled = true; b.textContent = "KI analysiert …";
+  try { zeigeAnalyse((await post("/api/ki-analyse", {}, 120000)).analyse); }
+  catch (error) { toast(`Analyse fehlgeschlagen: ${error.message}`); }
+  finally { b.disabled = false; b.textContent = "✨ Jetzt analysieren"; }
+};
+
 function renderInsights() {
   if (!variantenGeladen) ladeVarianten();
+  if (!analyseGeladen) ladeAnalyse();
   const historical = state.metrics?.historical || {}; const acceptance = pct(historical.accepted || 0, historical.invited || 0); const reply = pct(historical.replied || 0, historical.messaged || 0);
   const kpis = [["Anfragen", historical.invited || 0, "versendet"], ["Annahmequote", acceptance == null ? "–" : `${acceptance}%`, `${historical.accepted || 0} angenommen`], ["Antwortquote", reply == null ? "–" : `${reply}%`, `${historical.replied || 0} aus ${historical.messaged || 0} Nachrichten`], ["Termine", (state.bookedLeads || []).length, "persönlich übergeben"]];
   $("insight-kpis").innerHTML = kpis.map(([label, value, note]) => `<div class="kpi-card"><span>${label}</span><b>${value}</b><small>${note}</small></div>`).join("");

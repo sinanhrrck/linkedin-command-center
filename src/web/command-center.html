@@ -146,6 +146,10 @@
       </section>
       <!-- TAGES-/WOCHENBERICHT (2026-09-22): fester Zeitraum, Vergleich zum Zeitraum davor.
            Eigener Ladepfad (/api/bericht) mit laufender Anfragenummer wie bei der Wirkung. -->
+      <section class="insight-panel ki-analyse-panel">
+        <div class="section-head"><div><span class="eyebrow">KI-Wochenanalyse</span><h3>Wo es hakt und was du ändern solltest</h3></div><button id="ki-analyse-run" title="Analysiert Zahlen, Stile, Ablehnungen und echte Antworten (ein Claude-Aufruf). Läuft sonst automatisch montags.">✨ Jetzt analysieren</button></div>
+        <div id="ki-analyse-body"><p class="muted">Läuft automatisch jeden Montag und kommt per Telegram.</p></div>
+      </section>
       <section class="insight-panel varianten-panel">
         <div class="section-head"><div><span class="eyebrow">Was wirkt</span><h3>Welche Formulierung mehr Antworten bringt</h3></div><button id="varianten-reload">Aktualisieren</button></div>
         <p class="muted">Der Bot probiert je Nachrichtenart mehrere Stile und bevorzugt automatisch den, der mehr positive Antworten bringt. Ein Versand zählt erst nach 10 Tagen als „ohne Antwort“. Stile, die du oft ablehnst, pausieren.</p>

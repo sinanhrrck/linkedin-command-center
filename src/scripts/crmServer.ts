@@ -41,6 +41,7 @@ import { approveMany, autoFreigabeStand, speichereAutoFreigabe } from "../module
 import { variantenStatistik } from "../modules/varianten.js";
 import { frageAssistent } from "../modules/assistent.js";
 import { kiCoach } from "../modules/coach.js";
+import { kiWochenanalyse, letzteAnalyse } from "../modules/kiAnalyse.js";
 import { bericht, type BerichtArt } from "../modules/berichte.js";
 import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
 
@@ -1062,6 +1063,16 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // KI-WOCHENANALYSE: GET = letzte gespeicherte, POST = jetzt neu (ein Claude-Aufruf).
+  if (url.pathname === "/api/ki-analyse") {
+    if (req.method === "GET") { res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify({ analyse: letzteAnalyse() })); return; }
+    if (req.method === "POST") {
+      kiWochenanalyse()
+        .then((analyse) => res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, analyse })))
+        .catch((e) => res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) })));
+      return;
+    }
+  }
   // KI-COACH im Prüfer: Urteil + verbesserter Text. Speichert nichts.
   if (url.pathname === "/api/draft/coach" && req.method === "POST") {
     let body = "";

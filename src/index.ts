@@ -11,6 +11,7 @@ import { checkAcceptances } from "./modules/acceptance.js";
 import { feedTick } from "./modules/leadFeed.js";
 import { generateInboxDrafts, generateFollowups, sendApprovedDrafts as sendeFreigegebene, reviveChat, pitchZuNachricht } from "./modules/drafts.js";
 import { autoFreigabe } from "./modules/freigabe.js";
+import { kiWochenanalyse } from "./modules/kiAnalyse.js";
 
 /** Vor jedem Versandlauf: automatische Freigabe (Opt-in, standardmäßig aus), dann Versand über den Governor. */
 async function sendApprovedDrafts(limit: number): Promise<number> {
@@ -549,6 +550,11 @@ cron.schedule(`5 ${START_STUNDE} * * 1`, () => events.emit("bilanz:woche"));
 // Die Berechnung liegt in modules/berichte.ts, der Text wird dort gebaut; Telegram sendet nur.
 cron.schedule("5 22 * * *", () => events.emit("bericht:tag"));
 cron.schedule(`10 ${START_STUNDE} * * 1`, () => events.emit("bericht:woche"));
+// KI-Wochenanalyse: montags nach dem Wochenbericht, ein Claude-Aufruf, Ergebnis per Telegram + Cockpit.
+cron.schedule(`20 ${START_STUNDE} * * 1`, () => einzeln("kianalyse", async () => {
+  const a = await kiWochenanalyse();
+  events.emit("ki:analyse", a);
+}, 10));
 
 /**
  * STILLSTANDS-MELDUNG (2026-09-22). Telegram meldete bisher nur GESENDETES – also schwieg es

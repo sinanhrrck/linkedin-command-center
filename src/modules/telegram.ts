@@ -9,6 +9,7 @@ import { computeBilanz } from "./bilanz.js";
 import { tagesbericht, letzteWoche, wochenbericht } from "./berichte.js";
 import { pendingPosts, approvePost, discardPost } from "./content.js";
 import { stillstandGrund, type Stillstand } from "./engineWatch.js";
+import { analyseAlsText, letzteAnalyse, type WochenAnalyse } from "./kiAnalyse.js";
 
 /**
  * Telegram-Steuerung: Entwürfe freigeben/senden, offene Nachrichten sehen, Tages-Status.
@@ -246,6 +247,10 @@ export function startTelegram() {
    * Die Engine ist neu gestartet und der Grund stand nur im Dashboard-Prozess. Genau diese
    * Meldung fehlte am 22.09., als die Engine zweimal ohne jede Begründung neu anlief.
    */
+  events.on("ki:analyse", (a: WochenAnalyse) => {
+    if (!bot || !config.telegram.chatId || !a) return;
+    bot.api.sendMessage(config.telegram.chatId, analyseAlsText(a)).catch(() => {});
+  });
   events.on("drafts:auto", (a: { anzahl: number; namen: string[] }) => {
     if (!bot || !config.telegram.chatId || !a?.anzahl) return;
     bot.api.sendMessage(config.telegram.chatId, `✅ ${a.anzahl} Entwurf/Entwürfe automatisch freigegeben (${a.namen.slice(0, 5).join(", ")}${a.namen.length > 5 ? " …" : ""}). Gesendet wird gedrosselt über den Governor. Abschalten: Cockpit → Einstellungen → Automatische Freigabe.`).catch(() => {});
@@ -482,6 +487,11 @@ export function startTelegram() {
   events.on("bericht:woche", () => {
     if (!bot || !config.telegram.chatId) return;
     bot.api.sendMessage(config.telegram.chatId, letzteWoche().text).catch(() => {});
+  });
+  bot.command(["analyse", "kianalyse"], (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    const a = letzteAnalyse();
+    ctx.reply(a ? analyseAlsText(a) : "Noch keine KI-Wochenanalyse. Sie läuft montags automatisch oder im Cockpit unter Auswertung → „Jetzt analysieren“.").catch(() => {});
   });
   bot.command(["tag", "heute"], (ctx) => {
     if (!allowed(ctx.chat.id)) return;
