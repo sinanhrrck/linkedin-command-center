@@ -17,7 +17,9 @@ test("Analyse bekommt Zahlen, Ablehnungen und Antworten ohne Namen, speichert da
   setTextGeneratorForTests(async (p) => { prompt = p; return `{"kurzfazit":"Antworten sind der Engpass.","empfehlungen":[{"titel":"Angebot schärfen","warum":"Wenig positive Antworten.","wo":"Einstellungen → Dein Angebot"},{"titel":"B","warum":"b","wo":"x"},{"titel":"C","warum":"c","wo":"y"},{"titel":"D","warum":"d","wo":"z"}]}`; });
   const a = await kiWochenanalyse();
   assert.equal(a.empfehlungen.length, 3, "genau drei");
-  assert.match(prompt, /WOCHENBERICHT/);
+  assert.match(prompt, /LAUFENDE WOCHE/);
+  assert.match(prompt, /VORWOCHE/);
+  assert.match(prompt, /keine eigenen Varianten anlegbar/);
   assert.match(prompt, /too_salesy 1×/);
   assert.match(prompt, /\[chance\] Klingt spannend/);
   assert.doesNotMatch(prompt, /Max Geheim/, "keine Namen an die KI");

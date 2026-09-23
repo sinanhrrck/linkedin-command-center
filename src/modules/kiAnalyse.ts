@@ -27,7 +27,11 @@ export function letzteAnalyse(): WochenAnalyse | null {
 }
 
 function analyseDaten(): string {
-  const woche = bericht("woche", isoTag(vorTagen(7)));
+  // Laufende Woche UND Vorwoche: montags ist die Vorwoche das Maß, mitten in der Woche die
+  // laufende. Nur die Vorwoche zu zeigen, ließ die KI „0 Aktivität“ melden, obwohl der Bot
+  // gerade arbeitete (real 2026-09-23: KW 38 = 0, KW 39 = 23 Anfragen).
+  const jetzt = bericht("woche", isoTag(new Date()));
+  const vorwoche = bericht("woche", isoTag(vorTagen(7)));
   const ablehnungen = db.prepare(
     `SELECT reason, COUNT(*) n FROM draft_feedback WHERE created_at >= datetime('now','-14 days') GROUP BY reason ORDER BY n DESC`,
   ).all() as { reason: string; n: number }[];
@@ -44,8 +48,11 @@ function analyseDaten(): string {
        FROM drafts WHERE status IN ('approved','sent') AND COALESCE(freigabe_quelle,'mensch')='mensch' AND created_at >= datetime('now','-14 days') GROUP BY kind`,
   ).all() as { kind: string; u: number; n: number }[];
   const varianten = variantenStatistik().map((s) => `${s.slot}: ${s.arme.map((a) => `${a.titel} ${a.gesendet} gesendet / ${a.reif} ausgewertet / ${a.positiv} positiv`).join(" | ")}`);
-  return `WOCHENBERICHT:
-${woche.text}
+  return `LAUFENDE WOCHE (bis heute, noch nicht vollständig):
+${jetzt.text}
+
+VORWOCHE:
+${vorwoche.text}
 
 WAS WIRKT (Varianten-Test):
 ${varianten.join("\n")}
@@ -68,7 +75,17 @@ ${daten}
 
 AUFGABE:
 - Finde den größten Engpass im Trichter (Annahme, Antwort, positive Antwort, Termin) und begründe ihn mit den Zahlen oben.
-- Gib GENAU 3 konkrete Verbesserungen, jede mit Ort im Cockpit ("wo", z. B. "Einstellungen → Dein Angebot", "Einstellungen → Nachfass-Plan", "Heute → Schnellprüfung", "Auswertung → Was wirkt", "Einstellungen → Lead-Quellen").
+- Gib GENAU 3 konkrete Verbesserungen. "wo" ist NUR der kurze Pfad im Cockpit, höchstens 6 Wörter, ohne Satz.
+- Was man im Tool tatsächlich tun kann (nur das empfehlen):
+  * Heute → Schnellprüfung: offene Entwürfe durchgehen und mehrere auf einmal genehmigen.
+  * Heute → Entwurf → KI-Coach: einen Entwurf bewerten und verbessern lassen.
+  * Einstellungen → Dein Angebot: kostenlose Angebote aktivieren, mit KI schärfen, echte Belege eintragen, Buchungslink setzen.
+  * Einstellungen → Nachfass-Plan: 1 bis 3 Stufen, Abstände in Tagen, Zweck je Stufe.
+  * Einstellungen → Automatische Freigabe: sichere Entwürfe selbst genehmigen lassen.
+  * Einstellungen → Wer entscheidet?: Automatik-Stufe.
+  * Einstellungen → Lead-Quellen: bessere Suchen für neue Kontakte hinterlegen.
+  * Kontakte: Stufen setzen (qualifiziert, Termin, gewonnen), Aufgaben, Notizen.
+  * Auswertung → Was wirkt: NUR ansehen, der Stil-Test läuft automatisch (keine eigenen Varianten anlegbar).
 - Nur Hebel, die das Tool bietet. NIEMALS Limits, Lese-Budget oder Arbeitszeiten erhöhen (Kontosperre-Risiko).
 - Wenn Daten fehlen oder zu wenig sind: sag das ehrlich im Kurzfazit und empfiehl, was man tun kann, um mehr zu lernen.
 - Deutsch, per Du, knapp.
@@ -81,7 +98,7 @@ Antworte AUSSCHLIESSLICH mit JSON:
   const x = JSON.parse(roh.slice(s, e + 1)) as { kurzfazit?: unknown; empfehlungen?: unknown };
   const empfehlungen = (Array.isArray(x.empfehlungen) ? x.empfehlungen : []).slice(0, 3).map((r) => {
     const o = (r || {}) as Record<string, unknown>;
-    return { titel: String(o.titel ?? "").slice(0, 120), warum: String(o.warum ?? "").slice(0, 400), wo: String(o.wo ?? "").slice(0, 80) };
+    return { titel: String(o.titel ?? "").slice(0, 120), warum: String(o.warum ?? "").slice(0, 400), wo: String(o.wo ?? "").slice(0, 120) };
   }).filter((r) => r.titel);
   if (!empfehlungen.length) throw new Error("Die KI hat keine Empfehlungen geliefert.");
   const analyse: WochenAnalyse = {
