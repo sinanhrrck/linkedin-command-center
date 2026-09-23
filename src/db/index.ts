@@ -96,6 +96,10 @@ for (const [column, definition] of [
   // Nachfass-Stufe (1..3) laut Plan zum Zeitpunkt der Erzeugung – eingefroren, damit eine
   // spätere Planänderung die Auswertung nicht rückwirkend umschreibt (2026-09-23).
   ["sequence_stage", "INTEGER"],
+  // Wer hat freigegeben: 'mensch' (Cockpit/Telegram) oder 'auto' (modules/freigabe.ts). Getrennt,
+  // damit die Automatik nie ihr eigenes Vertrauen erzeugt und Lernregeln nur Menschen folgen.
+  ["freigabe_quelle", "TEXT"],
+  ["freigegeben_at", "TEXT"],
 ] as const) {
   try { db.exec(`ALTER TABLE drafts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
 }

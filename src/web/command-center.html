@@ -47,9 +47,10 @@
         </div>
       </section>
       <div class="today-grid">
-        <section><div class="section-head"><div><span class="eyebrow">Arbeitskorb</span><h3>Nach Wirkung priorisiert</h3></div><div class="head-side"><button id="scan-offene" type="button" title="Geht alle Chats durch, auch alte, und legt für jeden offenen Fall einen Entwurf zur Prüfung an. Dauert einige Minuten. Es wird nichts gesendet.">Alle Chats prüfen</button><span class="muted" id="work-total"></span></div></div><div id="work-groups" class="work-groups"></div></section>
+        <section><div class="section-head"><div><span class="eyebrow">Arbeitskorb</span><h3>Nach Wirkung priorisiert</h3></div><div class="head-side"><button id="quick-open" type="button" class="primary" title="Alle offenen Entwürfe als Liste, mehrere auf einmal genehmigen">Schnellprüfung</button><button id="scan-offene" type="button" title="Geht alle Chats durch, auch alte, und legt für jeden offenen Fall einen Entwurf zur Prüfung an. Dauert einige Minuten. Es wird nichts gesendet.">Alle Chats prüfen</button><span class="muted" id="work-total"></span></div></div><div id="work-groups" class="work-groups"></div></section>
         <aside class="result-card"><span class="eyebrow">Ergebnis · Outreach</span><div id="mini-funnel" class="mini-funnel"></div><p>Bestehendes Netzwerk wird getrennt gemessen.</p></aside>
       </div>
+      <section id="quick-review" class="quick-review hidden" aria-live="polite"></section>
       <section id="reviewer" class="reviewer hidden" aria-live="polite"></section>
     </section>
 
@@ -198,6 +199,11 @@
         <section id="acceptance-warning" class="setting-card wide-card acceptance-warning hidden" aria-live="polite">
           <div class="acceptance-warning-copy"><span class="eyebrow">Annahmequote niedrig</span><div><b id="acceptance-warning-rate">–</b><span id="acceptance-warning-threshold">Warnschwelle –</span></div><h3>Weniger Vernetzungsanfragen senden?</h3><p id="acceptance-warning-effect"></p></div>
           <button id="acceptance-protection-toggle" class="switch-control" type="button" role="switch" aria-checked="true"><span class="switch-track"><i></i></span><span><b>Weniger Anfragen senden</b><small id="acceptance-protection-state">Aktiv</small></span></button>
+        </section>
+        <section class="setting-card wide-card auto-card">
+          <div class="section-head"><div><span class="eyebrow">Automatische Freigabe</span><h3>Sichere Entwürfe selbst genehmigen lassen</h3></div><button id="auto-save" class="primary">Speichern</button></div>
+          <p>Standardmäßig aus. Eingeschaltet genehmigt NextLead nur Entwürfe, die die Prüfung bestehen, frühestens nach der Wartezeit (du kannst vorher noch eingreifen) und nur, wenn du diese Art zuletzt meist unverändert genehmigt hast. Gesendet wird weiterhin gedrosselt über den Sicherheits-Regler.</p>
+          <div id="auto-card-body" class="auto-body"></div>
         </section>
         <section class="setting-card wide-card followup-card">
           <div class="section-head"><div><span class="eyebrow">Nachfass-Plan</span><h3>Wie oft und womit nachgefasst wird</h3></div><button id="fu-save" class="primary">Plan speichern</button></div>

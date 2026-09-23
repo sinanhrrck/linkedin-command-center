@@ -7,6 +7,7 @@ import { GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { markInboundReply, messagedAwaitingFollowup, type Contact } from "./crm.js";
 import { followupPlan } from "./playbook.js";
+import { lasseAlteNachfassungenVerfallen } from "./freigabe.js";
 import { pruefeAusgehend, type AusgehendKontext } from "../core/ausgehendCheck.js";
 import { erlaubteLinks } from "./angebot.js";
 import { contactForConversation, recordCrmStage } from "./crmStages.js";
@@ -44,6 +45,7 @@ export type Draft = {
   parent_draft_id: number | null;
   approach_key: string | null;
   sequence_stage?: number | null;
+  freigabe_quelle?: string | null;
   rejection_reason: string | null;
   blockiert_grund: string | null;
   context_evidence_json: string | null;
@@ -236,6 +238,8 @@ export async function reviveChat(profileUrl: string): Promise<boolean> {
 
 /** Erzeugt Follow-up-Entwürfe für Kontakte, die seit >= `days` Tagen nicht geantwortet haben. */
 export async function generateFollowups(limit = 5): Promise<number> {
+  const verfallen = lasseAlteNachfassungenVerfallen();
+  if (verfallen) console.info(`[followup] ${verfallen} ungeprüfte Nachfassung(en) älter als 10 Tage verfallen – werden bei Fälligkeit neu geschrieben`);
   const plan = followupPlan();
   const candidates = messagedAwaitingFollowup(plan, limit);
   const auto = getMode() === "full"; // im Vollautomatik-Modus direkt senden
@@ -377,8 +381,28 @@ function hasOpenDraft(threadUrl: string, incoming?: string): boolean {
     .get(threadUrl, incoming ?? null, `-${VERWURF_RUHEZEIT_TAGE} days`);
 }
 
+/**
+ * Offene Entwürfe NACH WERT sortiert (2026-09-23): Antworten mit Chance/Termin/Einwand zuerst
+ * (da wartet ein Mensch auf eine Antwort), dann übrige Antworten, dann Erstnachrichten nach
+ * Lead-Score, Reaktivierungen, zuletzt Nachfassungen. Vorher schlicht „neueste zuerst“ – bei
+ * 126 offenen Entwürfen lag eine heiße Antwort irgendwo in der Mitte.
+ */
 export function pendingDrafts(): Draft[] {
-  return db.prepare("SELECT * FROM drafts WHERE status='pending' ORDER BY created_at DESC").all() as Draft[];
+  return db.prepare(
+    `SELECT d.* FROM drafts d LEFT JOIN contacts c ON c.id=d.contact_id
+      WHERE d.status='pending'
+      ORDER BY
+        CASE
+          WHEN d.kind IN ('message','pitchidee') AND d.intent IN ('chance','meeting','einwand') THEN 0
+          WHEN d.kind IN ('message','pitchidee') THEN 1
+          WHEN d.kind='first' THEN 2
+          WHEN d.kind='reaktivierung' THEN 3
+          WHEN d.kind='followup' THEN 4
+          ELSE 5
+        END,
+        COALESCE(c.lead_score,50) DESC,
+        d.created_at DESC`,
+  ).all() as Draft[];
 }
 
 export function getDraft(id: number): Draft | undefined {
@@ -443,7 +467,7 @@ export function deleteDraft(id: number): boolean {
  * Genehmigen: Status 'approved'. `sendApprovedDrafts` (Engine-Cron) holt sie und sendet.
  * Optionaler `text` übernimmt eine letzte Bearbeitung vor der Freigabe.
  */
-export function approveDraft(id: number, text?: string): boolean {
+export function approveDraft(id: number, text?: string, quelle: "mensch" | "auto" = "mensch"): boolean {
   const d = getDraft(id);
   if (!d || d.status === "sent" || d.phase === "approach") return false;
   if (["first", "followup", "reaktivierung", "event"].includes(d.kind) && d.contact_id) {
@@ -458,7 +482,9 @@ export function approveDraft(id: number, text?: string): boolean {
   }
   if (typeof text === "string" && text.trim()) db.prepare("UPDATE drafts SET draft=? WHERE id=?").run(text.trim(), id);
   setDraftStatus(id, "approved");
-  learnFromDraft(id, "approved");
+  db.prepare("UPDATE drafts SET freigabe_quelle=?, freigegeben_at=datetime('now') WHERE id=?").run(quelle, id);
+  // Nur menschliche Entscheidungen sind ein Lernsignal – sonst lernt der Bot von sich selbst.
+  if (quelle === "mensch") learnFromDraft(id, "approved");
   return true;
 }
 

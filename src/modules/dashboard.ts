@@ -21,6 +21,10 @@ import { contactIdentityHealth } from "./contactIdentity.js";
 import { sendHealthStand } from "../core/sendHealth.js";
 import { openJobFailures } from "../core/jobReliability.js";
 import { warteschlange } from "./warteschlange.js";
+import { pruefeAusgehend } from "../core/ausgehendCheck.js";
+import { erlaubteLinks } from "./angebot.js";
+import { followupPlan } from "./playbook.js";
+import { autoFreigabeStand } from "./freigabe.js";
 
 const APP_VERSION = (() => {
   try { return String(createRequire(import.meta.url)("../../package.json").version || "unbekannt"); }
@@ -275,11 +279,23 @@ export function getDashboardData() {
     const key = String(contact.full_name || "").trim().toLocaleLowerCase("de-DE");
     if (key && !contactByName.has(key)) contactByName.set(key, contact);
   }
+  const nachfassStufen = followupPlan().length;
+  const links = erlaubteLinks();
   const draftsForDashboard = openDrafts.map((draft) => {
     const nameKey = String(draft.participant || "").trim().toLocaleLowerCase("de-DE");
     const contact = contactByUrl.get(draft.thread_url) || contactByName.get(nameKey);
+    // Prüf-Badge für die Schnellprüfung: dieselbe Prüfung wie vor dem Entwurf und vor der
+    // automatischen Freigabe. Nur für die Arten, die sie kennt.
+    const pruefung = ["first", "followup", "reaktivierung"].includes(draft.kind) && draft.phase !== "approach"
+      ? pruefeAusgehend(draft.draft, {
+          kind: draft.kind as "first" | "followup" | "reaktivierung",
+          vorname: contact?.full_name ?? draft.participant, erlaubteLinks: links,
+          abschied: draft.kind === "followup" && (draft.sequence_stage ?? 1) >= nachfassStufen,
+        })
+      : null;
     return {
       ...draft,
+      pruefung,
       profile: contact ? {
         id: contact.id,
         fullName: contact.full_name,
@@ -470,6 +486,7 @@ export function getDashboardData() {
     ).all() as Array<{ id: number; kind: string; status: string; participant: string | null; thread_url: string; draft: string; created_at: string; blockiert_grund: string | null }>,
     /** Warteschlange je Kanal (Nachrichten / Anfragen): was wartet, läuft es, wann geht es weiter. */
     warteschlange: warteschlange(),
+    autoFreigabe: autoFreigabeStand(),
     blockaden: (() => {
       /**
        * `aktion` macht jeden Eintrag KLICKBAR (Sinans Vorgabe 2026-08-06): entweder wird die

@@ -9,7 +9,14 @@ import { publishPostBrowser } from "./modules/outreach.js";
 import { outreachTick } from "./modules/outreachTick.js";
 import { checkAcceptances } from "./modules/acceptance.js";
 import { feedTick } from "./modules/leadFeed.js";
-import { generateInboxDrafts, generateFollowups, sendApprovedDrafts, reviveChat, pitchZuNachricht } from "./modules/drafts.js";
+import { generateInboxDrafts, generateFollowups, sendApprovedDrafts as sendeFreigegebene, reviveChat, pitchZuNachricht } from "./modules/drafts.js";
+import { autoFreigabe } from "./modules/freigabe.js";
+
+/** Vor jedem Versandlauf: automatische Freigabe (Opt-in, standardmäßig aus), dann Versand über den Governor. */
+async function sendApprovedDrafts(limit: number): Promise<number> {
+  try { autoFreigabe(); } catch (e) { console.error("[freigabe] Auto-Freigabe fehlgeschlagen:", (e as Error)?.message); }
+  return sendeFreigegebene(limit);
+}
 import { generatePostIdeas } from "./modules/content.js";
 import { commentTick } from "./modules/comment.js";
 import { scanNetzwerk, generateReaktivierung } from "./modules/netzwerk.js";

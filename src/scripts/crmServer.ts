@@ -37,6 +37,7 @@ import { backfillConversationMemories, backfillDraftContexts } from "../modules/
 import { config } from "../config.js";
 import { angebotFuerCockpit, speichereAngebot } from "../modules/angebot.js";
 import { followupPlan, speichereFollowupPlan } from "../modules/playbook.js";
+import { approveMany, autoFreigabeStand, speichereAutoFreigabe } from "../modules/freigabe.js";
 import { bericht, type BerichtArt } from "../modules/berichte.js";
 import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
 
@@ -1006,6 +1007,34 @@ const server = createServer((req, res) => {
 
   // NOTIZEN: alles, was nach einem Telefonat festgehalten werden muss. Landet mit Zeitstempel
   // in der Kontaktspur, damit später nachvollziehbar ist, WANN es notiert wurde.
+  // SAMMEL-FREIGABE: jeder Entwurf einzeln durch approveDraft (Kontextprüfung bleibt).
+  if (url.pathname === "/api/drafts/bulk" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify((({ ok, blockiert }) => ({ ok: true, freigegeben: ok, blockiert }))(approveMany(JSON.parse(body || "{}").ids))));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+  // AUTOMATISCHE FREIGABE (Opt-in).
+  if (url.pathname === "/api/auto-freigabe" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        speichereAutoFreigabe(JSON.parse(body || "{}"));
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...autoFreigabeStand() }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
   // NACHFASS-PLAN: Stufen + Abstände. Die Grenzen (max. 3, letzte = Abschied) setzt playbook.ts.
   if (url.pathname === "/api/followup-plan" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify({ plan: followupPlan() }));

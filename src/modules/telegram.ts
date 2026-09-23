@@ -246,6 +246,10 @@ export function startTelegram() {
    * Die Engine ist neu gestartet und der Grund stand nur im Dashboard-Prozess. Genau diese
    * Meldung fehlte am 22.09., als die Engine zweimal ohne jede Begründung neu anlief.
    */
+  events.on("drafts:auto", (a: { anzahl: number; namen: string[] }) => {
+    if (!bot || !config.telegram.chatId || !a?.anzahl) return;
+    bot.api.sendMessage(config.telegram.chatId, `✅ ${a.anzahl} Entwurf/Entwürfe automatisch freigegeben (${a.namen.slice(0, 5).join(", ")}${a.namen.length > 5 ? " …" : ""}). Gesendet wird gedrosselt über den Governor. Abschalten: Cockpit → Einstellungen → Automatische Freigabe.`).catch(() => {});
+  });
   events.on("engine:neustart", (liste: Array<{ at: string; grund: string; detail: string | null; letzter_job: string | null }>) => {
     if (!bot || !config.telegram.chatId || !liste?.length) return;
     const zeilen = liste.map((n) => {

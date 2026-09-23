@@ -222,6 +222,7 @@ function renderToday() {
   $("mini-funnel").innerHTML = rows.map(([label, count, width]) => `<div class="mini-row"><span>${label}</span><b>${count}</b><em><i style="width:${width}%"></i></em></div>`).join("");
   renderActivity();
   renderQueue();
+  renderQuick();
 }
 
 /** Uhrzeit oder Tag des nächsten Versuchs – "um 14:20", "morgen 07:00", "Mo 07:00". */
@@ -1300,6 +1301,91 @@ $("wf-reset").onclick = () => {
 
 
 /**
+ * SCHNELLPRÜFUNG (2026-09-23): alle offenen Nachrichten-Entwürfe als kompakte Liste mit Häkchen.
+ * Jeder markierte Entwurf läuft serverseitig einzeln durch approveDraft – eine Sperre bei einem
+ * blockiert die anderen nicht. Vorausgewählt ist nur, was die Ausgangsprüfung besteht.
+ */
+const QUICK_LABEL = { first: "Erstnachricht", followup: "Nachfassung", reaktivierung: "Netzwerk", message: "Antwort" };
+let quickOffen = false;
+function quickList() { return (state.drafts || []).filter((d) => d.phase !== "approach" && d.kind !== "pitchidee" && d.kind !== "event" && d.kind !== "comment"); }
+function renderQuick() {
+  const box = $("quick-review");
+  if (!box) return;
+  box.classList.toggle("hidden", !quickOffen);
+  if (!quickOffen) return;
+  const liste = quickList();
+  const vorher = new Set([...box.querySelectorAll("[data-quick]:checked")].map((c) => Number(c.dataset.quick)));
+  const ersteAnzeige = !box.dataset.bereit;
+  box.innerHTML = `<div class="section-head"><div><span class="eyebrow">Schnellprüfung</span><h3>${liste.length} Entwürfe auf einen Blick</h3></div><div class="head-side"><button data-quick-all>Alle geprüften markieren</button><button data-quick-none>Keine</button><button class="primary" data-quick-approve>Markierte genehmigen</button><button class="icon-btn" data-quick-close aria-label="Schließen">×</button></div></div>
+    <p class="muted">Grün = besteht die Prüfung (eine Frage, keine Floskel, richtiger Name …). Gesendet wird wie immer gedrosselt über den Sicherheits-Regler.</p>
+    <div class="quick-list">${liste.map((d) => {
+      const p = d.pruefung;
+      const badge = !p ? `<span class="quick-badge neutral">Antwort, bitte lesen</span>` : p.ok ? `<span class="quick-badge ok">geprüft</span>` : `<span class="quick-badge bad" title="${esc(p.gruende.join(", "))}">${esc(p.gruende[0])}</span>`;
+      const an = ersteAnzeige ? !!p?.ok : vorher.has(d.id);
+      return `<label class="quick-row"><input type="checkbox" data-quick="${d.id}" ${an ? "checked" : ""}/><div><div class="quick-meta"><b>${esc(d.participant || d.profile?.fullName || "Kontakt")}</b><span>${QUICK_LABEL[d.kind] || esc(d.kind)}${d.sequence_stage ? ` ${d.sequence_stage}` : ""}</span>${badge}</div>${d.incoming && !String(d.incoming).startsWith("campaign:") ? `<div class="quick-in">${esc(d.incoming)}</div>` : ""}<p>${esc(d.draft)}</p></div></label>`;
+    }).join("") || `<p class="muted">Nichts offen.</p>`}</div>`;
+  box.dataset.bereit = "1";
+  box.querySelector("[data-quick-close]").onclick = () => { quickOffen = false; delete box.dataset.bereit; renderQuick(); };
+  box.querySelector("[data-quick-all]").onclick = () => box.querySelectorAll("[data-quick]").forEach((c) => { const d = liste.find((x) => x.id === Number(c.dataset.quick)); c.checked = !!d?.pruefung?.ok; });
+  box.querySelector("[data-quick-none]").onclick = () => box.querySelectorAll("[data-quick]").forEach((c) => { c.checked = false; });
+  box.querySelector("[data-quick-approve]").onclick = async (ev) => {
+    const ids = [...box.querySelectorAll("[data-quick]:checked")].map((c) => Number(c.dataset.quick));
+    if (!ids.length) return toast("Nichts markiert.");
+    ev.target.disabled = true;
+    try {
+      const r = await post("/api/drafts/bulk", { ids });
+      toast(`${r.freigegeben.length} genehmigt${r.blockiert.length ? `, ${r.blockiert.length} gesperrt (${r.blockiert[0].grund})` : ""}.`);
+      await load();
+    } catch (error) { toast(`Genehmigen fehlgeschlagen: ${error.message}`); }
+    finally { ev.target.disabled = false; }
+  };
+}
+$("quick-open").onclick = () => { quickOffen = true; renderQuick(); $("quick-review").scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+/**
+ * TASTENKÜRZEL im Einzel-Prüfer: A = genehmigen, R = ablehnen, J/K = nächster/vorheriger.
+ * Nicht, während in einem Textfeld getippt wird – sonst genehmigt ein „a“ im Text den Entwurf.
+ */
+document.addEventListener("keydown", (ev) => {
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const tag = (ev.target?.tagName || "").toLowerCase();
+  if (tag === "textarea" || tag === "input" || tag === "select" || ev.target?.isContentEditable) return;
+  const host = reviewerHost();
+  if (!host || host.classList.contains("hidden")) return;
+  const key = ev.key.toLowerCase();
+  if (key === "a") host.querySelector('[data-review-action="approve"]')?.click();
+  else if (key === "r") host.querySelector('[data-review-action="reject"]')?.click();
+  else if (key === "j" || key === "k") {
+    const n = reviewList().length; if (!n) return;
+    reviewIndex = (reviewIndex + (key === "j" ? 1 : n - 1)) % n; renderReviewer();
+  } else return;
+  ev.preventDefault();
+});
+
+/** AUTOMATISCHE FREIGABE – Karte in den Einstellungen. */
+function renderAutoFreigabe() {
+  const a = state.autoFreigabe; const box = $("auto-card-body");
+  if (!a || !box || box.contains(document.activeElement)) return; // nicht beim Tippen überschreiben
+  const e = a.einstellung, s = a.schwelle;
+  const zeile = (art, titel) => {
+    const v = a.vertrauen[art];
+    const stand = v.erreicht
+      ? `<span class="quick-badge ok">Vertrauen erreicht: ${v.unveraendert} von ${v.entscheidungen} unverändert genehmigt</span>`
+      : `<span class="quick-badge neutral">${v.entscheidungen < s.minEntscheidungen ? `noch ${s.minEntscheidungen - v.entscheidungen} eigene Entscheidungen nötig` : `erst ${Math.round(v.quote * 100)} % unverändert genehmigt (nötig ${Math.round(s.minQuote * 100)} %)`}</span>`;
+    return `<label class="auto-row"><input type="checkbox" data-auto="${art}" ${e[art] ? "checked" : ""}/><b>${titel}</b>${stand}</label>`;
+  };
+  box.innerHTML = `${zeile("followup", "Nachfassungen")}${zeile("first", "Erstnachrichten")}
+    <div class="auto-num"><label>höchstens <input type="number" min="1" max="30" data-auto-cap value="${e.tagesCap}"/> pro Tag</label><label>frühestens <input type="number" min="15" max="1440" data-auto-karenz value="${e.karenzMin}"/> Minuten nach dem Entwurf</label><span class="muted">Heute automatisch: ${a.heute}</span></div>`;
+}
+$("auto-save").onclick = async () => {
+  const q = (s) => document.querySelector(s);
+  try {
+    const r = await post("/api/auto-freigabe", { followup: q('[data-auto="followup"]').checked, first: q('[data-auto="first"]').checked, tagesCap: Number(q("[data-auto-cap]").value), karenzMin: Number(q("[data-auto-karenz]").value) });
+    state.autoFreigabe = { ...r }; document.activeElement?.blur(); renderAutoFreigabe(); toast("Automatische Freigabe gespeichert.");
+  } catch (error) { toast(error.message); }
+};
+
+/**
  * DEIN ANGEBOT (2026-09-23): eigener Ladepfad wie `ladeWirkung`, nicht über /api/state – das
  * Formular darf beim Auto-Refresh nicht überschrieben werden, während man tippt. Deshalb wird
  * es nur beim ersten Anzeigen der Einstellungen und nach dem Speichern gefüllt.
@@ -1379,6 +1465,7 @@ $("fu-save").onclick = async () => {
 function renderSettings() {
   if (!angebot) ladeAngebot();
   if (!fuPlan) ladeFuPlan();
+  renderAutoFreigabe();
   const alive = !!state.engine?.alive; $("engine-title").textContent = alive ? "Engine arbeitet" : "Engine ist aus"; $("engine-copy").textContent = alive ? "Vernetzung, Kampagnen und freigegebene Nachrichten laufen in einer gemeinsamen Prioritätsqueue." : "Ohne Engine werden keine Hintergrundaufgaben ausgeführt."; $("engine-toggle").textContent = alive ? "Engine stoppen" : "Engine starten";
   const level = automationLevel(); document.querySelectorAll("[data-level]").forEach((button) => button.classList.toggle("active", button.dataset.level === level));
   $("automation-copy").textContent = { vorschlaege: "NextLead vernetzt automatisch. Jede Nachricht bleibt ein Entwurf.", halb: "Azubi-Erstnachrichten werden automatisch gesendet, Antworten bleiben zur Prüfung.", agent_test: "Der Gesprächsagent denkt mit, sendet aber nicht selbst.", agent_live: "Der Gesprächsagent führt Routinegespräche selbst und übergibt wichtige Fälle." }[level] + " Bestehende Netzwerk-Kontakte brauchen in jeder Stufe deine Freigabe.";
