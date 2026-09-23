@@ -5,6 +5,7 @@ import type { Contact } from "./crm.js";
 import { promptKontext, saubern, erstnachrichtAngle, type Zielgruppe } from "../context.js";
 import type { ConversationGoal, GoalCode } from "./goals.js";
 import { learningGuidance } from "./learning.js";
+import { ausbildungsStand, ausbildungsVorgabe, behauptetLaufendeAusbildung } from "../core/ausbildungsStand.js";
 
 /**
  * Router für den Autopilot-Text: bezahltes Claude (Standard im Voll-Modus, Qualität +
@@ -22,6 +23,26 @@ async function generateAutopilot(prompt: string): Promise<string> {
 /** Beschreibt den Lead für den Prompt (inkl. Jobbezeichnung, falls erfasst). */
 function personZeile(c: Contact): string {
   return `Person: ${c.full_name ?? "Unbekannt"}${c.headline ? ` – ${c.headline}` : ""}.`;
+}
+
+/**
+ * Erzeugt den Text und prüft, ob er der Person eine laufende Ausbildung unterstellt, die es
+ * laut Profil nicht gibt (Sinan 2026-09-23: „Bankkaufmann bei X" bekam „du machst deine
+ * Ausbildung"). Ein Neuversuch mit ausdrücklicher Korrektur, danach Abbruch: lieber kein
+ * Entwurf als eine falsche Anrede. Die Aufrufer behandeln den Fehler als „kein Text".
+ */
+async function mitAusbildungsCheck(c: Contact, prompt: string): Promise<string> {
+  const text = saubern(await generateText(prompt));
+  if (ausbildungsStand(c.headline) === "in_ausbildung" || !behauptetLaufendeAusbildung(text)) return text;
+  const zweiter = saubern(await generateText(`${prompt}
+
+KORREKTUR: Dein letzter Entwurf hat behauptet, die Person sei gerade in der Ausbildung. Das ist FALSCH.
+Verworfener Entwurf: ${text}
+Schreibe neu, ohne eine laufende Ausbildung zu unterstellen.`));
+  if (behauptetLaufendeAusbildung(zweiter)) {
+    throw new Error(`Text unterstellt ${c.full_name ?? "der Person"} eine laufende Ausbildung, Profil sagt anders – kein Entwurf`);
+  }
+  return zweiter;
 }
 
 export type TextVariation = {
@@ -91,6 +112,8 @@ HARTE STIL- UND FORMATREGELN (Zwingend einhalten):
 GUTE BEISPIELE (Genau dein Stil):
 Beispiel 1: Hey Marvin, ich hab gesehen du bist im 2. Lehrjahr bei der Sparkasse Köln. Ich hab damals auch als Azubi in der Bank angefangen. Wie erlebst du den Alltag da gerade?
 Beispiel 2: Hey Lisa, cool dass du deine Ausbildung bei der Volksbank machst. Ich war früher selbst bei der Bank. Was ist bisher das Überraschendste für dich in der Praxis?
+Beispiel 3 (Ausbildung schon fertig, Headline "Bankkaufmann bei Sparkasse Köln"): Hey Jonas, ich hab gesehen du bist bei der Sparkasse Köln als Bankkaufmann. Ich hab damals auch in der Bank angefangen. Wie ging's für dich nach der Ausbildung weiter?
+Beispiel 1 und 2 passen NUR, wenn die Person laut AUSBILDUNGSSTAND wirklich in der Ausbildung ist.
 
 SCHLECHTE BEISPIELE (SO NICHT):
 Falsch: "Ich sehe du bist in der Finanzbranche, hast du schon mal über Selbstständigkeit nachgedacht?" (Riecht nach Pitch, zu aufdringlich.)
@@ -101,12 +124,13 @@ Falsch: "Hallo, ich hoffe es geht dir gut. Ich würde mich freuen, wenn wir uns 
 INPUT für diese Person (nutze nur, was da ist; erfinde nichts dazu):
 Name: ${c.full_name ?? "Unbekannt"}
 Profil-Headline (enthält oft Bank, Ausbildungsjahr, Studiengang, Standort): ${c.headline ?? "unbekannt"}
+${ausbildungsVorgabe(c.headline)}
 ${goal ? `\nLANGFRISTIGER GESPRÄCHSAUFTRAG: ${goal.code} – ${goal.label}. ${goal.instruction}\nDie Erstnachricht bleibt trotzdem ein echter Icebreaker ohne Pitch. Wähle nur eine Anknüpfung, die später natürlich zu diesem Ziel passen kann.` : ""}
 ${kampagnenFakten ? `\n${kampagnenFakten}\nNutze diese Angaben nur, um die richtige Anknüpfung und Tonlage zu wählen. Erwähne weder Kampagne, Angebot, Event noch Nutzen in dieser ersten Nachricht.` : ""}
 ${learningGuidance(goal?.code ?? null)}
 
 OUTPUT-REGEL: Generiere GENAU EINE Nachricht nach obigem Aufbau. Nichts drumherum, keine Erklärungen davor oder danach, kein "Hier ist die Nachricht:". Gib ausschließlich den Text der Nachricht aus.`;
-  return saubern(await generateText(prompt));
+  return mitAusbildungsCheck(c, prompt);
 }
 
 /**
@@ -334,7 +358,7 @@ export async function followupMessage(c: Contact, stufe: 1 | 2 = 1, variation?: 
     stufe === 1
       ? `Kontext: Sinan hatte der Person schon geschrieben, aber noch keine Antwort bekommen.
 KEIN Druck, kein Vorwurf, locker und sympathisch. Knüpf leicht an das Thema an (Ausbildung/
-Weg nach der Ausbildung) und mach es der Person leicht zu antworten.`
+Weg nach der Ausbildung, passend zum AUSBILDUNGSSTAND unten) und mach es der Person leicht zu antworten.`
       : `Kontext: Sinan hat der Person schon zweimal geschrieben, ohne Antwort. Das ist die LETZTE
 Nachricht. Schreib SEHR kurz (1-2 Sätze), ehrlich und ohne jeden Druck: Sinan meldet sich nicht
 mehr, die Tür bleibt aber offen, falls sie sich später doch melden möchte. Kein Vorwurf, kein
@@ -343,10 +367,11 @@ mehr, die Tür bleibt aber offen, falls sie sich später doch melden möchte. Ke
 ${promptKontext()}
 ${personZeile(c)}
 ${learningGuidance(null)}
+${ausbildungsVorgabe(c.headline)}
 ${stufenText}
 ${variationBlock(variation)}
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
-  return saubern(await generateText(prompt));
+  return mitAusbildungsCheck(c, prompt);
 }
 
 /**
@@ -373,6 +398,7 @@ Regeln:
 - KEIN Verkauf, KEIN Angebot, KEINE Beratung anbieten.
 - Echtes Interesse an ihrem Weg zeigen und EINE leichte, offene Frage stellen.
 - Kein Sie-Siezen, wenn der Stil sonst duzt. Kein Floskel-Deutsch.
+${ausbildungsVorgabe(c.headline)}
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
-  return saubern(await generateText(prompt));
+  return mitAusbildungsCheck(c, prompt);
 }
