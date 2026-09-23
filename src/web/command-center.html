@@ -286,6 +286,13 @@
   <div id="capture-selection" class="capture-selection"></div>
 </div>
 <div id="toast" role="status"></div>
+<button id="ki-fab" class="ki-fab" aria-label="NextLead-Assistent öffnen">✨ Frag NextLead</button>
+<section id="ki-panel" class="ki-panel hidden" role="dialog" aria-label="NextLead-Assistent">
+  <header><div><b>NextLead-Assistent</b><small>kennt das Tool und die aktuelle Lage · ändert nichts</small></div><button id="ki-reset" class="icon-btn" title="Neues Gespräch" aria-label="Neues Gespräch">↺</button><button id="ki-close" class="icon-btn" aria-label="Schließen">×</button></header>
+  <div id="ki-log" class="ki-log" aria-live="polite"></div>
+  <div id="ki-chips" class="ki-chips"><button>Warum sendet der Bot gerade nichts?</button><button>Was sollte ich heute als Erstes tun?</button><button>Wie verbessere ich meine Antwortquote?</button></div>
+  <form id="ki-form"><textarea id="ki-input" rows="2" placeholder="Frag etwas zu NextLead …"></textarea><button class="primary" type="submit">Senden</button></form>
+</section>
 <script type="module" src="/command-center.js"></script>
 </body>
 </html>

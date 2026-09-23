@@ -1404,6 +1404,50 @@ $("auto-save").onclick = async () => {
 };
 
 /**
+ * KI-ASSISTENT unten rechts (2026-09-23). Der Verlauf lebt nur in diesem Browser-Tab
+ * (sessionStorage, in try/catch – privater Modus darf nichts kaputt machen). Jede Frage geht
+ * mit den letzten Wortwechseln an /api/assistent; der Server hängt die aktuelle Lage an.
+ */
+let kiVerlauf = [];
+try { kiVerlauf = JSON.parse(sessionStorage.getItem("ki-verlauf") || "[]"); } catch { kiVerlauf = []; }
+const kiSpeichern = () => { try { sessionStorage.setItem("ki-verlauf", JSON.stringify(kiVerlauf.slice(-20))); } catch { /* egal */ } };
+/** Kleines, sicheres Markdown: erst escapen, dann nur **fett**, Listen und Überschriften-Zeilen. */
+function kiMarkdown(text) {
+  const zeilen = esc(text).split("\n");
+  let html = "", liste = false;
+  for (const roh of zeilen) {
+    const z = roh.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    const punkt = z.match(/^\s*(?:[-*•]|\d+\.)\s+(.*)$/);
+    if (punkt) { if (!liste) { html += "<ul>"; liste = true; } html += `<li>${punkt[1]}</li>`; continue; }
+    if (liste) { html += "</ul>"; liste = false; }
+    const kopf = z.match(/^#{1,4}\s+(.*)$/);
+    html += kopf ? `<p><b>${kopf[1]}</b></p>` : z.trim() ? `<p>${z}</p>` : "";
+  }
+  return html + (liste ? "</ul>" : "");
+}
+function kiZeichnen(wartet = false) {
+  $("ki-log").innerHTML = (kiVerlauf.length ? "" : `<p class="ki-hello">Hi! Ich kenne NextLead und sehe die aktuelle Lage deines Bots. Frag mich zum Beispiel, warum gerade nichts rausgeht oder wie du mehr Antworten bekommst.</p>`)
+    + kiVerlauf.map((t) => `<div class="ki-msg ${t.rolle}">${t.rolle === "assistent" ? kiMarkdown(t.text) : esc(t.text).replace(/\n/g, "<br>")}</div>`).join("")
+    + (wartet ? `<div class="ki-msg assistent ki-typing">denkt nach …</div>` : "");
+  $("ki-chips").classList.toggle("hidden", kiVerlauf.length > 0);
+  $("ki-log").scrollTop = $("ki-log").scrollHeight;
+}
+async function kiFragen(frage) {
+  frage = String(frage || "").trim(); if (!frage) return;
+  const verlauf = kiVerlauf.slice(-8);
+  kiVerlauf.push({ rolle: "du", text: frage }); kiZeichnen(true); $("ki-input").value = "";
+  try { const r = await post("/api/assistent", { frage, verlauf }, 90000); kiVerlauf.push({ rolle: "assistent", text: r.antwort }); }
+  catch (error) { kiVerlauf.push({ rolle: "assistent", text: `Das hat nicht geklappt: ${error.message}` }); }
+  kiSpeichern(); kiZeichnen();
+}
+$("ki-fab").onclick = () => { $("ki-panel").classList.remove("hidden"); $("ki-fab").classList.add("hidden"); kiZeichnen(); $("ki-input").focus(); };
+$("ki-close").onclick = () => { $("ki-panel").classList.add("hidden"); $("ki-fab").classList.remove("hidden"); };
+$("ki-reset").onclick = () => { kiVerlauf = []; kiSpeichern(); kiZeichnen(); };
+$("ki-form").onsubmit = (ev) => { ev.preventDefault(); kiFragen($("ki-input").value); };
+$("ki-input").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); kiFragen($("ki-input").value); } });
+$("ki-chips").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => kiFragen(b.textContent)));
+
+/**
  * DEIN ANGEBOT (2026-09-23): eigener Ladepfad wie `ladeWirkung`, nicht über /api/state – das
  * Formular darf beim Auto-Refresh nicht überschrieben werden, während man tippt. Deshalb wird
  * es nur beim ersten Anzeigen der Einstellungen und nach dem Speichern gefüllt.

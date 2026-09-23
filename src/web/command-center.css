@@ -300,3 +300,23 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 .offer-ki-list{display:grid;gap:8px;margin-bottom:12px}
 .offer-ki-item{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;border:1px dashed var(--blue);background:var(--blue-soft);border-radius:12px;padding:10px 12px;font-size:13px}
 .offer-ki-item p{margin:4px 0 0}
+
+/* KI-Assistent unten rechts (2026-09-23) */
+.ki-fab{position:fixed;right:20px;bottom:20px;z-index:60;border:0;border-radius:999px;padding:12px 18px;font-weight:700;background:var(--navy);color:#fff;box-shadow:var(--shadow);cursor:pointer}
+.ki-fab:hover{background:var(--blue)}
+.ki-panel{position:fixed;right:20px;bottom:20px;z-index:61;width:min(400px,calc(100vw - 32px));height:min(560px,calc(100vh - 40px));display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px rgba(16,47,99,.22);overflow:hidden}
+.ki-panel header{display:flex;align-items:center;gap:6px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--blue-soft)}
+.ki-panel header div{flex:1;display:grid}
+.ki-panel header small{font-size:11px;color:var(--muted)}
+.ki-log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
+.ki-hello{margin:0;font-size:13px;color:var(--muted)}
+.ki-msg{max-width:88%;padding:9px 12px;border-radius:14px;font-size:13.5px;line-height:1.45}
+.ki-msg.du{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:4px}
+.ki-msg.assistent{align-self:flex-start;background:var(--bg);color:var(--ink);border-bottom-left-radius:4px}
+.ki-typing{opacity:.7;font-style:italic}
+.ki-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+.ki-chips button{font-size:12px;border-radius:999px}
+.ki-panel form{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+.ki-panel textarea{flex:1;resize:none;font:inherit;font-size:13.5px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+@media(max-width:760px){.ki-fab{right:16px;bottom:16px}.ki-panel{right:16px;bottom:16px}}
+.ki-msg p{margin:0 0 6px}.ki-msg p:last-child{margin:0}.ki-msg ul{margin:4px 0 6px;padding-left:18px}.ki-msg li{margin:2px 0}

@@ -39,6 +39,7 @@ import { angebotFuerCockpit, speichereAngebot, kiAngebotsVorschlaege, kiAngebotS
 import { followupPlan, speichereFollowupPlan } from "../modules/playbook.js";
 import { approveMany, autoFreigabeStand, speichereAutoFreigabe } from "../modules/freigabe.js";
 import { variantenStatistik } from "../modules/varianten.js";
+import { frageAssistent } from "../modules/assistent.js";
 import { bericht, type BerichtArt } from "../modules/berichte.js";
 import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
 
@@ -1060,6 +1061,20 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // KI-ASSISTENT (unten rechts im Cockpit). Rein lesend, ein Claude-Aufruf je Frage.
+  if (url.pathname === "/api/assistent" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      try {
+        const { frage, verlauf } = JSON.parse(body || "{}");
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, antwort: await frageAssistent(frage, verlauf) }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
   // KI-HILFE FÜRS ANGEBOT: Vorschläge bzw. Schärfen. Speichert NICHTS – das Formular übernimmt,
   // gespeichert wird erst mit „Angebot speichern“.
   if (url.pathname === "/api/angebot/ki" && req.method === "POST") {
