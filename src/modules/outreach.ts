@@ -1,3 +1,4 @@
+import type { Page } from "playwright";
 import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { governor, GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { humanDelay, humanScroll, humanType, humanTypeInto } from "../core/humanize.js";
@@ -6,6 +7,7 @@ import { MESSAGE_BOX_VISIBLE_SELECTOR, SEND_BUTTON_VISIBLE_SELECTOR } from "../c
 import { db, getState, setState } from "../db/index.js";
 import { deferProfile, recordReadSaving } from "./lowRead.js";
 import { recordCrmStage } from "./crmStages.js";
+import { extrahiereProfilFakten, speichereProfilFakten } from "./profilFakten.js";
 
 /** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
 function normText(s: string): string {
@@ -151,6 +153,21 @@ function schonVernetzt(profileUrl: string): boolean {
 }
 
 /** Eine Vernetzungsanfrage mit optionaler personalisierter Notiz. */
+/**
+ * Profil-Fakten mitlesen, während die Profilseite ohnehin offen ist (Phase 5). EIN innerText
+ * von `main`, kein Klick, keine Navigation. Fehler bleiben still: lieber keine Zusatzinfo als
+ * ein abgebrochener Versand. Beim ersten echten Lauf engine.log auf „[profil-fakten]“ prüfen.
+ */
+async function erfasseProfilFakten(page: Page, profileUrl: string): Promise<void> {
+  try {
+    const text = await page.locator("main").first().innerText({ timeout: 3000 });
+    const f = extrahiereProfilFakten(text);
+    if (speichereProfilFakten(profileUrl, f)) {
+      console.info(`[profil-fakten] ${profileUrl}: ${f.rolle ?? "–"}${f.firma ? ` @ ${f.firma}` : ""}${f.ueber ? " + Info" : ""}`);
+    }
+  } catch { /* still */ }
+}
+
 export async function sendConnectionRequest(profileUrl: string, note?: string) {
   try {
     // DOPPEL-VERNETZUNGS-SPERRE: greift auch, wenn versehentlich zwei Engines laufen (z.B. alte
@@ -165,6 +182,7 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
       await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
       if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
       await humanScroll(page); // erst schauen, dann handeln – wie ein Mensch
+      await erfasseProfilFakten(page, profileUrl);
 
       const connect = await findConnectButton(page);
       if ((await connect.count()) === 0) {
@@ -502,6 +520,7 @@ export async function sendMessage(profileUrl: string, text: string, typ: "messag
       const page = await newPage();
       await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
       if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
+      await erfasseProfilFakten(page, profileUrl);
 
       // Sicherheitsnetz: lieber gar nicht senden als an die falsche Person. Wenn der
       // Profil-Button fehlt (LinkedIn-Umbau), abbrechen statt blind irgendwo zu klicken.

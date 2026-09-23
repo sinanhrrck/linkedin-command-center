@@ -98,6 +98,12 @@ export function repairContactDuplicates(db: Database.Database): { groups: number
             SELECT campaign_id,?,route,status,reason,created_at,updated_at FROM campaign_targets WHERE contact_id IN (${q})`).run(keep.id, ...dropIds);
           db.prepare(`DELETE FROM campaign_targets WHERE contact_id IN (${q})`).run(...dropIds);
         }
+        if (tableExists(db, "contact_profile_facts")) {
+          // Eine Zeile je Kontakt: vorhandene Fakten des Gewinners bleiben, sonst die der Dublette.
+          db.prepare(`INSERT OR IGNORE INTO contact_profile_facts(contact_id,rolle,firma,seit,ueber,captured_at)
+            SELECT ?,rolle,firma,seit,ueber,captured_at FROM contact_profile_facts WHERE contact_id IN (${q}) ORDER BY captured_at DESC LIMIT 1`).run(keep.id, ...dropIds);
+          db.prepare(`DELETE FROM contact_profile_facts WHERE contact_id IN (${q})`).run(...dropIds);
+        }
         if (tableExists(db, "contact_identities")) {
           db.prepare(`DELETE FROM contact_identities WHERE contact_id IN (${q}) AND identity_type='profile_url'`).run(...dropIds);
           db.prepare(`UPDATE contact_identities SET contact_id=? WHERE contact_id IN (${q})`).run(keep.id, ...dropIds);

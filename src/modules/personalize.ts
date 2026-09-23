@@ -9,6 +9,7 @@ import { ausbildungsStand, ausbildungsVorgabe, behauptetLaufendeAusbildung } fro
 import { angebotsHinweis, beweisBlock, type Route } from "./angebot.js";
 import { ZWECK_ANWEISUNG, zweckFuer } from "./playbook.js";
 import { variantenBlock, type Wahl } from "./varianten.js";
+import { faktenBlock, profilFakten } from "./profilFakten.js";
 
 /**
  * Router für den Autopilot-Text: bezahltes Claude (Standard im Voll-Modus, Qualität +
@@ -23,9 +24,19 @@ async function generateAutopilot(prompt: string): Promise<string> {
   return generateText(prompt);
 }
 
-/** Beschreibt den Lead für den Prompt (inkl. Jobbezeichnung, falls erfasst). */
+/** Beschreibt den Lead für den Prompt (inkl. Jobbezeichnung und – falls erfasst – Profil-Fakten). */
 function personZeile(c: Contact): string {
-  return `Person: ${c.full_name ?? "Unbekannt"}${c.headline ? ` – ${c.headline}` : ""}.`;
+  return `Person: ${c.full_name ?? "Unbekannt"}${c.headline ? ` – ${c.headline}` : ""}.${faktenBlock(c.id)}`;
+}
+
+/**
+ * Woraus der Ausbildungsstand bestimmt wird: die aktuelle Rolle aus dem Profil ist frischer als
+ * die Headline („Auszubildender“ steht dort oft noch Jahre später). Nur wenn die Rolle selbst
+ * nichts hergibt, zählt die Headline.
+ */
+function standQuelle(c: Contact): string | null | undefined {
+  const rolle = profilFakten(c.id)?.rolle;
+  return rolle && ausbildungsStand(rolle) !== "unklar" ? rolle : c.headline;
 }
 
 /**
@@ -36,7 +47,7 @@ function personZeile(c: Contact): string {
  */
 async function mitAusbildungsCheck(c: Contact, prompt: string): Promise<string> {
   const text = saubern(await generateText(prompt));
-  if (ausbildungsStand(c.headline) === "in_ausbildung" || !behauptetLaufendeAusbildung(text)) return text;
+  if (ausbildungsStand(standQuelle(c)) === "in_ausbildung" || !behauptetLaufendeAusbildung(text)) return text;
   const zweiter = saubern(await generateText(`${prompt}
 
 KORREKTUR: Dein letzter Entwurf hat behauptet, die Person sei gerade in der Ausbildung. Das ist FALSCH.
@@ -132,7 +143,7 @@ Falsch: "Hallo, ich hoffe es geht dir gut. Ich würde mich freuen, wenn wir uns 
 INPUT für diese Person (nutze nur, was da ist; erfinde nichts dazu):
 Name: ${c.full_name ?? "Unbekannt"}
 Profil-Headline (enthält oft Bank, Ausbildungsjahr, Studiengang, Standort): ${c.headline ?? "unbekannt"}
-${ausbildungsVorgabe(c.headline)}
+${faktenBlock(c.id)}${ausbildungsVorgabe(standQuelle(c))}
 ${goal ? `\nLANGFRISTIGER GESPRÄCHSAUFTRAG: ${goal.code} – ${goal.label}. ${goal.instruction}\nDie Erstnachricht bleibt trotzdem ein echter Icebreaker ohne Pitch. Wähle nur eine Anknüpfung, die später natürlich zu diesem Ziel passen kann.` : ""}
 ${kampagnenFakten ? `\n${kampagnenFakten}\nNutze diese Angaben nur, um die richtige Anknüpfung und Tonlage zu wählen. Erwähne weder Kampagne, Angebot, Event noch Nutzen in dieser ersten Nachricht.` : ""}
 ${learningGuidance(goal?.code ?? null)}
@@ -377,7 +388,7 @@ export async function followupMessage(
 ${promptKontext()}
 ${personZeile(c)}
 ${learningGuidance(null)}
-${ausbildungsVorgabe(c.headline)}
+${ausbildungsVorgabe(standQuelle(c))}
 ${opts.bisher ? `\nDEINE LETZTE NACHRICHT AN DIE PERSON (nicht wiederholen, nicht zitieren):\n${opts.bisher}\n` : ""}
 ${ZWECK_ANWEISUNG[zweck]}
 ${zweck === "beweis" ? beweisBlock() : ""}
@@ -413,7 +424,7 @@ Regeln:
 - Kein Pitch, keine Werbesprache. Steht unten ein Angebot, darf es als leichtes, freiwilliges Ja vorkommen, sonst nur echtes Interesse an ihrem Weg.
 - Genau EINE leichte Frage, die man in fünf Sekunden beantworten kann.
 - Kein Sie-Siezen, wenn der Stil sonst duzt. Kein Floskel-Deutsch.
-${ausbildungsVorgabe(c.headline)}
+${ausbildungsVorgabe(standQuelle(c))}
 ${angebotsHinweis(goal?.code === "B1" ? "finanzen" : "karriere")}
 ${variationBlock(variation)}${variation ? "" : variantenBlock(variante ?? null)}${korrekturBlock(korrektur)}
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;

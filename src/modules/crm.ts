@@ -147,6 +147,8 @@ export function resetHaengendeInvites(): number {
 
 /** Kontakt endgültig aus dem CRM entfernen. Rückgabe: true, wenn gelöscht. */
 export function deleteContact(id: number): boolean {
+  // Profil-Fakten sind personenbezogen und gehören zum Kontakt – sie gehen mit.
+  db.prepare("DELETE FROM contact_profile_facts WHERE contact_id = ?").run(id);
   return db.prepare("DELETE FROM contacts WHERE id = ?").run(id).changes > 0;
 }
 

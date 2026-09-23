@@ -511,3 +511,14 @@ CREATE TABLE IF NOT EXISTS message_variants (
 );
 CREATE INDEX IF NOT EXISTS idx_variants_slot ON message_variants(slot, arm, sent_at);
 CREATE INDEX IF NOT EXISTS idx_variants_contact ON message_variants(contact_id, sent_at);
+
+-- PROFIL-FAKTEN (2026-09-23, modules/profilFakten.ts): beim Vernetzen/Anschreiben mitgelesen,
+-- ohne zusätzlichen Seitenaufruf. Datensparsam, gelöscht mit dem Kontakt.
+CREATE TABLE IF NOT EXISTS contact_profile_facts (
+  contact_id  INTEGER PRIMARY KEY,
+  rolle       TEXT,
+  firma       TEXT,
+  seit        TEXT,
+  ueber       TEXT,
+  captured_at TEXT NOT NULL
+);
