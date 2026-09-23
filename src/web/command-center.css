@@ -320,3 +320,11 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 .ki-panel textarea{flex:1;resize:none;font:inherit;font-size:13.5px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
 @media(max-width:760px){.ki-fab{right:16px;bottom:16px}.ki-panel{right:16px;bottom:16px}}
 .ki-msg p{margin:0 0 6px}.ki-msg p:last-child{margin:0}.ki-msg ul{margin:4px 0 6px;padding-left:18px}.ki-msg li{margin:2px 0}
+
+/* KI-Coach im Prüfer (2026-09-23) */
+.coach-panel{border:1px dashed var(--blue);background:var(--blue-soft);border-radius:12px;padding:12px 14px;margin:10px 0;font-size:13px;display:grid;gap:8px}
+.coach-row{display:grid;grid-template-columns:70px 1fr;gap:8px}
+.coach-row b{color:var(--navy)}
+.coach-vorschlag{background:#fff;border-radius:10px;padding:10px 12px;white-space:pre-wrap;line-height:1.45}
+.coach-warn{margin:0;color:var(--red)}
+.coach-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}

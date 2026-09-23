@@ -482,7 +482,7 @@ function renderReviewer() {
     const reviewHint = draft.kind === "reaktivierung"
       ? "Zusätzlicher Kontakt – wird nur nach deiner Genehmigung gesendet."
       : draft.approach_key ? `Ansatz: ${draft.approach_key.replaceAll("_", " ")}` : draft.intent || "bereit zur Prüfung";
-    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">${label}</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>${esc(reviewHint)}</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}${contextEvidenceCard(draft)}<textarea data-review-field="text">${esc(draft.draft)}</textarea><div data-review-panel="reject" class="reject-feedback hidden"><span class="eyebrow">Was soll sich ändern?</span><div class="feedback-options"><button data-feedback="different_approach">Komplett anderer Ansatz</button><button data-feedback="artificial">Klingt künstlich</button><button data-feedback="too_personal">Zu persönlich</button><button data-feedback="too_salesy">Zu verkäuferisch</button></div><div class="custom-feedback"><input data-review-field="feedback" placeholder="Oder beschreibe kurz deine gewünschte Richtung…"/><button data-review-action="rewrite">Neu schreiben</button></div></div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button><button data-review-action="reject">Ablehnen</button><button data-review-action="approve" class="primary">Genehmigen</button></div></div></div>`;
+    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">${label}</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>${esc(reviewHint)}</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}${contextEvidenceCard(draft)}<textarea data-review-field="text">${esc(draft.draft)}</textarea><div data-review-panel="reject" class="reject-feedback hidden"><span class="eyebrow">Was soll sich ändern?</span><div class="feedback-options"><button data-feedback="different_approach">Komplett anderer Ansatz</button><button data-feedback="artificial">Klingt künstlich</button><button data-feedback="too_personal">Zu persönlich</button><button data-feedback="too_salesy">Zu verkäuferisch</button></div><div class="custom-feedback"><input data-review-field="feedback" placeholder="Oder beschreibe kurz deine gewünschte Richtung…"/><button data-review-action="rewrite">Neu schreiben</button></div></div><div data-review-panel="coach" class="coach-panel hidden"></div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button><button data-review-action="coach" title="Ein Vertriebscoach bewertet den Entwurf und schlägt eine bessere Fassung vor (ein Claude-Aufruf)">✨ KI-Coach</button><button data-review-action="reject">Ablehnen</button><button data-review-action="approve" class="primary">Genehmigen</button></div></div></div>`;
     const approve = reviewer.querySelector('[data-review-action="approve"]');
     const reject = reviewer.querySelector('[data-review-action="reject"]');
     const textField = reviewer.querySelector('[data-review-field="text"]');
@@ -496,6 +496,19 @@ function renderReviewer() {
         await post("/api/draft", { id: draft.id, action: "approve", text: textField.value }, 10000);
         toast("Genehmigt – NextLead stellt sicher zu."); await load(); renderReviewer();
       } catch (error) { toast(`Genehmigen fehlgeschlagen: ${error.message}`); renderReviewer(); }
+    };
+    const coach = reviewer.querySelector('[data-review-action="coach"]');
+    const coachPanel = reviewer.querySelector('[data-review-panel="coach"]');
+    coach.onclick = async () => {
+      coach.disabled = true; coach.textContent = "Coach liest …";
+      coachPanel.classList.remove("hidden"); coachPanel.innerHTML = `<p class="muted">Der Coach schaut sich den Entwurf an …</p>`;
+      try {
+        const r = await post("/api/draft/coach", { id: draft.id }, 90000);
+        const warn = r.pruefung && !r.pruefung.ok ? `<p class="coach-warn">Achtung, der Vorschlag besteht die Prüfung nicht: ${esc(r.pruefung.gruende.join(", "))}</p>` : "";
+        coachPanel.innerHTML = `<div class="coach-row"><b>Stark</b><span>${esc(r.staerke)}</span></div><div class="coach-row"><b>Ändern</b><span>${esc(r.aendern)}</span></div><div class="coach-vorschlag">${esc(r.vorschlag)}</div>${warn}<div class="coach-actions"><button data-coach-take class="primary">Vorschlag übernehmen</button><span class="muted">landet im Textfeld, genehmigen musst du selbst</span></div>`;
+        coachPanel.querySelector("[data-coach-take]").onclick = () => { textField.value = r.vorschlag; textField.focus(); toast("Vorschlag übernommen. Prüfen und genehmigen."); };
+      } catch (error) { coachPanel.innerHTML = `<p class="coach-warn">${esc(error.message)}</p>`; }
+      finally { coach.disabled = false; coach.textContent = "✨ KI-Coach"; }
     };
     reject.onclick = () => { rejectPanel.classList.toggle("hidden"); rejectPanel.scrollIntoView({ behavior: "smooth", block: "nearest" }); };
     const rejectWith = async (reason, instruction = "") => {
