@@ -21,6 +21,7 @@ export interface AgentDeps {
   analyzeLlm: LlmFn;               // günstiger Kanal (Gemini)
   replyLlm: LlmFn;                 // starker Kanal (Claude)
   persona: string;                 // promptKontext()
+  angebot?: string;                // angebotsWahl() – welches Angebot zu welchem Signal passt
   maxRegenerierungen?: number;     // Default 2
 }
 
@@ -75,7 +76,7 @@ export async function handleIncomingMessage(conv: Conversation, verlauf: Nachric
   let text = "", gruende: string[] = [];
   for (let versuch = 0; versuch <= maxTry; versuch++) {
     const roh = await generateReply({
-      persona: deps.persona, stage, profile, memory, letzteNachricht, teilnehmer: conv.teilnehmer,
+      persona: deps.persona, angebot: deps.angebot, stage, profile, memory, letzteNachricht, teilnehmer: conv.teilnehmer,
       triggerHinweise: versuch === 0 ? hinweise : [...hinweise, `Deine letzte Antwort war unpassend (${gruende.join("; ")}). Schreib sie besser, kurz und menschlich.`],
     }, deps.replyLlm);
     text = humanize(roh);

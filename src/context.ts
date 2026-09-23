@@ -5,7 +5,7 @@
  * jeder das Tool lokal mit seinem eigenen Profil nutzen. Hier lebt nur noch die LOGIK, die
  * aus dem Profil den Prompt-Block baut (promptKontext) und Texte säubert (saubern).
  */
-import { profil } from "./profil.js";
+import { profil, getProfil } from "./profil.js";
 
 /** Wer die Person ist (aus dem Profil). */
 export const PERSONA = profil.persona;
@@ -64,19 +64,23 @@ export function saubern(text: string): string {
     .trim();
 }
 
-/** Baut den gemeinsamen Kontext-Block für Prompts. Der Name kommt aus dem Profil. */
+/** Baut den gemeinsamen Kontext-Block für Prompts. Der Name kommt aus dem Profil.
+ *  Liest das Profil LIVE (`getProfil`), damit ein im Cockpit gespeichertes Angebot ohne
+ *  Engine-Neustart wirkt. Bei unverändertem Profil ist die Ausgabe identisch zu vorher. */
 export function promptKontext(): string {
-  const name = profil.name;
-  const regeln = STIL_REGELN.map((r) => `- ${r}`).join("\n");
-  const beispiele = BEISPIEL_NACHRICHTEN.length
-    ? `\nSo klingt ${name} (Beispiele, Stil nachahmen – NICHT Inhalt kopieren):\n${BEISPIEL_NACHRICHTEN.map((b, i) => `Beispiel ${i + 1}: ${b}`).join("\n")}\n`
+  const p = getProfil();
+  const name = p.name;
+  const regeln = p.stilRegeln.map((r) => `- ${r}`).join("\n");
+  const beispiele = p.beispielNachrichten.length
+    ? `\nSo klingt ${name} (Beispiele, Stil nachahmen – NICHT Inhalt kopieren):\n${p.beispielNachrichten.map((b, i) => `Beispiel ${i + 1}: ${b}`).join("\n")}\n`
     : "";
-  const angebotBlock = ANGEBOT
-    ? `\nDein Angebot (Mehrwert-Türöffner – NUR anbieten, wenn ein echter Bedarf sichtbar ist, z.B. Jobsuche/Orientierung; nie kalt reinpitchen):\n${ANGEBOT}\n`
+  const angebot = (p.angebot ?? "").trim();
+  const angebotBlock = angebot
+    ? `\nDein Angebot (Mehrwert-Türöffner – NUR anbieten, wenn ein echter Bedarf sichtbar ist, z.B. Jobsuche/Orientierung; nie kalt reinpitchen):\n${angebot}\n`
     : "";
-  return `Über ${name}: ${PERSONA}
-Ziel der Nachricht: ${ZIEL}
-${TABUS}
+  return `Über ${name}: ${p.persona}
+Ziel der Nachricht: ${p.ziel}
+${p.tabus}
 ${angebotBlock}Stil-Regeln:
 ${regeln}
 ${beispiele}`;

@@ -39,7 +39,9 @@ Regeln:
 - WICHTIG für die Angebots-Erkennung: Setze careerInterest HOCH (0.7+) und "karriere_interesse",
   wenn die Person Begeisterung für ihren Weg/Beruf zeigt, sich neu orientiert, eine Jobsuche
   aufmacht, über Perspektive/Führung/Weiterkommen spricht ODER klar sagt, was ihr Spaß macht /
-  wofür sie brennt. Das sind die Momente, in denen ein Mehrwert-Angebot (Potenzialanalyse) passt.
+  wofür sie brennt. Das sind die Momente, in denen ein Mehrwert-Angebot (z. B. Potenzialanalyse) passt.
+- Setze "investment_interesse" und moneyInterest HOCH, wenn die Person konkrete Geld-/Finanzfragen
+  stellt (Konto, Sparen, Aktien, Absicherung, Finanzierung). Das ist ein starkes Signal für ein Gespräch.
 - "positives_signal" bei erkennbarer Öffnung/Zustimmung/Wärme (auch ohne konkrete Zusage).`;
 }
 
@@ -54,6 +56,8 @@ export interface ReplyPromptInput {
   teilnehmer: string;
   /** Zusätzliche Verhaltens-Hinweise (z.B. aus der Trigger Engine). Optional. */
   triggerHinweise?: string[];
+  /** „Welches Angebot?“-Block (modules/angebot.ts angebotsWahl). Wirkt nur in den Angebots-Phasen. */
+  angebot?: string;
 }
 
 /** Deterministische Stil-Hinweise aus dem Profil (nur wo es ein Signal gibt). Seed der Trigger Engine. */
@@ -78,6 +82,9 @@ export function interessenFokus(p: PsychProfile): string[] {
   return f;
 }
 
+/** Phasen, in denen das Angebot konkret werden darf. Davor wäre es ein Kaltpitch. */
+const ANGEBOTS_PHASEN: Stage[] = ["bedarf", "validierung", "call_angebot", "nummer", "termin"];
+
 const stateBlock = (stage: Stage): string => {
   const d = STAGE_DEF[stage];
   return `# Aktuelle Gesprächsphase: ${stage}
@@ -94,7 +101,7 @@ const STILREGELN = `# Stil (Pflicht)
   NICHT weiter Fragen stapeln – spiegle kurz und führe zum konkreten nächsten Schritt (dein Angebot).
 - keine Marketing-/Verkaufsbegriffe, keine Aufzählungen, keine Bindestrich-Floskeln
 - kein Verknappungs-Druck ("nur noch X Plätze"), kein Skript-Aufsagen – eigene Worte
-- gelegentlich (nicht immer) mal ein Emoji, sparsam und passend
+- KEINE Emojis (wie in allen anderen Nachrichten des Nutzers)
 - klingt wie ein echter Mensch, nicht wie ChatGPT`;
 
 /** Setzt den vollständigen Antwort-Prompt aus den Blöcken zusammen. */
@@ -112,9 +119,10 @@ export function buildReplyPrompt(inp: ReplyPromptInput): string {
     warm && ["bedarf", "vertrauen", "validierung", "call_angebot"].includes(inp.stage)
       ? "\n# Jetzt: Brücke zum Angebot bauen\nDie Person zeigt klares Interesse/Passung. Steuere in DIESER oder der nächsten Nachricht sanft Richtung deines konkreten Angebots (siehe Abschnitt Dein Angebot oben): erst der ehrliche Bezug (etwa: genau dafür hab ich was, das dir wirklich weiterhilft) und dein Warum – noch KEIN Druck, kein Verkaufston. Ein Schritt nach dem anderen."
       : "";
+  const angebot = inp.angebot && ANGEBOTS_PHASEN.includes(inp.stage) ? `\n\n${inp.angebot}` : "";
   return `${inp.persona}
 
-${stateBlock(inp.stage)}
+${stateBlock(inp.stage)}${angebot}
 
 # Was du über die Person weißt
 ${mem || "Noch wenig – finde behutsam mehr heraus."}

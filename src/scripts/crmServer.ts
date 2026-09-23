@@ -35,6 +35,7 @@ import { backfillContactTimeline } from "../modules/contactTimeline.js";
 import { backfillCampaignWorkflows, retryCampaignTarget, retryFailedCampaignTargets } from "../modules/campaignWorkflow.js";
 import { backfillConversationMemories, backfillDraftContexts } from "../modules/conversationMemory.js";
 import { config } from "../config.js";
+import { angebotFuerCockpit, speichereAngebot } from "../modules/angebot.js";
 import { bericht, type BerichtArt } from "../modules/berichte.js";
 import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
 
@@ -1004,6 +1005,26 @@ const server = createServer((req, res) => {
 
   // NOTIZEN: alles, was nach einem Telefonat festgehalten werden muss. Landet mit Zeitstempel
   // in der Kontaktspur, damit später nachvollziehbar ist, WANN es notiert wurde.
+  // ANGEBOT (Lead Magnets, Belege, Buchungslink). Schreibt nur diese Felder ins Profil.
+  if (url.pathname === "/api/angebot" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(JSON.stringify(angebotFuerCockpit()));
+    return;
+  }
+  if (url.pathname === "/api/angebot" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const gespeichert = speichereAngebot(JSON.parse(body || "{}"));
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...gespeichert }));
+      } catch (e) {
+        // `reason` liest der Cockpit-post() bei HTTP 400 – sonst stünde dort nur „HTTP 400“.
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
   if (url.pathname === "/api/note" && req.method === "POST") {
     let body = "";
     req.on("data", (c) => (body += c));

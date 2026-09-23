@@ -242,3 +242,20 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 .queue-next li b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .queue-next li span{color:var(--muted);flex:none}
 @media(max-width:760px){.queue-lanes{grid-template-columns:1fr}.queue-lane+.queue-lane{border-left:0;border-top:1px solid var(--line)}}
+
+/* Dein Angebot (2026-09-23) */
+.offer-list{display:grid;gap:12px;margin:14px 0}
+.offer-item{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--bg)}
+.offer-item.off{opacity:.6}
+.offer-item header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.offer-item header .danger-ghost{margin-left:auto}
+.offer-toggle{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:700}
+.offer-item select{font:inherit;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.offer-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.offer-fields label{display:grid;gap:3px;font-size:11px;color:var(--muted)}
+.offer-fields input{font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+.offer-suggestions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.offer-suggestions .lane-label{margin:0 6px 0 0}
+.offer-extra{display:grid;gap:10px}
+.offer-extra textarea,.offer-extra input{width:100%;box-sizing:border-box}
+@media(max-width:760px){.offer-fields{grid-template-columns:1fr}}

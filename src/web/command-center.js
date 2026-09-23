@@ -1298,7 +1298,63 @@ $("wf-reset").onclick = () => {
   ladeWirkung();
 };
 
+
+/**
+ * DEIN ANGEBOT (2026-09-23): eigener Ladepfad wie `ladeWirkung`, nicht über /api/state – das
+ * Formular darf beim Auto-Refresh nicht überschrieben werden, während man tippt. Deshalb wird
+ * es nur beim ersten Anzeigen der Einstellungen und nach dem Speichern gefüllt.
+ */
+let angebot = null;
+const OFFER_FELDER = [["titel", "Titel", "z. B. kostenlose Potenzialanalyse"], ["nutzen", "Was die Person davon hat", ""], ["ablauf", "Ablauf / Dauer", ""], ["cta", "Die leichte Frage", "Soll ich dir mal zeigen, wie das abläuft?"], ["naechsterSchritt", "Was nach einem Ja passiert", ""], ["link", "Link (nur für Unterlagen)", "https://…"]];
+function offerZeile(m, i) {
+  return `<article class="offer-item ${m.aktiv === false ? "off" : ""}" data-offer="${i}">
+    <header><label class="offer-toggle"><input type="checkbox" data-f="aktiv" ${m.aktiv === false ? "" : "checked"}/> aktiv</label>
+      <select data-f="route"><option value="karriere" ${m.route !== "finanzen" ? "selected" : ""}>bei Karriere-/Orientierungsfragen</option><option value="finanzen" ${m.route === "finanzen" ? "selected" : ""}>bei Geldfragen</option></select>
+      <select data-f="art"><option value="gespraech" ${m.art !== "unterlage" ? "selected" : ""}>Gespräch</option><option value="unterlage" ${m.art === "unterlage" ? "selected" : ""}>Unterlage mit Link</option></select>
+      <button class="danger-ghost" data-offer-remove="${i}">Entfernen</button></header>
+    <div class="offer-fields">${OFFER_FELDER.map(([f, label, ph]) => `<label><span>${label}</span><input data-f="${f}" value="${esc(m[f] || "")}" placeholder="${esc(ph)}"/></label>`).join("")}</div>
+    <input type="hidden" data-f="key" value="${esc(m.key || "")}"/>
+  </article>`;
+}
+function leseOfferFormular() {
+  return [...document.querySelectorAll("[data-offer]")].map((el) => {
+    const m = {};
+    el.querySelectorAll("[data-f]").forEach((f) => { m[f.dataset.f] = f.type === "checkbox" ? f.checked : f.value; });
+    return m;
+  });
+}
+function renderAngebot() {
+  if (!angebot) return;
+  $("offer-list").innerHTML = angebot.leadMagnete.map(offerZeile).join("") || `<p class="muted">Noch kein strukturiertes Angebot. Übernimm unten einen Vorschlag und pass ihn an.</p>`;
+  $("offer-suggestions").innerHTML = angebot.vorschlaege.length
+    ? `<span class="lane-label">Vorschläge übernehmen</span>${angebot.vorschlaege.map((v, i) => `<button data-offer-add="${i}">+ ${esc(v.titel)}</button>`).join("")}` : "";
+  $("offer-beweise").value = (angebot.beweise || []).join("\n");
+  $("offer-link").value = angebot.buchungslink || "";
+  document.querySelectorAll("[data-offer-remove]").forEach((b) => b.onclick = () => {
+    angebot.leadMagnete = leseOfferFormular(); angebot.leadMagnete.splice(Number(b.dataset.offerRemove), 1); renderAngebot();
+  });
+  document.querySelectorAll("[data-offer-add]").forEach((b) => b.onclick = () => {
+    angebot.leadMagnete = leseOfferFormular();
+    const [v] = angebot.vorschlaege.splice(Number(b.dataset.offerAdd), 1);
+    angebot.leadMagnete.push({ ...v, aktiv: true }); renderAngebot();
+  });
+}
+async function ladeAngebot() {
+  try { const r = await fetch("/api/angebot", { cache: "no-store" }); angebot = await r.json(); renderAngebot(); }
+  catch (error) { $("offer-note").textContent = `Angebot nicht geladen: ${error.message}`; }
+}
+$("offer-save").onclick = async () => {
+  const button = $("offer-save"); button.disabled = true; $("offer-note").textContent = "";
+  try {
+    const r = await post("/api/angebot", { leadMagnete: leseOfferFormular(), beweise: $("offer-beweise").value, buchungslink: $("offer-link").value.trim() });
+    angebot = { ...angebot, leadMagnete: r.leadMagnete, beweise: r.beweise, buchungslink: r.buchungslink };
+    renderAngebot(); toast("Angebot gespeichert. Der Bot nutzt es ab der nächsten Nachricht.");
+  } catch (error) { $("offer-note").textContent = error.message; }
+  finally { button.disabled = false; }
+};
+
 function renderSettings() {
+  if (!angebot) ladeAngebot();
   const alive = !!state.engine?.alive; $("engine-title").textContent = alive ? "Engine arbeitet" : "Engine ist aus"; $("engine-copy").textContent = alive ? "Vernetzung, Kampagnen und freigegebene Nachrichten laufen in einer gemeinsamen Prioritätsqueue." : "Ohne Engine werden keine Hintergrundaufgaben ausgeführt."; $("engine-toggle").textContent = alive ? "Engine stoppen" : "Engine starten";
   const level = automationLevel(); document.querySelectorAll("[data-level]").forEach((button) => button.classList.toggle("active", button.dataset.level === level));
   $("automation-copy").textContent = { vorschlaege: "NextLead vernetzt automatisch. Jede Nachricht bleibt ein Entwurf.", halb: "Azubi-Erstnachrichten werden automatisch gesendet, Antworten bleiben zur Prüfung.", agent_test: "Der Gesprächsagent denkt mit, sendet aber nicht selbst.", agent_live: "Der Gesprächsagent führt Routinegespräche selbst und übergibt wichtige Fälle." }[level] + " Bestehende Netzwerk-Kontakte brauchen in jeder Stufe deine Freigabe.";

@@ -384,7 +384,7 @@ Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
  * Für sie ist diese Nachricht der einzige Berührungspunkt – sie muss den Auftrag kennen, sonst
  * bleiben diese Kampagnenkontakte für immer unbearbeitet liegen.
  */
-export async function reaktivierungMessage(c: Contact, goal?: ConversationGoal | null, kampagnenFakten?: string): Promise<string> {
+export async function reaktivierungMessage(c: Contact, goal?: ConversationGoal | null, kampagnenFakten?: string, variation?: TextVariation): Promise<string> {
   const prompt = `Schreibe eine kurze, natürliche LinkedIn-Nachricht (2-3 Sätze).
 ${promptKontext()}
 ${personZeile(c)}
@@ -399,6 +399,7 @@ Regeln:
 - Echtes Interesse an ihrem Weg zeigen und EINE leichte, offene Frage stellen.
 - Kein Sie-Siezen, wenn der Stil sonst duzt. Kein Floskel-Deutsch.
 ${ausbildungsVorgabe(c.headline)}
+${variationBlock(variation)}
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
   return mitAusbildungsCheck(c, prompt);
 }

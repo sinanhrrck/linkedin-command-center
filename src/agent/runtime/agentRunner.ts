@@ -23,6 +23,7 @@ import { GovernorBlocked } from "../../core/safetyGovernor.js";
 import { SqliteConversationRepository } from "../infra/sqliteConversationRepository.js";
 import { handleIncomingMessage } from "../application/handleIncomingMessage.js";
 import { neueConversation } from "../domain/conversation.js";
+import { angebotsWahl } from "../../modules/angebot.js";
 
 /**
  * KI-Kanäle für den Agent. WICHTIG (Fix 2026-07-24): BEIDE Schritte (Analyse UND Antwort) laufen
@@ -96,7 +97,7 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
     // ---- NEUE Nachricht → einmal durch die Pipeline (kostet KI) ----
     let e;
     try {
-      e = await handleIncomingMessage(conv, t.messages, { persona, analyzeLlm, replyLlm, maxRegenerierungen: 1 });
+      e = await handleIncomingMessage(conv, t.messages, { persona, angebot: angebotsWahl(), analyzeLlm, replyLlm, maxRegenerierungen: 1 });
     } catch (err) {
       // Pipeline-Fehler nicht in einer Endlosschleife wiederholen: abhaken, weiter.
       console.error("[agent] Pipeline-Fehler:", (err as Error)?.message?.slice(0, 90));

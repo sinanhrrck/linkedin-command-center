@@ -2,7 +2,7 @@ import { db, getMode } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { fetchThreads, type ThreadContext } from "./inbox.js";
 import { sendThreadReply, sendMessage, sendComment, VersandNichtVersucht } from "./outreach.js";
-import { firstMessage, followupMessage , converseStep, pitchIdeen, messageAusIdee } from "./personalize.js";
+import { firstMessage, followupMessage, reaktivierungMessage, converseStep, pitchIdeen, messageAusIdee } from "./personalize.js";
 import { GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { markInboundReply, messagedAwaitingFollowup, type Contact } from "./crm.js";
@@ -116,6 +116,19 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
  * Nach der 2. Stufe wird NIE wieder nachgefasst (siehe followupMessage) – wer zweimal nicht
  * antwortet, will nicht. Das schützt Sinans Ruf und das Konto (Report-Risiko).
  */
+/**
+ * Welche Nachfass-Stufe ist für diesen Kontakt dran? Zählt die bereits GESENDETEN Follow-ups
+ * (optional nur die vor einem bestimmten Entwurf). Gemeinsame Quelle für Entwurf, Voll-Automatik
+ * und Neuschreiben – vorher rechnete jeder Pfad anders: die Voll-Automatik schickte die zweite
+ * Nachfassung als Stufe 1, und ein abgelehnter Stufe-2-Entwurf kam als Stufe 1 zurück.
+ */
+export function followupStufe(threadUrl: string, vorEntwurfId?: number): 1 | 2 {
+  const n = (db.prepare(
+    `SELECT COUNT(*) n FROM drafts WHERE thread_url=? AND kind='followup' AND status='sent'${vorEntwurfId ? " AND id<?" : ""}`,
+  ).get(...(vorEntwurfId ? [threadUrl, vorEntwurfId] : [threadUrl])) as { n: number }).n;
+  return n === 0 ? 1 : 2;
+}
+
 export async function createFollowupDraft(c: Contact): Promise<boolean> {
   if (!proactiveDecisionForTarget(c.profile_url, c.full_name ?? "", "followup").ok) return false;
   const bisher = (
@@ -191,7 +204,7 @@ export async function generateFollowups(days = 4, limit = 5): Promise<number> {
   let done = 0;
   for (const c of candidates) {
     if (auto) {
-      const text = await followupMessage(c).catch(() => "");
+      const text = await followupMessage(c, followupStufe(c.profile_url)).catch(() => "");
       if (!text) continue;
       try {
         await sendMessage(c.profile_url, text);
@@ -274,8 +287,8 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
     }
     console.error("[first] Sendefehler → Entwurf:", (e as Error)?.message);
     const info = db
-      .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft) VALUES('first',?,?,?,?)")
-      .run(c.profile_url, c.full_name ?? null, "", text);
+      .prepare("INSERT INTO drafts(contact_id, kind, thread_url, participant, incoming, draft) VALUES(?,'first',?,?,?,?)")
+      .run(c.id, c.profile_url, c.full_name ?? null, "", text);
     events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
   }
 }
@@ -500,12 +513,14 @@ async function regenerateText(d: Draft, instruction: string, rejectedTexts: stri
   const avoid = rejected.length
     ? `\n\nBEREITS ABGELEHNT. Übernimm weder Gesprächsidee, Satzbau noch Frage:\n${rejected.map((text, i) => `${i + 1}. ${text}`).join("\n")}`
     : "";
-  if (d.kind === "first" || d.kind === "followup") {
+  if (d.kind === "first" || d.kind === "followup" || d.kind === "reaktivierung") {
     // Für den richtigen Winkel den Kontakt holen; sonst generischer Fallback.
+    // Reaktivierung lief vorher in den Thread-Antwort-Prompt unten – ohne Kontakt, ohne Anlass.
     const c = db.prepare("SELECT * FROM contacts WHERE profile_url=?").get(d.thread_url) as Contact | undefined;
-    if (c) return d.kind === "first"
-      ? firstMessage(c, { instruction, rejectedTexts: rejected }, auftragMitFakten(c.id).goal, auftragMitFakten(c.id).fakten)
-      : followupMessage(c, 1, { instruction, rejectedTexts: rejected });
+    const variation = { instruction, rejectedTexts: rejected };
+    if (c && d.kind === "first") return firstMessage(c, variation, auftragMitFakten(c.id).goal, auftragMitFakten(c.id).fakten);
+    if (c && d.kind === "followup") return followupMessage(c, followupStufe(d.thread_url, d.id), variation);
+    if (c) return reaktivierungMessage(c, auftragMitFakten(c.id).goal, auftragMitFakten(c.id).fakten, variation);
   }
   if (d.kind === "comment") {
     return saubern(await generateText(

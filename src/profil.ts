@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { config } from "./config.js";
 import { join } from "node:path";
 
@@ -16,6 +16,32 @@ import { join } from "node:path";
  * Der Setup-Assistent (später) schreibt profil.local.json. Bis dahin kann man die Datei von
  * Hand anlegen (profil.example.json kopieren und ausfüllen).
  */
+/**
+ * LEAD MAGNET (2026-09-23): ein konkretes, kostenloses Angebot, zu dem man leicht Ja sagen kann
+ * (Hormozi: erst Wert geben, dann fragen). Bewusst STRUKTURIERT statt Fließtext, damit Follow-ups,
+ * Agent und Varianten-Test gezielt EINES davon einsetzen können.
+ * `route` = zu welchem Signal es passt: "karriere" (Orientierung, Jobsuche, Weg nach der
+ * Ausbildung) oder "finanzen" (Geld-, Spar-, Absicherungsfragen). Nichts davon ist im Code
+ * hart verdrahtet – angeboten wird NUR, was hier steht und `aktiv` ist.
+ */
+export type LeadMagnet = {
+  key: string;
+  titel: string;
+  route: "karriere" | "finanzen";
+  /** Was die Person davon hat – in ihren Worten, nicht in Produktsprache. */
+  nutzen: string;
+  /** Wie es abläuft (Dauer, online/Telefon, was danach passiert). */
+  ablauf: string;
+  /** Die leichte Frage, mit der es angeboten wird ("Soll ich dir zeigen, wie das abläuft?"). */
+  cta: string;
+  /** Was nach einem Ja passiert (für den Agent und die Übergabe an den Menschen). */
+  naechsterSchritt: string;
+  /** Nur für Unterlagen (PDF, Rechner). Ohne Link wird ein solches Angebot nie gemacht. */
+  link?: string;
+  art?: "gespraech" | "unterlage";
+  aktiv?: boolean;
+};
+
 export type Profil = {
   /** Vorname, wird in Prompts als Label genutzt ("Über <name>", "So klingt <name>"). */
   name: string;
@@ -27,6 +53,12 @@ export type Profil = {
    *  Der Agent bietet es an, sobald ein echter Bedarf sichtbar wird (z.B. Jobsuche). Optional –
    *  leer = der Agent bleibt rein beim Kennenlernen. */
   angebot?: string;
+  /** Strukturierte Lead Magnets (siehe Typ oben). Leer = nur der Fließtext `angebot` wirkt. */
+  leadMagnete?: LeadMagnet[];
+  /** Echte Belege: kurze eigene Geschichten/Ergebnisse. Die KI darf NUR diese verwenden. */
+  beweise?: string[];
+  /** Optionaler Buchungslink (z. B. Calendly). Ohne Link schlägt der Bot zwei Termine vor. */
+  buchungslink?: string;
   /** Harte Grenzen, die kein Gesprächsziel aushebeln darf (Vertriebs-Timing, Tabus). */
   tabus: string;
   /** Konkrete Stil-Regeln, eine pro Eintrag. */
@@ -97,4 +129,18 @@ function ladeProfil(): Profil {
   return DEFAULT_PROFIL;
 }
 
+/** Beim Start geladen. Für Texte bitte `getProfil()` nutzen – das sieht Änderungen sofort. */
 export const profil = ladeProfil();
+
+/**
+ * Aktuelles Profil, neu geladen, sobald sich die Datei ändert. Grund: Dashboard und Engine sind
+ * getrennte Prozesse. Ein im Cockpit gespeichertes Angebot wirkte sonst erst nach einem
+ * Engine-Neustart – der Nutzer hätte gespeichert und nichts gesehen.
+ */
+let cache: { mtime: number; profil: Profil } | null = null;
+export function getProfil(): Profil {
+  let mtime = -1;
+  try { mtime = existsSync(config.paths.profilPath) ? statSync(config.paths.profilPath).mtimeMs : -1; } catch { /* Datei weg → Default */ }
+  if (!cache || cache.mtime !== mtime) cache = { mtime, profil: mtime === -1 && !cache ? profil : ladeProfil() };
+  return cache.profil;
+}

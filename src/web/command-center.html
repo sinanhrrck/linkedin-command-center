@@ -199,6 +199,17 @@
           <div class="acceptance-warning-copy"><span class="eyebrow">Annahmequote niedrig</span><div><b id="acceptance-warning-rate">–</b><span id="acceptance-warning-threshold">Warnschwelle –</span></div><h3>Weniger Vernetzungsanfragen senden?</h3><p id="acceptance-warning-effect"></p></div>
           <button id="acceptance-protection-toggle" class="switch-control" type="button" role="switch" aria-checked="true"><span class="switch-track"><i></i></span><span><b>Weniger Anfragen senden</b><small id="acceptance-protection-state">Aktiv</small></span></button>
         </section>
+        <section class="setting-card wide-card offer-card" id="offer-card">
+          <div class="section-head"><div><span class="eyebrow">Dein Angebot</span><h3>Wozu die Leute leicht Ja sagen</h3></div><button id="offer-save" class="primary">Angebot speichern</button></div>
+          <p>Kostenlose Angebote, die der Bot im Gespräch passend zum Signal anbietet: Karriere-Fragen bekommen das Karriere-Angebot, Geldfragen das Gespräch dazu. Angeboten wird nur, was hier aktiv ist.</p>
+          <div id="offer-list" class="offer-list"></div>
+          <div id="offer-suggestions" class="offer-suggestions"></div>
+          <div class="offer-extra">
+            <label class="report-field"><span>Echte Belege (eine Zeile je Beleg, z. B. eine kurze eigene Geschichte). Der Bot verwendet nur diese.</span><textarea id="offer-beweise" rows="3" placeholder="Ich hab selbst als Azubi bei der Bank angefangen und nach der Ausbildung …"></textarea></label>
+            <label class="report-field"><span>Buchungslink (optional, z. B. Calendly). Ohne Link schlägt der Bot zwei feste Termine vor.</span><input id="offer-link" placeholder="https://…" /></label>
+          </div>
+          <p id="offer-note" class="form-note" role="status"></p>
+        </section>
         <section class="setting-card"><span class="eyebrow">Engine</span><h3 id="engine-title">Lokale Engine</h3><p id="engine-copy"></p><div class="button-row"><button id="engine-toggle" class="primary"></button><button id="backup-now">Jetzt sichern</button></div></section>
         <section class="setting-card"><span class="eyebrow">Automatik</span><h3>Wer entscheidet?</h3><div id="automation-levels" class="segmented"><button data-level="vorschlaege">Ich prüfe alles</button><button data-level="halb">Erstkontakt automatisch</button><button data-level="agent_test">Gespräche testen</button><button data-level="agent_live">Gespräche automatisch</button></div><p id="automation-copy"></p></section>
         <section class="setting-card"><span class="eyebrow">Schutz</span><h3>Globale Grenzen</h3><div id="safety-summary"></div></section>
