@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { config } from "../config.js";
 import { getProfil, type LeadMagnet, type Profil } from "../profil.js";
+import { generateText } from "../core/textLlm.js";
 
 /**
  * ANGEBOTS-SCHICHT (2026-09-23, Sinan: „vertrieblicher, stell dir vor du bist Alex Hormozi“).
@@ -203,4 +204,99 @@ export function angebotFuerCockpit(p: Profil = getProfil()) {
     vorschlaege: LEAD_MAGNET_VORSCHLAEGE.filter((m) => !vorhanden.has(m.key)),
     fliesstextAngebot: Boolean((p.angebot || "").trim()),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// KI-HILFE FÜRS ANGEBOT (2026-09-23, Sinan: „mehr KI, z. B. Vorschläge zum Angebot“)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Hormozis Wertformel, als Denkanleitung für die KI: Wert = (Traumergebnis × Wahrscheinlichkeit)
+ * ÷ (Zeit bis zum Ergebnis × Aufwand). Ein kostenloses Angebot ist dann stark, wenn das Ergebnis
+ * konkret und begehrt ist und die Hürde (Zeit, Aufwand, Risiko) fast null.
+ */
+const WERTFORMEL = `Denk wie Alex Hormozi (Wertformel): Wert = (Traumergebnis × Wahrscheinlichkeit, dass es klappt) ÷ (Zeit bis zum Ergebnis × Aufwand).
+Ein starkes kostenloses Angebot hat ein KONKRETES, begehrtes Ergebnis in den Worten der Zielgruppe, wirkt glaubwürdig, liefert schnell etwas Greifbares und kostet die Person fast keinen Aufwand.`;
+
+/** Wörter, die die Ausgangsprüfung ohnehin ablehnt – die KI soll sie gar nicht erst verwenden. */
+const VERKAUFS_TABU = ["Mehrwert", "exklusiv", "einmalige Chance", "garantiert", "profitieren", "unverbindliches Beratungsgespräch", "Potenzial ausschöpfen"];
+
+const KI_REGELN = `Harte Regeln:
+- Kostenlos und von EINER Person realistisch lieferbar (Gespräch, kurze Analyse, Checkliste). Nichts versprechen, was nicht im Profil steht.
+- Keine Renditen, keine Gehalts- oder Verdienstzahlen, keine Garantien, keine Verknappung.
+- Duzen, gesprochene Sprache, keine Emojis, keine Gedankenstriche als Satztrenner.
+- Verbotene Wörter: ${VERKAUFS_TABU.join(", ")}.
+- "cta" ist EINE leichte Frage, die man mit Ja beantworten kann, höchstens 12 Wörter.
+- "nutzen" in den Worten der Person, höchstens 25 Wörter. "ablauf" höchstens 15 Wörter.`;
+
+function profilKurz(p: Profil): string {
+  return `ÜBER DICH: ${p.persona}
+ZIEL DEINER NACHRICHTEN: ${p.ziel}
+${p.angebot?.trim() ? `DEIN BISHERIGES ANGEBOT (Fließtext): ${p.angebot.trim()}` : ""}
+ZIELGRUPPE (Winkel): ${p.winkel.azubi}
+${(p.beweise || []).length ? `ECHTE BELEGE: ${(p.beweise || []).join(" | ")}` : ""}`;
+}
+
+/** Holt das erste JSON-Objekt/-Array aus einer KI-Antwort (Modelle umrahmen gern mit Text). */
+function jsonAus<T>(roh: string, art: "[" | "{"): T {
+  const start = roh.indexOf(art);
+  const ende = roh.lastIndexOf(art === "[" ? "]" : "}");
+  if (start < 0 || ende <= start) throw new Error("Die KI hat kein verwertbares Ergebnis geliefert. Bitte nochmal versuchen.");
+  return JSON.parse(roh.slice(start, ende + 1)) as T;
+}
+
+/** Nur die Felder, die das Formular kennt; alles andere fällt weg. Wird NICHT gespeichert. */
+function alsVorschlag(x: Record<string, unknown>, i: number): LeadMagnet {
+  const t = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").replace(/\s[–—-]\s/g, ", ").trim().slice(0, max);
+  const titel = t(x.titel, 120) || `KI-Vorschlag ${i + 1}`;
+  return {
+    key: `ki-${titel.toLowerCase().replace(/[^a-z0-9äöüß]+/g, "-").replace(/^-|-$/g, "").slice(0, 32)}`,
+    titel, route: x.route === "finanzen" ? "finanzen" : "karriere", art: "gespraech",
+    nutzen: t(x.nutzen, 400), ablauf: t(x.ablauf, 240), cta: t(x.cta, 200), naechsterSchritt: t(x.naechsterSchritt, 200),
+    aktiv: false,
+  };
+}
+
+/** Drei neue Lead-Magnet-Vorschläge aus dem Profil. Ein KI-Aufruf, nichts wird gespeichert. */
+export async function kiAngebotsVorschlaege(p: Profil = getProfil()): Promise<LeadMagnet[]> {
+  const vorhanden = (p.leadMagnete || []).map((m) => `- ${m.titel}`).join("\n");
+  const prompt = `Du hilfst ${p.name}, kostenlose Einstiegsangebote (Lead Magnets) für LinkedIn-Gespräche zu entwickeln.
+${profilKurz(p)}
+
+${WERTFORMEL}
+
+Entwickle GENAU 3 unterschiedliche Angebote. Mindestens eines passt zu Karriere-/Orientierungsfragen ("route":"karriere"), mindestens eines zu Geldfragen ("route":"finanzen").
+${vorhanden ? `Diese gibt es schon, schlag etwas ANDERES vor:\n${vorhanden}\n` : ""}
+${KI_REGELN}
+
+Antworte AUSSCHLIESSLICH mit einem JSON-Array aus 3 Objekten:
+[{"titel":"…","route":"karriere|finanzen","nutzen":"…","ablauf":"…","cta":"…","naechsterSchritt":"…","warum":"ein Satz, warum das nach der Wertformel stark ist"}]`;
+  const liste = jsonAus<Record<string, unknown>[]>(await generateText(prompt), "[");
+  return (Array.isArray(liste) ? liste : []).slice(0, 3).map((x, i) => ({ ...alsVorschlag(x, i), warum: String(x.warum ?? "").slice(0, 240) }) as LeadMagnet & { warum: string });
+}
+
+/** Ein bestehendes Angebot schärfen: Titel, Nutzen, Ablauf, Frage. Route und Schlüssel bleiben. */
+export async function kiAngebotSchaerfen(m: Partial<LeadMagnet>, p: Profil = getProfil()): Promise<LeadMagnet & { warum: string }> {
+  if (!String(m.titel || "").trim()) throw new Error("Erst einen Titel eintragen, dann schärfen.");
+  const prompt = `Du hilfst ${p.name}, ein kostenloses Einstiegsangebot für LinkedIn-Gespräche zu verbessern.
+${profilKurz(p)}
+
+${WERTFORMEL}
+
+DAS ANGEBOT BISHER:
+Titel: ${m.titel}
+Passt bei: ${m.route === "finanzen" ? "Geldfragen" : "Karriere-/Orientierungsfragen"}
+Nutzen: ${m.nutzen || "(leer)"}
+Ablauf: ${m.ablauf || "(leer)"}
+Leichte Frage: ${m.cta || "(leer)"}
+Nach einem Ja: ${m.naechsterSchritt || "(leer)"}
+
+Mach es stärker: Ergebnis konkreter und begehrenswerter, Hürde (Zeit, Aufwand, Risiko) sichtbar kleiner, die Frage noch leichter zu bejahen. Bleib beim selben Angebot, erfinde keine neuen Leistungen.
+${KI_REGELN}
+
+Antworte AUSSCHLIESSLICH mit einem JSON-Objekt:
+{"titel":"…","nutzen":"…","ablauf":"…","cta":"…","naechsterSchritt":"…","warum":"ein Satz, was du verbessert hast"}`;
+  const x = jsonAus<Record<string, unknown>>(await generateText(prompt), "{");
+  const v = alsVorschlag({ ...x, route: m.route }, 0);
+  return { ...v, key: m.key || v.key, route: m.route === "finanzen" ? "finanzen" : "karriere", art: m.art === "unterlage" ? "unterlage" : "gespraech", ...(m.link ? { link: m.link } : {}), aktiv: m.aktiv !== false, warum: String(x.warum ?? "").slice(0, 240) };
 }

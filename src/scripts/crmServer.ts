@@ -35,7 +35,7 @@ import { backfillContactTimeline } from "../modules/contactTimeline.js";
 import { backfillCampaignWorkflows, retryCampaignTarget, retryFailedCampaignTargets } from "../modules/campaignWorkflow.js";
 import { backfillConversationMemories, backfillDraftContexts } from "../modules/conversationMemory.js";
 import { config } from "../config.js";
-import { angebotFuerCockpit, speichereAngebot } from "../modules/angebot.js";
+import { angebotFuerCockpit, speichereAngebot, kiAngebotsVorschlaege, kiAngebotSchaerfen } from "../modules/angebot.js";
 import { followupPlan, speichereFollowupPlan } from "../modules/playbook.js";
 import { approveMany, autoFreigabeStand, speichereAutoFreigabe } from "../modules/freigabe.js";
 import { variantenStatistik } from "../modules/varianten.js";
@@ -1060,6 +1060,22 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // KI-HILFE FÜRS ANGEBOT: Vorschläge bzw. Schärfen. Speichert NICHTS – das Formular übernimmt,
+  // gespeichert wird erst mit „Angebot speichern“.
+  if (url.pathname === "/api/angebot/ki" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      try {
+        const { aktion, magnet } = JSON.parse(body || "{}");
+        const ergebnis = aktion === "schaerfen" ? { magnet: await kiAngebotSchaerfen(magnet || {}) } : { vorschlaege: await kiAngebotsVorschlaege() };
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...ergebnis }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
   // ANGEBOT (Lead Magnets, Belege, Buchungslink). Schreibt nur diese Felder ins Profil.
   if (url.pathname === "/api/angebot" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(JSON.stringify(angebotFuerCockpit()));

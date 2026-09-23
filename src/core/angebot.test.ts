@@ -84,3 +84,32 @@ test("Nachfass-Stufe: die zweite Nachfassung bleibt Stufe 2, auch beim Neuschrei
   assert.equal(followupStufe(url, zweite), 2, "Neuschreiben des zweiten Entwurfs");
   assert.equal(followupStufe(url, erste), 1, "Neuschreiben des ersten Entwurfs");
 });
+
+test("KI-Vorschläge: Antwort mit Rahmentext wird sauber übernommen, nie automatisch aktiv", async () => {
+  const { kiAngebotsVorschlaege, kiAngebotSchaerfen } = await import("../modules/angebot.js");
+  const { setTextGeneratorForTests } = await import("./textLlm.js");
+  const prompts: string[] = [];
+  setTextGeneratorForTests(async (p) => {
+    prompts.push(p);
+    return p.includes("JSON-Array")
+      ? `Hier meine Vorschläge:\n[{"titel":"Gehalts-Check","route":"finanzen","nutzen":"Klarheit - was bleibt","ablauf":"15 Min","cta":"Lust auf einen Check?","naechsterSchritt":"Termin","warum":"schnell"},{"titel":"Karriere-Kompass","route":"karriere","nutzen":"x","ablauf":"y","cta":"z?","naechsterSchritt":"t"},{"titel":"Drei","route":"quatsch","nutzen":"a","ablauf":"b","cta":"c?","naechsterSchritt":"d"}]\nViel Erfolg!`
+      : `{"titel":"Potenzialanalyse in 20 Minuten","nutzen":"Du weißt danach schwarz auf weiß, wo deine Stärken liegen","ablauf":"20 Minuten online","cta":"Soll ich dir den Zugang schicken?","naechsterSchritt":"Code","warum":"Hürde kleiner"}`;
+  });
+  const v = await kiAngebotsVorschlaege(basis);
+  assert.equal(v.length, 3);
+  assert.ok(v.every((m) => m.aktiv === false), "KI-Vorschläge wirken erst nach bewusstem Speichern");
+  assert.equal(v[2].route, "karriere", "unbekannte Route fällt auf karriere zurück");
+  assert.doesNotMatch(v[0].nutzen, / - /, "Gedankenstrich-Satztrenner entfernt");
+  assert.match(prompts[0], /Wertformel/);
+  assert.match(prompts[0], /Mehrwert/, "Tabuwörter werden der KI mitgegeben");
+
+  const s = await kiAngebotSchaerfen({ key: "pa", titel: "Potenzialanalyse", route: "karriere", aktiv: true }, basis);
+  assert.equal(s.key, "pa"); assert.equal(s.route, "karriere"); assert.equal(s.aktiv, true);
+  assert.equal(s.titel, "Potenzialanalyse in 20 Minuten");
+  assert.equal(s.warum, "Hürde kleiner");
+
+  setTextGeneratorForTests(async () => "Tut mir leid, das kann ich nicht.");
+  await assert.rejects(kiAngebotsVorschlaege(basis), /kein verwertbares Ergebnis/);
+  await assert.rejects(kiAngebotSchaerfen({ titel: "" }, basis), /Titel/);
+  setTextGeneratorForTests(null);
+});

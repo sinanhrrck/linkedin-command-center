@@ -1415,7 +1415,9 @@ function offerZeile(m, i) {
     <header><label class="offer-toggle"><input type="checkbox" data-f="aktiv" ${m.aktiv === false ? "" : "checked"}/> aktiv</label>
       <select data-f="route"><option value="karriere" ${m.route !== "finanzen" ? "selected" : ""}>bei Karriere-/Orientierungsfragen</option><option value="finanzen" ${m.route === "finanzen" ? "selected" : ""}>bei Geldfragen</option></select>
       <select data-f="art"><option value="gespraech" ${m.art !== "unterlage" ? "selected" : ""}>Gespräch</option><option value="unterlage" ${m.art === "unterlage" ? "selected" : ""}>Unterlage mit Link</option></select>
+      <button data-offer-sharpen="${i}" title="Nutzen und Frage nach Hormozis Wertformel schärfen (ein Claude-Aufruf)">✨ Mit KI schärfen</button>
       <button class="danger-ghost" data-offer-remove="${i}">Entfernen</button></header>
+    ${m.warum ? `<p class="offer-why">✨ ${esc(m.warum)}</p>` : ""}
     <div class="offer-fields">${OFFER_FELDER.map(([f, label, ph]) => `<label><span>${label}</span><input data-f="${f}" value="${esc(m[f] || "")}" placeholder="${esc(ph)}"/></label>`).join("")}</div>
     <input type="hidden" data-f="key" value="${esc(m.key || "")}"/>
   </article>`;
@@ -1437,6 +1439,22 @@ function renderAngebot() {
   document.querySelectorAll("[data-offer-remove]").forEach((b) => b.onclick = () => {
     angebot.leadMagnete = leseOfferFormular(); angebot.leadMagnete.splice(Number(b.dataset.offerRemove), 1); renderAngebot();
   });
+  $("offer-ki-list").innerHTML = (angebot.kiVorschlaege || []).length
+    ? `<span class="lane-label">KI-Vorschläge (noch nicht gespeichert)</span>${angebot.kiVorschlaege.map((v, i) => `<article class="offer-ki-item"><div><b>${esc(v.titel)}</b> <span class="muted">${v.route === "finanzen" ? "bei Geldfragen" : "bei Karrierefragen"}</span><p>${esc(v.nutzen)}</p><p class="muted">Frage: „${esc(v.cta)}“${v.warum ? ` · ${esc(v.warum)}` : ""}</p></div><button data-offer-ki-add="${i}">Übernehmen</button></article>`).join("")}` : "";
+  document.querySelectorAll("[data-offer-ki-add]").forEach((b) => b.onclick = () => {
+    angebot.leadMagnete = leseOfferFormular();
+    const [v] = angebot.kiVorschlaege.splice(Number(b.dataset.offerKiAdd), 1);
+    angebot.leadMagnete.push({ ...v, aktiv: true }); renderAngebot(); $("offer-note").textContent = "Übernommen – zum Aktivieren noch „Angebot speichern“.";
+  });
+  document.querySelectorAll("[data-offer-sharpen]").forEach((b) => b.onclick = async () => {
+    const i = Number(b.dataset.offerSharpen);
+    angebot.leadMagnete = leseOfferFormular();
+    b.disabled = true; b.textContent = "KI denkt nach…";
+    try {
+      const r = await post("/api/angebot/ki", { aktion: "schaerfen", magnet: angebot.leadMagnete[i] }, 90000);
+      angebot.leadMagnete[i] = r.magnet; renderAngebot(); $("offer-note").textContent = "Geschärft – prüfen und dann „Angebot speichern“.";
+    } catch (error) { toast(`KI-Schärfen fehlgeschlagen: ${error.message}`); b.disabled = false; b.textContent = "✨ Mit KI schärfen"; }
+  });
   document.querySelectorAll("[data-offer-add]").forEach((b) => b.onclick = () => {
     angebot.leadMagnete = leseOfferFormular();
     const [v] = angebot.vorschlaege.splice(Number(b.dataset.offerAdd), 1);
@@ -1447,6 +1465,15 @@ async function ladeAngebot() {
   try { const r = await fetch("/api/angebot", { cache: "no-store" }); angebot = await r.json(); renderAngebot(); }
   catch (error) { $("offer-note").textContent = `Angebot nicht geladen: ${error.message}`; }
 }
+$("offer-ki").onclick = async () => {
+  const b = $("offer-ki"); b.disabled = true; b.textContent = "KI denkt nach…";
+  try {
+    angebot.leadMagnete = leseOfferFormular();
+    const r = await post("/api/angebot/ki", { aktion: "vorschlaege" }, 90000);
+    angebot.kiVorschlaege = r.vorschlaege; renderAngebot();
+  } catch (error) { toast(`KI-Vorschläge fehlgeschlagen: ${error.message}`); }
+  finally { b.disabled = false; b.textContent = "✨ KI-Vorschläge holen"; }
+};
 $("offer-save").onclick = async () => {
   const button = $("offer-save"); button.disabled = true; $("offer-note").textContent = "";
   try {
