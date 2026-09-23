@@ -1367,7 +1367,7 @@ const server = createServer((req, res) => {
     return;
   }
 
-  if (url.pathname === "/command-center.css" || url.pathname === "/command-center.js") {
+  if (url.pathname === "/command-center.css" || url.pathname === "/design-system.css" || url.pathname === "/command-center.js") {
     try {
       const name = url.pathname.slice(1);
       const body = readFileSync(join(__dirname, "..", "web", name));

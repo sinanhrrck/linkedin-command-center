@@ -1,0 +1,290 @@
+/* =============================================================================================
+   NEXTLEAD DESIGNSYSTEM (2026-09-23) – „präzise Finanzsoftware“
+   Wird NACH command-center.css geladen und ordnet die über Monate gewachsenen Stile:
+   - EIN Akzent (Kontoblau) nur für Aktives; Status in gedeckten Tönen.
+   - Drei Rundungen (6 / 10 / Pille), keine Schatten auf Flächen, Linien statt Karten in Karten.
+   - Systemschrift (lokal, nichts von außen nachladen), klare Stufen 11/12/13/14/16/22,
+     alle Zahlen als Tabellenziffern – die Kennzahlen lesen sich wie ein Kontoauszug.
+   Variablennamen bleiben (render-Funktionen setzen style="color:var(--amber)"), nur Werte ändern sich.
+   ============================================================================================= */
+
+:root {
+  --navy: #0f2240;
+  --blue: #2a4bc2;          /* Kontoblau – der einzige Akzent */
+  --blue-soft: #eef2fc;
+  --ink: #111a2b;
+  --muted: #5b6679;
+  --faint: #8a93a3;
+  --line: #e4e7ec;
+  --line-strong: #d0d5dd;
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --hover: #f2f4f7;
+  --green: #0f7a4f;
+  --green-soft: #e8f4ee;
+  --amber: #a35a00;
+  --amber-soft: #fdf3e3;
+  --red: #b42318;
+  --red-soft: #fdeeec;
+  --r-s: 6px;
+  --r-m: 10px;
+  --radius: var(--r-m);
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05);
+  --shadow-pop: 0 12px 32px rgba(16, 24, 40, .14);
+  --sidebar: 232px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+html { font-family: var(--font); background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; }
+body { font-size: 14px; line-height: 1.45; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* Zahlen überall als Tabellenziffern – gleiche Breite, ruhige Spalten. */
+b, strong, td, .work-count, .kpi-card b, .mini-row b, .queue-counts b, .queue-limit b,
+#today-auto, .contact-score, .review-progress, #updated-at { font-variant-numeric: tabular-nums; }
+
+/* ---------- Grundbausteine ---------------------------------------------------------------- */
+
+/* Beschriftung über Überschriften: klein, ruhig, ohne Großbuchstaben-Monospace. */
+.eyebrow, .topbar p, .lane-label {
+  font: 600 11.5px/1.3 var(--font) !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: var(--faint) !important;
+  margin: 0 0 4px !important;
+}
+h2, h3 { letter-spacing: -.01em !important; }
+.section-head h3, .setting-card h3, .form-head h3 { font-size: 16px; font-weight: 650; margin: 0; }
+.section-head { margin-bottom: 12px; align-items: center; gap: 12px; }
+.muted, p.muted { color: var(--muted); }
+.setting-card > p, .insight-panel > p, .queue-board p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+/* Knöpfe: eine Höhe, drei Varianten. */
+button { font-family: var(--font); }
+.primary, .danger-ghost, .support-button,
+.review-actions button, .head-side button, .button-row button, .source-form button,
+.quick-review button, .offer-card button, .auto-card button, .followup-card button, .ki-analyse-panel button, .varianten-panel button,
+.offer-item button, .coach-actions button, .feedback-options button, .custom-feedback button, .ki-chips button {
+  min-height: 32px;
+  padding: 0 12px !important;
+  border-radius: var(--r-s) !important;
+  font: 550 13px/1 var(--font) !important;
+  box-shadow: none !important;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background-color .12s, border-color .12s, color .12s;
+}
+.primary { background: var(--blue) !important; color: #fff !important; border: 1px solid var(--blue) !important; }
+.primary:hover:not(:disabled) { background: #223ea3 !important; border-color: #223ea3 !important; }
+.primary:disabled { opacity: .55; }
+.danger-ghost { background: #fff !important; color: var(--red) !important; border: 1px solid #efc7c2 !important; }
+.danger-ghost:hover { background: var(--red-soft) !important; }
+
+/* Standardknopf – bewusst über :where, damit spezielle Bausteine (Tabellenköpfe, Chips …) ihn
+   überschreiben können. Vorher hatte diese Regel die Spezifität von fünf Klassen und machte
+   z. B. die Tabellenköpfe der Kontakte zu eingerahmten Knöpfen. */
+:where(button:not(.nav):not(.primary):not(.danger-ghost):not(.work-item):not(.icon-btn)) {
+  background: #fff; color: var(--ink); border: 1px solid var(--line-strong);
+  border-radius: var(--r-s); min-height: 32px; padding: 0 12px; font: 550 13px/1 var(--font);
+}
+button:not(.nav):not(.primary):not(.danger-ghost):not(.work-item):not(.icon-btn) {
+  border-color: var(--line-strong); border-radius: var(--r-s); font-size: 13px; font-weight: 550; padding: 7px 12px;
+}
+button:not(.nav):not(.primary):not(.danger-ghost):not(.work-item):not(.icon-btn):hover:not(:disabled) { background: var(--hover); }
+.icon-btn { border: 0; background: transparent; color: var(--muted); border-radius: var(--r-s); width: 30px; height: 30px; font-size: 18px; }
+.icon-btn:hover { background: var(--hover); color: var(--ink); }
+
+/* Eingaben */
+input:not([type=checkbox]):not([type=radio]), select, textarea {
+  border: 1px solid var(--line-strong) !important; border-radius: var(--r-s) !important;
+  background: #fff; color: var(--ink); font: 400 13.5px/1.4 var(--font) !important;
+}
+input:not([type=checkbox]):not([type=radio]), select { min-height: 34px; padding: 0 10px !important; }
+textarea { padding: 8px 10px !important; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--blue) !important; box-shadow: 0 0 0 3px rgba(42, 75, 194, .14); }
+input[type=checkbox] { accent-color: var(--blue); width: 15px; height: 15px; }
+
+/* Status-Pillen: das einzige Runde. */
+.status-pill, .quick-badge, .queue-pill, .activity-live {
+  font: 600 11.5px/1 var(--font) !important; letter-spacing: 0 !important; text-transform: none !important;
+  padding: 4px 8px !important; border-radius: 999px !important;
+}
+
+/* ---------- Flächen: eine Sorte, keine Schatten, keine Karten in Karten ---------------------- */
+.today-grid > section, .result-card, .reviewer, .campaign-form, .contact-table, .insight-panel, .setting-card,
+.queue-board, .activity-board, .quick-review, .kpi-card, .campaign-card, .blockaden, .goal-alerts, .status-strip {
+  background: var(--panel) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: var(--r-m) !important;
+  box-shadow: none !important;
+}
+.setting-card, .insight-panel { padding: 20px 22px; }
+.settings-grid { gap: 14px; }
+
+/* Doppelte Seiten-Intros weg: der Seitentitel oben sagt dasselbe. */
+.view:not(#view-campaigns) > .page-intro { display: none !important; }
+
+/* ---------- Rahmen: Seitenleiste + Kopf ---------------------------------------------------- */
+.sidebar { background: #fbfbfc; border-right: 1px solid var(--line); padding: 20px 14px 16px; }
+.brand { padding: 0 8px 24px; }
+.brand b { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.brand span { font: 500 11px/1.2 var(--font) !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--faint) !important; }
+.nav { border-radius: var(--r-s) !important; padding: 8px 10px !important; font: 550 13.5px/1.2 var(--font) !important; color: var(--muted) !important; gap: 10px !important; }
+.nav:hover { background: var(--hover) !important; color: var(--ink) !important; }
+.nav.active { background: #fff !important; color: var(--ink) !important; box-shadow: inset 0 0 0 1px var(--line), 0 1px 2px rgba(16,24,40,.04); }
+.nav.active .nav-icon { color: var(--blue); }
+.nav i { font: 600 11px/1 var(--font) !important; font-style: normal; background: var(--blue) !important; color: #fff !important; border-radius: 999px !important; padding: 3px 7px !important; margin-left: auto; }
+.nav i:empty { display: none; }
+.side-status { background: #fff !important; color: var(--ink) !important; border: 1px solid var(--line); border-radius: var(--r-m) !important; }
+.side-status b { font-size: 12.5px; }
+.side-status small { color: var(--muted) !important; font-size: 11px !important; }
+
+main { padding: 0 32px 32px; max-width: 1360px; margin: 0 auto !important; align-self: start; }
+.topbar { height: auto; padding: 22px 0 18px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+.topbar p { display: none; } /* Kicker über dem Titel war doppelt gemoppelt */
+.topbar h1 { font-size: 22px; font-weight: 650; letter-spacing: -.015em; }
+.top-actions { font: 500 12px var(--mono) !important; color: var(--faint) !important; gap: 10px !important; }
+
+/* ---------- Heute ---------------------------------------------------------------------------- */
+/* Statt dunkelblauer Deko-Fläche: eine ruhige Zeile mit der einen Zahl, die zählt. */
+.today-hero {
+  background: var(--panel) !important; color: var(--ink) !important; min-height: 0 !important;
+  border: 1px solid var(--line); border-radius: var(--r-m) !important; padding: 18px 22px !important;
+  margin: 14px 0 !important; display: flex !important; align-items: center; gap: 24px;
+}
+.today-hero:after { display: none !important; }
+.today-hero h2 { font-size: 20px !important; font-weight: 650; margin: 2px 0 4px !important; color: var(--ink) !important; }
+.today-hero p { color: var(--muted) !important; font-size: 13px !important; }
+.today-hero .eyebrow { color: var(--faint) !important; }
+.hero-done { text-align: right; border-left: 1px solid var(--line); padding-left: 24px; }
+.hero-done b { color: var(--ink) !important; font: 650 28px/1 var(--font) !important; letter-spacing: -.02em; }
+.hero-done span { color: var(--muted) !important; font-size: 12px !important; }
+
+.status-strip { padding: 10px 14px !important; font-size: 13px !important; }
+.status-strip.ok { border-color: var(--line) !important; }
+.blockaden { border-left: 3px solid var(--red) !important; }
+
+/* Warteschlange: Zeilen wie auf einem Kontoauszug. */
+.queue-lane { gap: 10px; padding: 16px 20px 18px; }
+.queue-why { font-size: 13.5px; }
+.queue-counts { gap: 0; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }
+.queue-counts div { background: #fff !important; border-radius: 0 !important; padding: 10px 12px; border-left: 1px solid var(--line); }
+.queue-counts div:first-child { border-left: 0; }
+.queue-counts b { font: 650 20px/1.1 var(--font) !important; letter-spacing: -.01em; }
+.queue-counts span { font-size: 12px !important; color: var(--muted); }
+.queue-counts .needs-you b { color: var(--amber) !important; }
+.queue-limit div { font-size: 12.5px; }
+.queue-limit em, .mini-row em { height: 4px !important; background: #eceef2 !important; border-radius: 2px !important; }
+.queue-limit em i, .mini-row em i { background: var(--blue) !important; border-radius: 2px !important; }
+.queue-next { font-size: 13px !important; }
+.queue-reach, .queue-last, .queue-more { font-size: 12px !important; color: var(--faint) !important; }
+
+/* Aktivität */
+.activity-head { padding: 16px 20px !important; border-bottom: 1px solid var(--line); }
+.activity-lane { padding: 14px 20px !important; }
+.current-job b, .activity-row b { font-size: 13px !important; font-weight: 600; }
+.current-job span:not(.pulse-ring), .activity-row span:not(.activity-index):not(.done-mark) { font-size: 12px !important; }
+.current-job small, .activity-row small { font: 500 11px var(--mono) !important; color: var(--faint) !important; }
+.activity-index { background: var(--hover) !important; color: var(--muted) !important; border-radius: 4px !important; font: 600 11px/1 var(--font) !important; }
+
+/* Arbeitskorb: Zeilen statt Einzelkarten. */
+.work-groups { gap: 0 !important; border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; }
+.work-item { border: 0 !important; border-top: 1px solid var(--line) !important; border-radius: 0 !important; padding: 12px 16px !important; background: #fff !important; }
+.work-item:first-child { border-top: 0 !important; }
+.work-item:hover { background: var(--hover) !important; }
+.work-item b { font-size: 14px; font-weight: 600; }
+.work-item .work-copy span { font-size: 12.5px; color: var(--muted); }
+.work-icon { width: 30px !important; height: 30px !important; border-radius: var(--r-s) !important; font-size: 14px; }
+.work-count { font: 650 18px var(--font) !important; }
+.mini-row span { font-size: 12.5px !important; }
+.mini-row b { font: 650 16px var(--font) !important; }
+
+/* Prüfer */
+.reviewer { padding: 20px 22px !important; }
+.review-person h3 { font-size: 18px !important; font-weight: 650; }
+.review-progress { font: 500 12px var(--mono) !important; color: var(--faint) !important; }
+.review-compose textarea { font-size: 14px !important; line-height: 1.55 !important; min-height: 140px; }
+.incoming { border-radius: var(--r-s) !important; font-size: 13.5px !important; }
+
+/* ---------- Kontakte-Tabelle ----------------------------------------------------------------- */
+.contact-toolbar { gap: 8px !important; }
+.contact-head { background: #fafbfc !important; color: var(--faint) !important; font: 600 11.5px/1 var(--font) !important; letter-spacing: 0 !important; text-transform: none !important; }
+.contact-head button { font: inherit !important; border: 0 !important; background: none !important; padding: 0 !important; min-height: 0 !important; color: inherit !important; }
+.contact-head button:hover { color: var(--ink) !important; }
+.contact-row { padding: 10px 16px !important; border-top: 1px solid var(--line) !important; font-size: 13px; }
+.contact-row:not(.contact-head):hover { background: #fafbfc; }
+.contact-person b { font-size: 13.5px; font-weight: 600; }
+.contact-person span, .contact-meta, .next-step { font-size: 12.5px !important; color: var(--muted); }
+.contact-score { font: 600 13px var(--font) !important; }
+
+/* ---------- Auswertung ----------------------------------------------------------------------- */
+.kpi-card { padding: 16px 18px !important; }
+.kpi-card span { font-size: 12.5px !important; color: var(--muted) !important; }
+.kpi-card b { font: 650 28px/1.1 var(--font) !important; letter-spacing: -.02em; margin: 8px 0 4px !important; }
+.kpi-card small { font-size: 12px !important; color: var(--faint) !important; }
+.var-table th { font-size: 12px !important; }
+
+/* ---------- Überlagerungen dürfen Schatten haben ---------------------------------------------- */
+.ki-panel, .report-card, #toast { box-shadow: var(--shadow-pop) !important; border-radius: var(--r-m) !important; }
+.ki-fab { background: var(--ink) !important; color: #fff !important; border: 0 !important; font: 600 13px/1 var(--font) !important; padding: 11px 16px !important; box-shadow: var(--shadow-pop) !important; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+@media (max-width: 760px) {
+  main { padding: 0 16px 24px; }
+  .today-hero { flex-direction: column; align-items: flex-start !important; }
+  .hero-done { border-left: 0; padding-left: 0; text-align: left; }
+}
+
+/* ---------- Altbestand vereinheitlichen (automatisch aus command-center.css ermittelt) ------- */
+/* Alle Beschriftungen, die bisher als winzige Monospace-Großbuchstaben liefen. */
+.acceptance-warning-copy>div>span, .asset-form label, .context-evidence-grid span, .context-evidence-head>span,
+.equation-flow small, .form-grid label, .goal-alert-head>span, .goal-picker legend, .mission-rail, .mission-search,
+.planning-card label>span, .planning-controls label>span, .planning-evidence>span, .rail-rate small, .rail-stage span,
+.report-field, .timeline-body small, .vergleich-head, .wirkung-filter label span {
+  font: 600 12px/1.35 var(--font) !important; letter-spacing: 0 !important; text-transform: none !important;
+}
+.report-field > span { color: var(--muted); }
+/* Zahlen: Systemschrift mit Tabellenziffern statt Monospace – Monospace nur noch für Uhrzeiten. */
+.acceptance-warning-copy>div>b, .campaign-preview b, .funnel-count, .goal-code, .goal-shift b, .goal-shift strong,
+.learning-stats b, .planning-total b, .qualitaet b, .rail-stage b, .vergleich-kennzahl, .wirkung-oekonomie b,
+.wirkung-quote b, .workflow-step b, .equation-flow strong, .approach-card>span, .planning-badge, .money-input i, .rail-rate input {
+  font-family: var(--font) !important; font-variant-numeric: tabular-nums; letter-spacing: -.01em !important;
+}
+.planning-lab { background: var(--panel) !important; }
+.planning-badge { letter-spacing: 0 !important; font-size: 11.5px !important; font-weight: 600 !important; padding: 4px 9px !important; border: 0 !important; }
+.planning-card { border-radius: var(--r-m) !important; border-color: var(--line) !important; }
+.planning-note, .planning-total { font-size: 12px !important; }
+.planning-evidence b { font-size: 12.5px !important; font-weight: 500 !important; }
+/* Rechner-Ergebnis: hell mit Akzentzahl statt dunkelblauem Block. */
+.equation-flow { background: var(--blue-soft) !important; color: var(--ink) !important; border-radius: var(--r-s) !important; }
+.equation-flow span { color: var(--muted) !important; font-size: 12px !important; }
+.equation-flow strong { color: var(--blue) !important; font-size: 28px !important; font-weight: 650 !important; }
+.equation-flow small { color: var(--muted) !important; font-size: 11.5px !important; }
+.equation-index, .goal-picker i { background: var(--hover) !important; color: var(--ink) !important; font: 650 12px/1 var(--font) !important; border-radius: var(--r-s) !important; }
+.profile-avatar { background: var(--blue-soft) !important; color: var(--blue) !important; font-family: var(--font) !important; }
+#toast { background: var(--ink) !important; font-size: 13px !important; }
+
+/* Tabellen „Was wirkt“: gleiche Spalten in allen Blöcken. */
+.var-table { table-layout: fixed; }
+.var-table th:first-child, .var-table td:first-child { width: 30%; }
+.var-table th:last-child, .var-table td:last-child { width: 18%; }
+.var-slot > b { font-size: 13.5px; }
+
+/* Zu kleine Schriftgrade aus dem Altbestand anheben (Lesbarkeit). */
+.planning-controls input, .planning-controls select, .planning-card input { border-radius: var(--r-s) !important; }
+.timeline-body small, .drill-meta { font-size: 11.5px !important; }
+.money-input input { padding-left: 26px !important; }
+
+/* Einstellungen in drei Gruppen (Betrieb / Nachrichten & Angebot / Sicherheit & Daten). */
+.settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; align-items: start; }
+.settings-group { grid-column: 1 / -1; margin: 18px 0 0; display: flex; align-items: baseline; gap: 12px; font-size: 15px !important; font-weight: 650; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.settings-group:first-of-type { margin-top: 0; }
+.settings-group small { font-size: 12.5px; font-weight: 400; color: var(--muted); }
+@media (max-width: 1050px) { .settings-grid { grid-template-columns: 1fr !important; } .settings-group { flex-direction: column; gap: 2px; } }
+/* Mobil: Einstellungen waren in der oberen Leiste gar nicht erreichbar. */
+@media (max-width: 760px) {
+  .sidebar { display: flex !important; flex-wrap: nowrap; justify-content: flex-start; align-items: center; gap: 4px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .sidebar nav { flex: 0 0 auto; }
+  .settings-nav { display: flex !important; flex: 0 0 auto; margin: 0 !important; }
+  .topbar { padding: 14px 0 12px; }
+}
