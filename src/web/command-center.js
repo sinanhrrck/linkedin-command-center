@@ -1034,7 +1034,25 @@ function renderPlanner() {
   calculatePlanner();
 }
 
+/**
+ * WAS WIRKT (2026-09-23): eigener Ladepfad mit laufender Nummer wie `ladeWirkung` – keine
+ * Lade-Sperre, die späte Antworten verwirft. Einmal beim Öffnen der Auswertung, sonst per Knopf.
+ */
+const SLOT_TITEL = { first: "Erstnachricht", "followup:wert": "Nachfassung mit Angebot", "followup:abschied": "Schlussstrich", reaktivierung: "Netzwerk-Reaktivierung" };
+let variantenAnfrage = 0, variantenGeladen = false;
+async function ladeVarianten() {
+  const nr = ++variantenAnfrage;
+  try {
+    const r = await (await fetch("/api/varianten", { cache: "no-store" })).json();
+    if (nr !== variantenAnfrage) return;
+    variantenGeladen = true;
+    $("varianten-body").innerHTML = r.slots.map((s) => `<div class="var-slot"><b>${esc(SLOT_TITEL[s.slot] || s.slot)}</b><table class="var-table"><thead><tr><th>Stil</th><th>gesendet</th><th>ausgewertet</th><th>Antworten</th><th>positiv</th><th>Quote</th><th>Status</th></tr></thead><tbody>${s.arme.map((a) => `<tr><td>${esc(a.titel)}</td><td>${a.gesendet}</td><td>${a.reif}</td><td>${a.antworten}</td><td>${a.positiv}</td><td>${a.quote == null ? "–" : `${Math.round(a.quote * 100)} %`}</td><td class="muted">${esc(a.status)}</td></tr>`).join("")}</tbody></table></div>`).join("");
+  } catch (error) { if (nr === variantenAnfrage) $("varianten-body").textContent = `Nicht geladen: ${error.message}`; }
+}
+$("varianten-reload").onclick = ladeVarianten;
+
 function renderInsights() {
+  if (!variantenGeladen) ladeVarianten();
   const historical = state.metrics?.historical || {}; const acceptance = pct(historical.accepted || 0, historical.invited || 0); const reply = pct(historical.replied || 0, historical.messaged || 0);
   const kpis = [["Anfragen", historical.invited || 0, "versendet"], ["Annahmequote", acceptance == null ? "–" : `${acceptance}%`, `${historical.accepted || 0} angenommen`], ["Antwortquote", reply == null ? "–" : `${reply}%`, `${historical.replied || 0} aus ${historical.messaged || 0} Nachrichten`], ["Termine", (state.bookedLeads || []).length, "persönlich übergeben"]];
   $("insight-kpis").innerHTML = kpis.map(([label, value, note]) => `<div class="kpi-card"><span>${label}</span><b>${value}</b><small>${note}</small></div>`).join("");

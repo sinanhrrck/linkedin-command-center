@@ -8,6 +8,7 @@ import { learningGuidance } from "./learning.js";
 import { ausbildungsStand, ausbildungsVorgabe, behauptetLaufendeAusbildung } from "../core/ausbildungsStand.js";
 import { angebotsHinweis, beweisBlock, type Route } from "./angebot.js";
 import { ZWECK_ANWEISUNG, zweckFuer } from "./playbook.js";
+import { variantenBlock, type Wahl } from "./varianten.js";
 
 /**
  * Router für den Autopilot-Text: bezahltes Claude (Standard im Voll-Modus, Qualität +
@@ -92,7 +93,7 @@ Nimm EINEN konkreten Bezug zur Person (z.B. ihre Rolle/Ausbildung). Gib NUR die 
  * Inhalt hatte keinerlei Wirkung auf den Text. Die Fakten steuern jetzt die ANKNÜPFUNG –
  * verkauft oder erwähnt wird in Nachricht 1 weiterhin nichts.
  */
-export async function firstMessage(c: Contact, variation?: TextVariation, goal?: ConversationGoal | null, kampagnenFakten?: string, korrektur?: string): Promise<string> {
+export async function firstMessage(c: Contact, variation?: TextVariation, goal?: ConversationGoal | null, kampagnenFakten?: string, korrektur?: string, variante?: Wahl | null): Promise<string> {
   const aufbau = variation
     ? `AUFBAU FÜR DIESE NEUGENERIERUNG:\nFolge der unten genannten neuen Gesprächsrichtung. Du darfst die übliche Reihenfolge Profilbezug, eigene Geschichte, offene Frage ausdrücklich verlassen. Nutze nur Bausteine, die zu dieser Richtung passen.`
     : `AUFBAU (Nutze immer diese 3 Bausteine, genau in dieser Reihenfolge):
@@ -136,7 +137,7 @@ ${goal ? `\nLANGFRISTIGER GESPRÄCHSAUFTRAG: ${goal.code} – ${goal.label}. ${g
 ${kampagnenFakten ? `\n${kampagnenFakten}\nNutze diese Angaben nur, um die richtige Anknüpfung und Tonlage zu wählen. Erwähne weder Kampagne, Angebot, Event noch Nutzen in dieser ersten Nachricht.` : ""}
 ${learningGuidance(goal?.code ?? null)}
 
-${korrekturBlock(korrektur)}
+${variation ? "" : variantenBlock(variante ?? null)}${korrekturBlock(korrektur)}
 OUTPUT-REGEL: Generiere GENAU EINE Nachricht nach obigem Aufbau. Nichts drumherum, keine Erklärungen davor oder danach, kein "Hier ist die Nachricht:". Gib ausschließlich den Text der Nachricht aus.`;
   return mitAusbildungsCheck(c, prompt);
 }
@@ -365,7 +366,7 @@ export async function followupMessage(
   c: Contact,
   stufe = 1,
   variation?: TextVariation,
-  opts: { bisher?: string; korrektur?: string; route?: Route } = {},
+  opts: { bisher?: string; korrektur?: string; route?: Route; variante?: Wahl | null } = {},
 ): Promise<string> {
   // Jede Stufe hat einen eigenen Zweck aus dem Nachfass-Plan (modules/playbook.ts). Vorher war
   // Stufe 1 ein reines „wollte nochmal nachfragen“ – ohne jeden Grund zu antworten.
@@ -381,7 +382,7 @@ ${opts.bisher ? `\nDEINE LETZTE NACHRICHT AN DIE PERSON (nicht wiederholen, nich
 ${ZWECK_ANWEISUNG[zweck]}
 ${zweck === "beweis" ? beweisBlock() : ""}
 ${angebot}
-${variationBlock(variation)}${korrekturBlock(opts.korrektur)}
+${variationBlock(variation)}${variation ? "" : variantenBlock(opts.variante ?? null)}${korrekturBlock(opts.korrektur)}
 Umlaute immer richtig schreiben (ä, ö, ü, ß), nie ae/oe/ue.
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
   return mitAusbildungsCheck(c, prompt);
@@ -397,7 +398,7 @@ Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
  * Für sie ist diese Nachricht der einzige Berührungspunkt – sie muss den Auftrag kennen, sonst
  * bleiben diese Kampagnenkontakte für immer unbearbeitet liegen.
  */
-export async function reaktivierungMessage(c: Contact, goal?: ConversationGoal | null, kampagnenFakten?: string, variation?: TextVariation, korrektur?: string): Promise<string> {
+export async function reaktivierungMessage(c: Contact, goal?: ConversationGoal | null, kampagnenFakten?: string, variation?: TextVariation, korrektur?: string, variante?: Wahl | null): Promise<string> {
   const prompt = `Schreibe eine kurze, natürliche LinkedIn-Nachricht (2-3 Sätze).
 ${promptKontext()}
 ${personZeile(c)}
@@ -414,7 +415,7 @@ Regeln:
 - Kein Sie-Siezen, wenn der Stil sonst duzt. Kein Floskel-Deutsch.
 ${ausbildungsVorgabe(c.headline)}
 ${angebotsHinweis(goal?.code === "B1" ? "finanzen" : "karriere")}
-${variationBlock(variation)}${korrekturBlock(korrektur)}
+${variationBlock(variation)}${variation ? "" : variantenBlock(variante ?? null)}${korrekturBlock(korrektur)}
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
   return mitAusbildungsCheck(c, prompt);
 }

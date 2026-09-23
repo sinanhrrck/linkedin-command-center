@@ -38,6 +38,7 @@ import { config } from "../config.js";
 import { angebotFuerCockpit, speichereAngebot } from "../modules/angebot.js";
 import { followupPlan, speichereFollowupPlan } from "../modules/playbook.js";
 import { approveMany, autoFreigabeStand, speichereAutoFreigabe } from "../modules/freigabe.js";
+import { variantenStatistik } from "../modules/varianten.js";
 import { bericht, type BerichtArt } from "../modules/berichte.js";
 import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
 
@@ -1007,6 +1008,11 @@ const server = createServer((req, res) => {
 
   // NOTIZEN: alles, was nach einem Telefonat festgehalten werden muss. Landet mit Zeitstempel
   // in der Kontaktspur, damit später nachvollziehbar ist, WANN es notiert wurde.
+  // WAS WIRKT: Varianten-Auswertung (eigener Ladepfad im Cockpit).
+  if (url.pathname === "/api/varianten" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify({ slots: variantenStatistik() }));
+    return;
+  }
   // SAMMEL-FREIGABE: jeder Entwurf einzeln durch approveDraft (Kontextprüfung bleibt).
   if (url.pathname === "/api/drafts/bulk" && req.method === "POST") {
     let body = "";

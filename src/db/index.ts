@@ -99,6 +99,8 @@ for (const [column, definition] of [
   // Wer hat freigegeben: 'mensch' (Cockpit/Telegram) oder 'auto' (modules/freigabe.ts). Getrennt,
   // damit die Automatik nie ihr eigenes Vertrauen erzeugt und Lernregeln nur Menschen folgen.
   ["freigabe_quelle", "TEXT"],
+  // Gewählte Variante {slot, arm} (modules/varianten.ts) – eingefroren am Entwurf.
+  ["variant_json", "TEXT"],
   ["freigegeben_at", "TEXT"],
 ] as const) {
   try { db.exec(`ALTER TABLE drafts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }

@@ -146,6 +146,11 @@
       </section>
       <!-- TAGES-/WOCHENBERICHT (2026-09-22): fester Zeitraum, Vergleich zum Zeitraum davor.
            Eigener Ladepfad (/api/bericht) mit laufender Anfragenummer wie bei der Wirkung. -->
+      <section class="insight-panel varianten-panel">
+        <div class="section-head"><div><span class="eyebrow">Was wirkt</span><h3>Welche Formulierung mehr Antworten bringt</h3></div><button id="varianten-reload">Aktualisieren</button></div>
+        <p class="muted">Der Bot probiert je Nachrichtenart mehrere Stile und bevorzugt automatisch den, der mehr positive Antworten bringt. Ein Versand zählt erst nach 10 Tagen als „ohne Antwort“. Stile, die du oft ablehnst, pausieren.</p>
+        <div id="varianten-body"></div>
+      </section>
       <section class="insight-panel bericht">
         <div class="section-head">
           <div><span class="eyebrow">Bericht</span><h3 id="bericht-titel">Tagesbericht</h3></div>

@@ -10,6 +10,8 @@ import { followupPlan } from "./playbook.js";
 import { lasseAlteNachfassungenVerfallen } from "./freigabe.js";
 import { pruefeAusgehend, type AusgehendKontext } from "../core/ausgehendCheck.js";
 import { erlaubteLinks } from "./angebot.js";
+import { registriereVersand, waehleArm, type Wahl } from "./varianten.js";
+import { zweckFuer } from "./playbook.js";
 import { contactForConversation, recordCrmStage } from "./crmStages.js";
 import { promptKontext, saubern } from "../context.js";
 import { events } from "../core/events.js";
@@ -46,6 +48,7 @@ export type Draft = {
   approach_key: string | null;
   sequence_stage?: number | null;
   freigabe_quelle?: string | null;
+  variant_json?: string | null;
   rejection_reason: string | null;
   blockiert_grund: string | null;
   context_evidence_json: string | null;
@@ -94,8 +97,9 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
     .get(c.profile_url);
   if (exists) return false;
   const auftrag = auftragMitFakten(c.id);
+  const wahl = waehleArm("first");
   const text = await mitAusgangsCheck(
-    (korrektur) => firstMessage(c, undefined, auftrag.goal, auftrag.fakten, korrektur).catch((e: Error) => {
+    (korrektur) => firstMessage(c, undefined, auftrag.goal, auftrag.fakten, korrektur, wahl).catch((e: Error) => {
       console.error(`[first] ⚠ KI-Fehler (Entwurf) fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
       return "";
     }),
@@ -109,8 +113,8 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
     return false;
   }
   const info = db
-    .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES(?,'first',?,?,?,?,?,'first')")
-    .run(c.id, c.profile_url, c.full_name ?? null, "", text, text);
+    .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft, ki_original, intent, variant_json) VALUES(?,'first',?,?,?,?,?,'first',?)")
+    .run(c.id, c.profile_url, c.full_name ?? null, "", text, text, wahl ? JSON.stringify({ slot: wahl.slot, arm: wahl.arm }) : null);
   const draftId = Number(info.lastInsertRowid);
   attachDraftContext(draftId, c.id);
   events.emit("draft:new", getDraft(draftId));
@@ -145,6 +149,18 @@ function letzteGesendete(threadUrl: string): string {
     "SELECT draft FROM drafts WHERE thread_url=? AND status='sent' AND kind IN ('first','followup','reaktivierung','message') ORDER BY COALESCE(sent_at,created_at) DESC LIMIT 1",
   ).get(threadUrl) as { draft: string } | undefined;
   return r?.draft || "";
+}
+
+/** Nach nachgewiesenem Versand: gewählte Variante für das Selbstlernen verbuchen. */
+function registriereVarianteFuerEntwurf(d: Draft): void {
+  if (!d.variant_json) return;
+  try {
+    const v = JSON.parse(d.variant_json) as Wahl;
+    const contactId = d.contact_id ?? contactForConversation(d.thread_url, d.participant ?? "")?.id;
+    if (!contactId || !v?.slot || !v?.arm) return;
+    const zg = (db.prepare("SELECT zielgruppe FROM contacts WHERE id=?").get(contactId) as { zielgruppe: string | null } | undefined)?.zielgruppe;
+    registriereVersand({ contactId, draftId: d.id, kind: d.kind, stufe: d.sequence_stage ?? 0, slot: v.slot, arm: v.arm, goalCode: goalForContact(contactId)?.code ?? null, zielgruppe: zg ?? null });
+  } catch { /* Selbstlernen darf den Versand nie stören */ }
 }
 
 /**
@@ -185,15 +201,16 @@ export async function createFollowupDraft(c: Contact): Promise<boolean> {
   if (offen) return false;
   const stufe = bisher + 1;
   const bisherGesendet = letzteGesendete(c.profile_url);
+  const wahl = waehleArm(`followup:${zweckFuer(stufe, plan)}`);
   const text = await mitAusgangsCheck(
-    (korrektur) => followupMessage(c, stufe, undefined, { bisher: bisherGesendet, korrektur, route: auftragMitFakten(c.id).goal?.code === "B1" ? "finanzen" : "karriere" }).catch(() => ""),
+    (korrektur) => followupMessage(c, stufe, undefined, { bisher: bisherGesendet, korrektur, route: auftragMitFakten(c.id).goal?.code === "B1" ? "finanzen" : "karriere", variante: wahl }).catch(() => ""),
     { kind: "followup", abschied: stufe >= plan.length, vorname: c.full_name },
     c.full_name ?? "?",
   );
   if (!text) return false;
   const info = db
-    .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft, ki_original, sequence_stage) VALUES(?,'followup',?,?,?,?,?,?)")
-    .run(c.id, c.profile_url, c.full_name ?? null, "", text, text, stufe);
+    .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft, ki_original, sequence_stage, variant_json) VALUES(?,'followup',?,?,?,?,?,?,?)")
+    .run(c.id, c.profile_url, c.full_name ?? null, "", text, text, stufe, wahl ? JSON.stringify({ slot: wahl.slot, arm: wahl.arm }) : null);
   const draftId = Number(info.lastInsertRowid);
   attachDraftContext(draftId, c.id);
   events.emit("draft:new", getDraft(draftId));
@@ -247,14 +264,16 @@ export async function generateFollowups(limit = 5): Promise<number> {
   for (const c of candidates) {
     if (auto) {
       const stufe = followupStufe(c.profile_url);
+      const wahl = waehleArm(`followup:${zweckFuer(stufe, plan)}`);
       const text = await mitAusgangsCheck(
-        (korrektur) => followupMessage(c, stufe, undefined, { bisher: letzteGesendete(c.profile_url), korrektur }).catch(() => ""),
+        (korrektur) => followupMessage(c, stufe, undefined, { bisher: letzteGesendete(c.profile_url), korrektur, variante: wahl }).catch(() => ""),
         { kind: "followup", abschied: stufe >= plan.length, vorname: c.full_name },
         c.full_name ?? "?",
       );
       if (!text) continue;
       try {
         await sendMessage(c.profile_url, text);
+        if (wahl) registriereVersand({ contactId: c.id, kind: "followup", stufe, slot: wahl.slot, arm: wahl.arm, zielgruppe: c.zielgruppe ?? null });
         done++;
       } catch (e) {
         if (!(e instanceof GovernorBlocked)) console.error("[followup] Sendefehler → Entwurf:", (e as Error)?.message);
@@ -308,8 +327,9 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
   // nichts. Real passiert 2026-07-16: Gemini lieferte 503, der Bot ging wortlos weiter.
   // Der Kontakt bleibt 'accepted' und wird beim naechsten stuendlichen Lauf neu versucht.
   const auftrag = auftragMitFakten(c.id);
+  const wahlAuto = waehleArm("first");
   const text = await mitAusgangsCheck(
-    (korrektur) => firstMessage(c, undefined, auftrag.goal, auftrag.fakten, korrektur).catch((e: Error) => {
+    (korrektur) => firstMessage(c, undefined, auftrag.goal, auftrag.fakten, korrektur, wahlAuto).catch((e: Error) => {
       console.error(`[first] ⚠ KI konnte keinen Text schreiben fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
       return "";
     }),
@@ -328,6 +348,7 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
   }
   try {
     await sendMessage(c.profile_url, text); // setzt Status 'messaged' bei Erfolg
+    if (wahlAuto) registriereVersand({ contactId: c.id, kind: "first", slot: wahlAuto.slot, arm: wahlAuto.arm, goalCode: auftrag.goal?.code ?? null, zielgruppe: c.zielgruppe ?? null });
     console.info(`[first] ✅ Erstnachricht auto-gesendet an ${c.full_name}`);
   } catch (e) {
     // GovernorBlocked (z.B. Sonntag/außerhalb der Zeit/Limit) = nur vertagt: Kontakt bleibt
@@ -338,8 +359,8 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
     }
     console.error("[first] Sendefehler → Entwurf:", (e as Error)?.message);
     const info = db
-      .prepare("INSERT INTO drafts(contact_id, kind, thread_url, participant, incoming, draft) VALUES(?,'first',?,?,?,?)")
-      .run(c.id, c.profile_url, c.full_name ?? null, "", text);
+      .prepare("INSERT INTO drafts(contact_id, kind, thread_url, participant, incoming, draft, ki_original, variant_json) VALUES(?,'first',?,?,?,?,?,?)")
+      .run(c.id, c.profile_url, c.full_name ?? null, "", text, text, wahlAuto ? JSON.stringify({ slot: wahlAuto.slot, arm: wahlAuto.arm }) : null);
     events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
   }
 }
@@ -747,6 +768,7 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
       if (contact) recordCrmStage(contact.id, "messaged", "bot");
     }
     learnFromDraft(id, "sent");
+    registriereVarianteFuerEntwurf(d);
     return { ok: true };
   } catch (e) {
     if (e instanceof DuplikatBlockiert) {

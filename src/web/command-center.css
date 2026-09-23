@@ -286,3 +286,10 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 .auto-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px}
 .auto-num{display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:13px}
 .auto-num input{width:64px;font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:8px}
+
+/* Was wirkt (2026-09-23) */
+.var-slot{margin-top:14px}
+.var-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+.var-table th{text-align:left;font-size:11px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:6px 8px}
+.var-table td{padding:7px 8px;border-bottom:1px solid var(--line)}
+.varianten-panel{overflow-x:auto}

@@ -11,6 +11,7 @@ import { goalForContact } from "./goals.js";
 import { campaignContext } from "./campaigns.js";
 import { pruefeAusgehend } from "../core/ausgehendCheck.js";
 import { erlaubteLinks } from "./angebot.js";
+import { waehleArm } from "./varianten.js";
 
 /**
  * BESTEHENDES NETZWERK REAKTIVIEREN.
@@ -127,11 +128,12 @@ export async function generateReaktivierung(limit = 3): Promise<number> {
   for (const c of kandidaten) {
     const goal = goalForContact(c.id);
     const fakten = goal?.campaignId ? campaignContext(goal.campaignId) : "";
-    let text = await reaktivierungMessage(c, goal, fakten).catch(() => "");
+    const wahl = waehleArm("reaktivierung");
+    let text = await reaktivierungMessage(c, goal, fakten, undefined, undefined, wahl).catch(() => "");
     // Ausgangsprüfung wie bei Erstnachricht/Nachfassung: ein Neuversuch mit Gründen, sonst nichts.
     const pruef = text ? pruefeAusgehend(text, { kind: "reaktivierung", vorname: c.full_name, erlaubteLinks: erlaubteLinks() }) : null;
     if (pruef && !pruef.ok) {
-      text = await reaktivierungMessage(c, goal, fakten, undefined, `Dein letzter Entwurf wurde abgelehnt: ${pruef.gruende.join("; ")}. Verworfener Entwurf: ${text}`).catch(() => "");
+      text = await reaktivierungMessage(c, goal, fakten, undefined, `Dein letzter Entwurf wurde abgelehnt: ${pruef.gruende.join("; ")}. Verworfener Entwurf: ${text}`, wahl).catch(() => "");
       if (text && !pruefeAusgehend(text, { kind: "reaktivierung", vorname: c.full_name, erlaubteLinks: erlaubteLinks() }).ok) text = "";
     }
     if (!text) continue;
@@ -141,8 +143,8 @@ export async function generateReaktivierung(limit = 3): Promise<number> {
       continue;
     }
     const info = db
-      .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft, ki_original) VALUES(?,'reaktivierung',?,?,?,?,?)")
-      .run(c.id, c.profile_url, c.full_name ?? null, "", text, text);
+      .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft, ki_original, variant_json) VALUES(?,'reaktivierung',?,?,?,?,?,?)")
+      .run(c.id, c.profile_url, c.full_name ?? null, "", text, text, wahl ? JSON.stringify({ slot: wahl.slot, arm: wahl.arm }) : null);
     const draftId = Number(info.lastInsertRowid);
     attachDraftContext(draftId, c.id);
     events.emit("draft:new", getDraft(draftId));

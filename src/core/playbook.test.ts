@@ -58,8 +58,10 @@ test("Nachfassung: Zweck + Angebot im Prompt, Stufe eingefroren", async () => {
   assert.match(prompts[0], /WERT GEBEN/);
   assert.match(prompts[0], /Potenzialanalyse/);
   assert.doesNotMatch(prompts[0], /wollte nochmal nachfragen\./i);
-  const d = db.prepare("SELECT sequence_stage FROM drafts WHERE thread_url='https://www.linkedin.com/in/max-prompt/'").get() as { sequence_stage: number };
+  const d = db.prepare("SELECT sequence_stage, variant_json FROM drafts WHERE thread_url='https://www.linkedin.com/in/max-prompt/'").get() as { sequence_stage: number; variant_json: string };
   assert.equal(d.sequence_stage, 1);
+  assert.match(prompts[0], /VARIANTE FÜR DIESE NACHRICHT/, "Selbstlernen: die gewählte Variante steuert den Text");
+  assert.equal(JSON.parse(d.variant_json).slot, "followup:wert");
   setTextGeneratorForTests(null);
 });
 

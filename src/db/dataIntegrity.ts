@@ -86,7 +86,7 @@ export function repairContactDuplicates(db: Database.Database): { groups: number
       }
       if (dropIds.length) {
         const q = dropIds.map(() => "?").join(",");
-        for (const table of ["relationship_events", "crm_stage_events", "contact_timeline_events"] as const) {
+        for (const table of ["relationship_events", "crm_stage_events", "contact_timeline_events", "message_variants"] as const) {
           if (tableExists(db, table)) db.prepare(`UPDATE ${table} SET contact_id=? WHERE contact_id IN (${q})`).run(keep.id, ...dropIds);
         }
         if (tableExists(db, "drafts")) {

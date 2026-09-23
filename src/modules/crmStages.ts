@@ -1,5 +1,6 @@
 import { db } from "../db/index.js";
 import { resolveContactIdentity } from "./contactIdentity.js";
+import { attribuiereErgebnis, aktualisiereAntwortQualitaet } from "./varianten.js";
 
 /**
  * Die vollständige Funnel-Kette. Sie ist bewusst EIN Vokabular für alle Auswertungen: gefunden →
@@ -82,6 +83,11 @@ export function recordCrmStage(
   // Das ist eine Korrektur derselben Antwort, kein zweites Ereignis — deshalb UPDATE statt INSERT.
   if (quality && stage === "replied" && !inserted) {
     db.prepare("UPDATE crm_stage_events SET reply_quality=? WHERE dedupe_key=?").run(quality, key);
+    aktualisiereAntwortQualitaet(contactId, quality);
+  }
+  // Selbstlernen: Antwort/Termin der zuletzt davor gesendeten Variante zuordnen (genau einmal).
+  if (inserted && (stage === "replied" || stage === "meeting")) {
+    attribuiereErgebnis(contactId, stage, options.occurredAt ?? null, quality);
   }
 
   if (OUTCOME_STAGES.has(stage)) {

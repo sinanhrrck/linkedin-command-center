@@ -489,3 +489,25 @@ CREATE TABLE IF NOT EXISTS engine_neustarts (
   berichtet_at    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_engine_neustarts_offen ON engine_neustarts(berichtet_at, at);
+
+-- SELBSTLERNENDE VARIANTEN (2026-09-23, modules/varianten.ts). Ein Versand je Kontakt/Art/Stufe
+-- (fachlicher dedupe_key). Slot/Arm/Ziel beim Schreiben eingefroren; Antwort und Termin werden
+-- genau einmal nachgetragen. Bewusst OHNE Nachrichtentext.
+CREATE TABLE IF NOT EXISTS message_variants (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key    TEXT UNIQUE NOT NULL,
+  contact_id    INTEGER NOT NULL,
+  draft_id      INTEGER,
+  kind          TEXT NOT NULL,
+  stage         INTEGER NOT NULL DEFAULT 0,
+  slot          TEXT NOT NULL,
+  arm           TEXT NOT NULL,
+  goal_code     TEXT,
+  zielgruppe    TEXT,
+  sent_at       TEXT NOT NULL,
+  replied_at    TEXT,
+  reply_quality TEXT,
+  meeting_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_variants_slot ON message_variants(slot, arm, sent_at);
+CREATE INDEX IF NOT EXISTS idx_variants_contact ON message_variants(contact_id, sent_at);
