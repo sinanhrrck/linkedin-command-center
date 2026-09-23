@@ -182,7 +182,7 @@ export function learningRules(goalCode?: LearningGoal): LearningRule[] {
     if (row.n >= 2) rules.push({ code, title, instruction, evidence: row.n, goalCode: row.goal_code as LearningGoal });
   };
   for (const row of reasons) {
-    if (row.key === "too_salesy") add(row, "less_salesy", "Weniger verkäuferisch", "Kein Pitch, keine Nutzenbehauptung und kein Druck, bevor die Person selbst einen Bedarf zeigt.");
+    if (row.key === "too_salesy") add(row, "less_salesy", "Weniger verkäuferisch", "Kein Druck, keine Übertreibung, keine Werbesprache. Ein Angebot nur in der leichten, freiwilligen Form, die die Nachricht ausdrücklich vorsieht.");
     if (row.key === "artificial") add(row, "more_natural", "Natürlicher schreiben", "Schreibe gesprochener, einfacher und weniger glatt. Vermeide typische KI-Floskeln.");
     if (row.key === "too_personal") add(row, "less_personal", "Mehr Abstand halten", "Bleib bei beruflichen und von der Person selbst geöffneten Themen. Keine privaten Annahmen.");
   }

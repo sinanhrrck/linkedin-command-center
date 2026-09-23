@@ -9,6 +9,8 @@ import { getDraft } from "./drafts.js";
 import { attachDraftContext } from "./conversationMemory.js";
 import { goalForContact } from "./goals.js";
 import { campaignContext } from "./campaigns.js";
+import { pruefeAusgehend } from "../core/ausgehendCheck.js";
+import { erlaubteLinks } from "./angebot.js";
 
 /**
  * BESTEHENDES NETZWERK REAKTIVIEREN.
@@ -124,7 +126,14 @@ export async function generateReaktivierung(limit = 3): Promise<number> {
   let done = 0;
   for (const c of kandidaten) {
     const goal = goalForContact(c.id);
-    const text = await reaktivierungMessage(c, goal, goal?.campaignId ? campaignContext(goal.campaignId) : "").catch(() => "");
+    const fakten = goal?.campaignId ? campaignContext(goal.campaignId) : "";
+    let text = await reaktivierungMessage(c, goal, fakten).catch(() => "");
+    // Ausgangsprüfung wie bei Erstnachricht/Nachfassung: ein Neuversuch mit Gründen, sonst nichts.
+    const pruef = text ? pruefeAusgehend(text, { kind: "reaktivierung", vorname: c.full_name, erlaubteLinks: erlaubteLinks() }) : null;
+    if (pruef && !pruef.ok) {
+      text = await reaktivierungMessage(c, goal, fakten, undefined, `Dein letzter Entwurf wurde abgelehnt: ${pruef.gruende.join("; ")}. Verworfener Entwurf: ${text}`).catch(() => "");
+      if (text && !pruefeAusgehend(text, { kind: "reaktivierung", vorname: c.full_name, erlaubteLinks: erlaubteLinks() }).ok) text = "";
+    }
     if (!text) continue;
     const chk = istPlausibleNachricht(text);
     if (!chk.ok) {

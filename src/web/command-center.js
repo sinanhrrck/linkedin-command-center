@@ -1353,8 +1353,32 @@ $("offer-save").onclick = async () => {
   finally { button.disabled = false; }
 };
 
+
+/** NACHFASS-PLAN (2026-09-23): eigener Ladepfad, damit der Auto-Refresh das Formular nicht überschreibt. */
+let fuPlan = null;
+const FU_ZWECK = { wert: "Wert geben + Angebot", beweis: "Echte Geschichte + Angebot", anknuepfen: "Locker anknüpfen", abschied: "Ehrlicher Schlussstrich" };
+const FU_PRESETS = { 2: [{ nachTagen: 4, zweck: "wert" }, { nachTagen: 7, zweck: "abschied" }], 3: [{ nachTagen: 3, zweck: "wert" }, { nachTagen: 5, zweck: "beweis" }, { nachTagen: 7, zweck: "abschied" }] };
+function renderFuPlan() {
+  if (!fuPlan) return;
+  $("fu-steps").innerHTML = fuPlan.map((s, i) => {
+    const letzte = i === fuPlan.length - 1;
+    return `<div class="fu-step"><b>${i + 1}. Nachfassung</b><label>nach <input type="number" min="2" max="30" data-fu-days="${i}" value="${s.nachTagen}"/> Tagen</label>${letzte
+      ? `<span class="fu-fixed">${FU_ZWECK.abschied}</span>`
+      : `<select data-fu-zweck="${i}">${["wert", "beweis", "anknuepfen"].map((z) => `<option value="${z}" ${s.zweck === z ? "selected" : ""}>${FU_ZWECK[z]}</option>`).join("")}</select>`}</div>`;
+  }).join("");
+}
+const leseFuPlan = () => fuPlan.map((s, i) => ({ nachTagen: Number(document.querySelector(`[data-fu-days="${i}"]`)?.value || s.nachTagen), zweck: document.querySelector(`[data-fu-zweck="${i}"]`)?.value || "abschied" }));
+async function ladeFuPlan() { try { fuPlan = (await (await fetch("/api/followup-plan", { cache: "no-store" })).json()).plan; renderFuPlan(); } catch (error) { $("fu-note").textContent = `Plan nicht geladen: ${error.message}`; } }
+document.querySelectorAll("[data-fu-preset]").forEach((b) => b.addEventListener("click", () => { fuPlan = FU_PRESETS[b.dataset.fuPreset].map((s) => ({ ...s })); renderFuPlan(); $("fu-note").textContent = "Noch nicht gespeichert."; }));
+$("fu-save").onclick = async () => {
+  $("fu-note").textContent = "";
+  try { fuPlan = (await post("/api/followup-plan", { plan: leseFuPlan() })).plan; renderFuPlan(); toast("Nachfass-Plan gespeichert."); }
+  catch (error) { $("fu-note").textContent = error.message; }
+};
+
 function renderSettings() {
   if (!angebot) ladeAngebot();
+  if (!fuPlan) ladeFuPlan();
   const alive = !!state.engine?.alive; $("engine-title").textContent = alive ? "Engine arbeitet" : "Engine ist aus"; $("engine-copy").textContent = alive ? "Vernetzung, Kampagnen und freigegebene Nachrichten laufen in einer gemeinsamen Prioritätsqueue." : "Ohne Engine werden keine Hintergrundaufgaben ausgeführt."; $("engine-toggle").textContent = alive ? "Engine stoppen" : "Engine starten";
   const level = automationLevel(); document.querySelectorAll("[data-level]").forEach((button) => button.classList.toggle("active", button.dataset.level === level));
   $("automation-copy").textContent = { vorschlaege: "NextLead vernetzt automatisch. Jede Nachricht bleibt ein Entwurf.", halb: "Azubi-Erstnachrichten werden automatisch gesendet, Antworten bleiben zur Prüfung.", agent_test: "Der Gesprächsagent denkt mit, sendet aber nicht selbst.", agent_live: "Der Gesprächsagent führt Routinegespräche selbst und übergibt wichtige Fälle." }[level] + " Bestehende Netzwerk-Kontakte brauchen in jeder Stufe deine Freigabe.";

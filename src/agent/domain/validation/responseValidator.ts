@@ -13,7 +13,7 @@ import { STAGE_DEF } from "../state.js";
 import { istWiederholung } from "../policy/riskEngine.js";
 
 /** ChatGPT-/Floskel-Marker, die eine Nachricht sofort unecht wirken lassen. */
-const FLOSKELN = [
+export const FLOSKELN = [
   "als ki", "als sprachmodell", "ich hoffe, diese nachricht", "ich hoffe, es geht dir gut",
   "ich hoffe, es geht dir", "ich hoffe, du hattest", "zögere nicht", "zögern sie nicht",
   "stehe dir jederzeit", "stehe ich dir", "jederzeit zur verfügung", "gerne zur verfügung",
@@ -22,7 +22,7 @@ const FLOSKELN = [
 ];
 
 /** Verkaufs-/Marketingsprache – für einen Erst-Kontakt tabu. */
-const VERKAUFSSPRACHE = [
+export const VERKAUFSSPRACHE = [
   "exklusiv", "einzigartige gelegenheit", "einmalige chance", "mehrwert", "synergie",
   "potenzial ausschöpfen", "marktführend", "revolutionär", "no-brainer", "garantiert",
   "profitier", "unverbindliches beratungsgespräch", "attraktives angebot", "top-angebot",

@@ -6,6 +6,8 @@ import { promptKontext, saubern, erstnachrichtAngle, type Zielgruppe } from "../
 import type { ConversationGoal, GoalCode } from "./goals.js";
 import { learningGuidance } from "./learning.js";
 import { ausbildungsStand, ausbildungsVorgabe, behauptetLaufendeAusbildung } from "../core/ausbildungsStand.js";
+import { angebotsHinweis, beweisBlock, type Route } from "./angebot.js";
+import { ZWECK_ANWEISUNG, zweckFuer } from "./playbook.js";
 
 /**
  * Router für den Autopilot-Text: bezahltes Claude (Standard im Voll-Modus, Qualität +
@@ -57,6 +59,11 @@ function variationBlock(variation?: TextVariation): string {
     (rejected.length ? `\nBEREITS ABGELEHNT. Übernimm weder deren Gesprächsidee noch Satzbau oder Frage:\n${rejected.map((text, i) => `${i + 1}. ${text}`).join("\n")}\n` : "");
 }
 
+/** Rückmeldung der Ausgangsprüfung (drafts.mitAusgangsCheck) für den einen Neuversuch. */
+function korrekturBlock(korrektur?: string): string {
+  return korrektur ? `\nKORREKTUR (zwingend beachten): ${korrektur}\nSchreib die Nachricht neu und vermeide genau diese Fehler.\n` : "";
+}
+
 /**
  * Kurze, personalisierte Vernetzungsnotiz (< 200 Zeichen, LinkedIn-Limit).
  * Personalisierung ist hier kein Nice-to-have: Sie ist der einzige Hebel, der
@@ -85,13 +92,13 @@ Nimm EINEN konkreten Bezug zur Person (z.B. ihre Rolle/Ausbildung). Gib NUR die 
  * Inhalt hatte keinerlei Wirkung auf den Text. Die Fakten steuern jetzt die ANKNÜPFUNG –
  * verkauft oder erwähnt wird in Nachricht 1 weiterhin nichts.
  */
-export async function firstMessage(c: Contact, variation?: TextVariation, goal?: ConversationGoal | null, kampagnenFakten?: string): Promise<string> {
+export async function firstMessage(c: Contact, variation?: TextVariation, goal?: ConversationGoal | null, kampagnenFakten?: string, korrektur?: string): Promise<string> {
   const aufbau = variation
     ? `AUFBAU FÜR DIESE NEUGENERIERUNG:\nFolge der unten genannten neuen Gesprächsrichtung. Du darfst die übliche Reihenfolge Profilbezug, eigene Geschichte, offene Frage ausdrücklich verlassen. Nutze nur Bausteine, die zu dieser Richtung passen.`
     : `AUFBAU (Nutze immer diese 3 Bausteine, genau in dieser Reihenfolge):
 1. Persönliche Anknüpfung (1 Zeile). Beziehe dich auf etwas Konkretes aus dem Profil: Bank, Standort, Ausbildungsjahr, ein Post. Kein "Ich sehe du bist im Vertrieb tätig". Etwas, das nur auf diese Person zutrifft.
-2. Eigener Bezug (1 Zeile). Erkläre kurz, warum du schreibst. Beispiel: "Ich hab damals auch in der Bank angefangen" oder "Ich bin gerade viel im Austausch mit Leuten aus dem Bankumfeld".
-3. Offene Frage (1 Zeile). Stelle exakt EINE ehrliche, offene Frage zu seiner aktuellen Situation. Keine Suggestivfragen. Keine Verkaufsfragen. Beispiele: "Wie erlebst du das gerade?", "Ist das so, wie du dir das vorgestellt hast?". Die Nachricht ENDET mit dieser Frage – KEINE Absichtserklärung, KEIN "ich will nichts verkaufen", KEIN "das ist kein Pitch" hinterher.`;
+2. Eigener Bezug MIT Mehrwert (1 bis 2 Zeilen). Warum du schreibst, und EIN echter Gedanke, der für ihre Lage nützlich ist: etwas, das viele in genau dieser Situation unterschätzen oder zu spät merken (zum Beispiel, dass nach der Ausbildung die Weichen schneller gestellt werden, als man denkt). Aus eigener Erfahrung erzählt, nicht belehrend. Beispiel: "Ich hab damals auch in der Bank angefangen und hab erst spät gemerkt, wie schnell nach der Ausbildung alles festgefahren ist."
+3. Leichte Frage (1 Zeile). Stelle exakt EINE ehrliche Frage zu ihrer aktuellen Situation, die man in fünf Sekunden beantworten kann. Keine Suggestivfragen. Keine Verkaufsfragen. Beispiele: "Wie erlebst du das gerade?", "Ist das so, wie du dir das vorgestellt hast?". Die Nachricht ENDET mit dieser Frage – KEINE Absichtserklärung, KEIN "ich will nichts verkaufen", KEIN "das ist kein Pitch" hinterher.`;
   const prompt = `Du bist Sinan. Du schreibst LinkedIn-Erstnachrichten an Auszubildende oder Berufseinsteiger im Bankwesen. Dein Ziel ist NIEMALS der Verkauf oder Pitch in der ersten Nachricht, sondern das Öffnen eines echten, lockeren Gesprächs auf Augenhöhe. Du bist neugierig, ehrlich und kommst sofort auf den Punkt. Du warst selbst mal Azubi in einer Bank und holst die Leute genau über diese gemeinsame Lebenslage ab.
 
 ${aufbau}
@@ -129,6 +136,7 @@ ${goal ? `\nLANGFRISTIGER GESPRÄCHSAUFTRAG: ${goal.code} – ${goal.label}. ${g
 ${kampagnenFakten ? `\n${kampagnenFakten}\nNutze diese Angaben nur, um die richtige Anknüpfung und Tonlage zu wählen. Erwähne weder Kampagne, Angebot, Event noch Nutzen in dieser ersten Nachricht.` : ""}
 ${learningGuidance(goal?.code ?? null)}
 
+${korrekturBlock(korrektur)}
 OUTPUT-REGEL: Generiere GENAU EINE Nachricht nach obigem Aufbau. Nichts drumherum, keine Erklärungen davor oder danach, kein "Hier ist die Nachricht:". Gib ausschließlich den Text der Nachricht aus.`;
   return mitAusbildungsCheck(c, prompt);
 }
@@ -353,23 +361,28 @@ Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
  *  - Stufe 2 (nach weiteren ~7 Tagen): kurz, ehrlich, mit sauberem Schlussstrich –
  *    das nimmt Druck raus und bringt erfahrungsgemäß die meisten späten Antworten.
  */
-export async function followupMessage(c: Contact, stufe: 1 | 2 = 1, variation?: TextVariation): Promise<string> {
-  const stufenText =
-    stufe === 1
-      ? `Kontext: Sinan hatte der Person schon geschrieben, aber noch keine Antwort bekommen.
-KEIN Druck, kein Vorwurf, locker und sympathisch. Knüpf leicht an das Thema an (Ausbildung/
-Weg nach der Ausbildung, passend zum AUSBILDUNGSSTAND unten) und mach es der Person leicht zu antworten.`
-      : `Kontext: Sinan hat der Person schon zweimal geschrieben, ohne Antwort. Das ist die LETZTE
-Nachricht. Schreib SEHR kurz (1-2 Sätze), ehrlich und ohne jeden Druck: Sinan meldet sich nicht
-mehr, die Tür bleibt aber offen, falls sie sich später doch melden möchte. Kein Vorwurf, kein
-"schade", kein Verkaufsversuch. Sympathischer Schlussstrich.`;
-  const prompt = `Schreibe ein kurzes, freundliches Follow-up auf LinkedIn (${stufe === 1 ? "2-3 Sätze" : "1-2 Sätze"}).
+export async function followupMessage(
+  c: Contact,
+  stufe = 1,
+  variation?: TextVariation,
+  opts: { bisher?: string; korrektur?: string; route?: Route } = {},
+): Promise<string> {
+  // Jede Stufe hat einen eigenen Zweck aus dem Nachfass-Plan (modules/playbook.ts). Vorher war
+  // Stufe 1 ein reines „wollte nochmal nachfragen“ – ohne jeden Grund zu antworten.
+  const zweck = zweckFuer(stufe);
+  const abschied = zweck === "abschied";
+  const angebot = abschied ? "" : angebotsHinweis(opts.route ?? "karriere");
+  const prompt = `Schreibe eine kurze LinkedIn-Nachfassung (${abschied ? "1-2 Sätze" : "2-3 Sätze"}). Die Person hat auf die letzte Nachricht noch nicht geantwortet.
 ${promptKontext()}
 ${personZeile(c)}
 ${learningGuidance(null)}
 ${ausbildungsVorgabe(c.headline)}
-${stufenText}
-${variationBlock(variation)}
+${opts.bisher ? `\nDEINE LETZTE NACHRICHT AN DIE PERSON (nicht wiederholen, nicht zitieren):\n${opts.bisher}\n` : ""}
+${ZWECK_ANWEISUNG[zweck]}
+${zweck === "beweis" ? beweisBlock() : ""}
+${angebot}
+${variationBlock(variation)}${korrekturBlock(opts.korrektur)}
+Umlaute immer richtig schreiben (ä, ö, ü, ß), nie ae/oe/ue.
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
   return mitAusbildungsCheck(c, prompt);
 }
@@ -384,7 +397,7 @@ Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
  * Für sie ist diese Nachricht der einzige Berührungspunkt – sie muss den Auftrag kennen, sonst
  * bleiben diese Kampagnenkontakte für immer unbearbeitet liegen.
  */
-export async function reaktivierungMessage(c: Contact, goal?: ConversationGoal | null, kampagnenFakten?: string, variation?: TextVariation): Promise<string> {
+export async function reaktivierungMessage(c: Contact, goal?: ConversationGoal | null, kampagnenFakten?: string, variation?: TextVariation, korrektur?: string): Promise<string> {
   const prompt = `Schreibe eine kurze, natürliche LinkedIn-Nachricht (2-3 Sätze).
 ${promptKontext()}
 ${personZeile(c)}
@@ -395,11 +408,13 @@ Kontext: Ihr seid auf LinkedIn schon vernetzt, aber ihr habt nie miteinander ges
 Die Person erinnert sich vielleicht nicht mehr an die Vernetzung.
 Regeln:
 - Sprich das offen und locker an ("wir sind hier schon länger vernetzt, aber nie ins Gespräch gekommen").
-- KEIN Verkauf, KEIN Angebot, KEINE Beratung anbieten.
-- Echtes Interesse an ihrem Weg zeigen und EINE leichte, offene Frage stellen.
+- Nenn einen ECHTEN Anlass, warum du dich jetzt meldest (z. B. dass du gerade viel mit Leuten in ihrer Lage sprichst). Kein erfundener Anlass.
+- Kein Pitch, keine Werbesprache. Steht unten ein Angebot, darf es als leichtes, freiwilliges Ja vorkommen, sonst nur echtes Interesse an ihrem Weg.
+- Genau EINE leichte Frage, die man in fünf Sekunden beantworten kann.
 - Kein Sie-Siezen, wenn der Stil sonst duzt. Kein Floskel-Deutsch.
 ${ausbildungsVorgabe(c.headline)}
-${variationBlock(variation)}
+${angebotsHinweis(goal?.code === "B1" ? "finanzen" : "karriere")}
+${variationBlock(variation)}${korrekturBlock(korrektur)}
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
   return mitAusbildungsCheck(c, prompt);
 }

@@ -36,6 +36,7 @@ import { backfillCampaignWorkflows, retryCampaignTarget, retryFailedCampaignTarg
 import { backfillConversationMemories, backfillDraftContexts } from "../modules/conversationMemory.js";
 import { config } from "../config.js";
 import { angebotFuerCockpit, speichereAngebot } from "../modules/angebot.js";
+import { followupPlan, speichereFollowupPlan } from "../modules/playbook.js";
 import { bericht, type BerichtArt } from "../modules/berichte.js";
 import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
 
@@ -1005,6 +1006,25 @@ const server = createServer((req, res) => {
 
   // NOTIZEN: alles, was nach einem Telefonat festgehalten werden muss. Landet mit Zeitstempel
   // in der Kontaktspur, damit später nachvollziehbar ist, WANN es notiert wurde.
+  // NACHFASS-PLAN: Stufen + Abstände. Die Grenzen (max. 3, letzte = Abschied) setzt playbook.ts.
+  if (url.pathname === "/api/followup-plan" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify({ plan: followupPlan() }));
+    return;
+  }
+  if (url.pathname === "/api/followup-plan" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const plan = speichereFollowupPlan(JSON.parse(body || "{}").plan);
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, plan }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
   // ANGEBOT (Lead Magnets, Belege, Buchungslink). Schreibt nur diese Felder ins Profil.
   if (url.pathname === "/api/angebot" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(JSON.stringify(angebotFuerCockpit()));

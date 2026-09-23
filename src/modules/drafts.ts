@@ -6,6 +6,9 @@ import { firstMessage, followupMessage, reaktivierungMessage, converseStep, pitc
 import { GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
 import { markInboundReply, messagedAwaitingFollowup, type Contact } from "./crm.js";
+import { followupPlan } from "./playbook.js";
+import { pruefeAusgehend, type AusgehendKontext } from "../core/ausgehendCheck.js";
+import { erlaubteLinks } from "./angebot.js";
 import { contactForConversation, recordCrmStage } from "./crmStages.js";
 import { promptKontext, saubern } from "../context.js";
 import { events } from "../core/events.js";
@@ -40,6 +43,7 @@ export type Draft = {
   phase: "message" | "approach";
   parent_draft_id: number | null;
   approach_key: string | null;
+  sequence_stage?: number | null;
   rejection_reason: string | null;
   blockiert_grund: string | null;
   context_evidence_json: string | null;
@@ -88,10 +92,14 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
     .get(c.profile_url);
   if (exists) return false;
   const auftrag = auftragMitFakten(c.id);
-  const text = await firstMessage(c, undefined, auftrag.goal, auftrag.fakten).catch((e: Error) => {
-    console.error(`[first] ⚠ KI-Fehler (Entwurf) fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
-    return "";
-  });
+  const text = await mitAusgangsCheck(
+    (korrektur) => firstMessage(c, undefined, auftrag.goal, auftrag.fakten, korrektur).catch((e: Error) => {
+      console.error(`[first] ⚠ KI-Fehler (Entwurf) fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
+      return "";
+    }),
+    { kind: "first", vorname: c.full_name },
+    c.full_name ?? "?",
+  );
   if (!text) return false;
   const chk = istPlausibleNachricht(text);
   if (!chk.ok) {
@@ -122,11 +130,39 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
  * und Neuschreiben – vorher rechnete jeder Pfad anders: die Voll-Automatik schickte die zweite
  * Nachfassung als Stufe 1, und ein abgelehnter Stufe-2-Entwurf kam als Stufe 1 zurück.
  */
-export function followupStufe(threadUrl: string, vorEntwurfId?: number): 1 | 2 {
+export function followupStufe(threadUrl: string, vorEntwurfId?: number): number {
   const n = (db.prepare(
     `SELECT COUNT(*) n FROM drafts WHERE thread_url=? AND kind='followup' AND status='sent'${vorEntwurfId ? " AND id<?" : ""}`,
   ).get(...(vorEntwurfId ? [threadUrl, vorEntwurfId] : [threadUrl])) as { n: number }).n;
-  return n === 0 ? 1 : 2;
+  return n + 1;
+}
+
+/** Letzte von uns gesendete Nachricht an diesen Kontakt – damit die Nachfassung sie nicht wiederholt. */
+function letzteGesendete(threadUrl: string): string {
+  const r = db.prepare(
+    "SELECT draft FROM drafts WHERE thread_url=? AND status='sent' AND kind IN ('first','followup','reaktivierung','message') ORDER BY COALESCE(sent_at,created_at) DESC LIMIT 1",
+  ).get(threadUrl) as { draft: string } | undefined;
+  return r?.draft || "";
+}
+
+/**
+ * Erzeugen + prüfen (core/ausgehendCheck.ts). Fällt die Prüfung durch, EIN Neuversuch mit den
+ * konkreten Gründen, danach kein Text – lieber kein Entwurf als ein schlechter.
+ */
+async function mitAusgangsCheck(
+  erzeuge: (korrektur?: string) => Promise<string>,
+  ctx: AusgehendKontext,
+  wer: string,
+): Promise<string> {
+  const erster = await erzeuge();
+  if (!erster) return "";
+  const p1 = pruefeAusgehend(erster, { erlaubteLinks: erlaubteLinks(), ...ctx });
+  if (p1.ok) return erster;
+  const zweiter = await erzeuge(`Dein letzter Entwurf wurde abgelehnt: ${p1.gruende.join("; ")}. Verworfener Entwurf: ${erster}`).catch(() => "");
+  const p2 = zweiter ? pruefeAusgehend(zweiter, { erlaubteLinks: erlaubteLinks(), ...ctx }) : { ok: false, gruende: ["kein Text"] };
+  if (p2.ok) return zweiter;
+  console.error(`[sicherheit] ${ctx.kind}-Text für ${wer} verworfen (${p2.gruende.join("; ")}).`);
+  return "";
 }
 
 export async function createFollowupDraft(c: Contact): Promise<boolean> {
@@ -138,23 +174,24 @@ export async function createFollowupDraft(c: Contact): Promise<boolean> {
       )
       .get(c.profile_url) as { n: number }
   ).n;
-  if (bisher >= 2) return false; // Schluss nach zwei Versuchen
+  const plan = followupPlan();
+  if (bisher >= plan.length) return false; // Plan ausgeschöpft → nie wieder nachfassen
   // Ein offener Follow-up (oder ein vom Nutzer GELÖSCHTER = 'discarded') blockiert einen weiteren.
   const offen = db
     .prepare("SELECT 1 FROM drafts WHERE thread_url=? AND kind='followup' AND status IN ('pending','approved','discarded') LIMIT 1")
     .get(c.profile_url);
   if (offen) return false;
-  const stufe: 1 | 2 = bisher === 0 ? 1 : 2;
-  const text = await followupMessage(c, stufe).catch(() => "");
+  const stufe = bisher + 1;
+  const bisherGesendet = letzteGesendete(c.profile_url);
+  const text = await mitAusgangsCheck(
+    (korrektur) => followupMessage(c, stufe, undefined, { bisher: bisherGesendet, korrektur, route: auftragMitFakten(c.id).goal?.code === "B1" ? "finanzen" : "karriere" }).catch(() => ""),
+    { kind: "followup", abschied: stufe >= plan.length, vorname: c.full_name },
+    c.full_name ?? "?",
+  );
   if (!text) return false;
-  const chkF = istPlausibleNachricht(text);
-  if (!chkF.ok) {
-    console.error(`[sicherheit] Follow-up-Entwurf fuer ${c.full_name} verworfen (${chkF.grund}).`);
-    return false;
-  }
   const info = db
-    .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft) VALUES(?,'followup',?,?,?,?)")
-    .run(c.id, c.profile_url, c.full_name ?? null, "", text);
+    .prepare("INSERT INTO drafts(contact_id,kind, thread_url, participant, incoming, draft, ki_original, sequence_stage) VALUES(?,'followup',?,?,?,?,?,?)")
+    .run(c.id, c.profile_url, c.full_name ?? null, "", text, text, stufe);
   const draftId = Number(info.lastInsertRowid);
   attachDraftContext(draftId, c.id);
   events.emit("draft:new", getDraft(draftId));
@@ -198,13 +235,19 @@ export async function reviveChat(profileUrl: string): Promise<boolean> {
 }
 
 /** Erzeugt Follow-up-Entwürfe für Kontakte, die seit >= `days` Tagen nicht geantwortet haben. */
-export async function generateFollowups(days = 4, limit = 5): Promise<number> {
-  const candidates = messagedAwaitingFollowup(days, limit);
+export async function generateFollowups(limit = 5): Promise<number> {
+  const plan = followupPlan();
+  const candidates = messagedAwaitingFollowup(plan, limit);
   const auto = getMode() === "full"; // im Vollautomatik-Modus direkt senden
   let done = 0;
   for (const c of candidates) {
     if (auto) {
-      const text = await followupMessage(c, followupStufe(c.profile_url)).catch(() => "");
+      const stufe = followupStufe(c.profile_url);
+      const text = await mitAusgangsCheck(
+        (korrektur) => followupMessage(c, stufe, undefined, { bisher: letzteGesendete(c.profile_url), korrektur }).catch(() => ""),
+        { kind: "followup", abschied: stufe >= plan.length, vorname: c.full_name },
+        c.full_name ?? "?",
+      );
       if (!text) continue;
       try {
         await sendMessage(c.profile_url, text);
@@ -261,10 +304,14 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
   // nichts. Real passiert 2026-07-16: Gemini lieferte 503, der Bot ging wortlos weiter.
   // Der Kontakt bleibt 'accepted' und wird beim naechsten stuendlichen Lauf neu versucht.
   const auftrag = auftragMitFakten(c.id);
-  const text = await firstMessage(c, undefined, auftrag.goal, auftrag.fakten).catch((e: Error) => {
-    console.error(`[first] ⚠ KI konnte keinen Text schreiben fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
-    return "";
-  });
+  const text = await mitAusgangsCheck(
+    (korrektur) => firstMessage(c, undefined, auftrag.goal, auftrag.fakten, korrektur).catch((e: Error) => {
+      console.error(`[first] ⚠ KI konnte keinen Text schreiben fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
+      return "";
+    }),
+    { kind: "first", vorname: c.full_name },
+    c.full_name ?? "?",
+  );
   if (!text) {
     console.info(`[first] ${c.full_name} bleibt offen, naechster Versuch in max. 1 Stunde.`);
     return;
@@ -519,7 +566,7 @@ async function regenerateText(d: Draft, instruction: string, rejectedTexts: stri
     const c = db.prepare("SELECT * FROM contacts WHERE profile_url=?").get(d.thread_url) as Contact | undefined;
     const variation = { instruction, rejectedTexts: rejected };
     if (c && d.kind === "first") return firstMessage(c, variation, auftragMitFakten(c.id).goal, auftragMitFakten(c.id).fakten);
-    if (c && d.kind === "followup") return followupMessage(c, followupStufe(d.thread_url, d.id), variation);
+    if (c && d.kind === "followup") return followupMessage(c, d.sequence_stage ?? followupStufe(d.thread_url, d.id), variation, { bisher: letzteGesendete(d.thread_url) });
     if (c) return reaktivierungMessage(c, auftragMitFakten(c.id).goal, auftragMitFakten(c.id).fakten, variation);
   }
   if (d.kind === "comment") {

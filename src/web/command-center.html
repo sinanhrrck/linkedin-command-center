@@ -199,6 +199,13 @@
           <div class="acceptance-warning-copy"><span class="eyebrow">Annahmequote niedrig</span><div><b id="acceptance-warning-rate">–</b><span id="acceptance-warning-threshold">Warnschwelle –</span></div><h3>Weniger Vernetzungsanfragen senden?</h3><p id="acceptance-warning-effect"></p></div>
           <button id="acceptance-protection-toggle" class="switch-control" type="button" role="switch" aria-checked="true"><span class="switch-track"><i></i></span><span><b>Weniger Anfragen senden</b><small id="acceptance-protection-state">Aktiv</small></span></button>
         </section>
+        <section class="setting-card wide-card followup-card">
+          <div class="section-head"><div><span class="eyebrow">Nachfass-Plan</span><h3>Wie oft und womit nachgefasst wird</h3></div><button id="fu-save" class="primary">Plan speichern</button></div>
+          <p>Jede Nachfassung hat einen eigenen Anlass statt „wollte nochmal nachfragen“. Die letzte ist immer ein ehrlicher Schlussstrich, danach meldet sich der Bot nie wieder. Höchstens 3 Stufen, gezählt in Tagen seit der letzten Nachricht.</p>
+          <div class="button-row"><button data-fu-preset="2">Standard: 2 Stufen (4 / 7 Tage)</button><button data-fu-preset="3">Intensiver: 3 Stufen (3 / 5 / 7 Tage)</button></div>
+          <div id="fu-steps" class="fu-steps"></div>
+          <p id="fu-note" class="form-note" role="status"></p>
+        </section>
         <section class="setting-card wide-card offer-card" id="offer-card">
           <div class="section-head"><div><span class="eyebrow">Dein Angebot</span><h3>Wozu die Leute leicht Ja sagen</h3></div><button id="offer-save" class="primary">Angebot speichern</button></div>
           <p>Kostenlose Angebote, die der Bot im Gespräch passend zum Signal anbietet: Karriere-Fragen bekommen das Karriere-Angebot, Geldfragen das Gespräch dazu. Angeboten wird nur, was hier aktiv ist.</p>

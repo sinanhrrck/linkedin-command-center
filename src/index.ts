@@ -515,7 +515,7 @@ cron.schedule(`0 ${START_STUNDE} * * *`, () =>
 cron.schedule("*/10 * * * *", () => einzeln("sendApproved", () => sendApprovedDrafts(10), 100));
 
 // Follow-ups 1x täglich: für Kontakte, die seit >=4 Tagen nicht geantwortet haben.
-cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(4, 5), 55));
+cron.schedule("0 11 * * *", () => einzeln("followup", () => generateFollowups(5), 55));
 
 // SALES-AGENT = die EINZIGE Gesprächs-Engine (der alte Autopilot `runAutopilot` ist bewusst
 // stillgelegt – es gibt nur noch EINEN Bot, das war vorher verwirrend). Der Cron läuft immer,

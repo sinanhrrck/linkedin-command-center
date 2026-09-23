@@ -93,6 +93,9 @@ for (const [column, definition] of [
   ["context_evidence_json", "TEXT"],
   ["context_validation", "TEXT"],
   ["context_memory_version", "INTEGER"],
+  // Nachfass-Stufe (1..3) laut Plan zum Zeitpunkt der Erzeugung – eingefroren, damit eine
+  // spätere Planänderung die Auswertung nicht rückwirkend umschreibt (2026-09-23).
+  ["sequence_stage", "INTEGER"],
 ] as const) {
   try { db.exec(`ALTER TABLE drafts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
 }

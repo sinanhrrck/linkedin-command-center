@@ -301,40 +301,37 @@ export function hotLeads(): Contact[] {
 }
 
 /**
- * Kontakte, die vor >= `days` Tagen angeschrieben wurden und NICHT geantwortet haben –
- * Kandidaten fürs Follow-up (max. `limit`).
+ * Kandidaten fürs Nachfassen nach dem einstellbaren Plan (modules/playbook.ts).
+ * `n` = bereits erzeugte Nachfassungen (gesendet, freigegeben oder offen). Fällig ist Stufe n+1,
+ * sobald seit dem LETZTEN Kontakt `plan[n].nachTagen` vergangen sind (`messaged_at` wird beim
+ * Senden aktualisiert). Wer alle Stufen hinter sich hat, einen offenen Entwurf hat oder dessen
+ * Nachfassung der Nutzer verworfen hat, fällt raus – danach NIE wieder.
  */
-/**
- * Kandidaten fürs Nachfassen – ZWEISTUFIG.
- *  - Stufe 1: angeschrieben, keine Antwort, noch kein Follow-up → nach `days` Tagen fällig.
- *  - Stufe 2: genau EIN Follow-up ist raus, immer noch keine Antwort → erst nach `days2`
- *    Tagen fällig (längerer Abstand, damit es nicht drängend wirkt).
- * Wer schon zwei Follow-ups hat oder noch einen offenen Entwurf, fällt raus.
- * `messaged_at` wird beim Senden aktualisiert, ist also immer "letzter Kontakt".
- */
-export function messagedAwaitingFollowup(days: number, limit: number, days2 = 7): Contact[] {
-  const gesendetOderOffen = "status IN ('pending','approved','sent')";
-  return db
+export function messagedAwaitingFollowup(plan: { nachTagen: number }[], limit: number, now = new Date()): (Contact & { n_followups: number; messaged_at: string })[] {
+  if (!plan.length) return [];
+  const rows = db
     .prepare(
-      `SELECT c.* FROM contacts c
-       WHERE c.status='messaged' AND c.messaged_at IS NOT NULL
-         AND COALESCE(c.do_not_contact,0)=0
-         AND COALESCE(c.automation_status,'active')='active'
-         AND (c.snoozed_until IS NULL OR c.snoozed_until<=datetime('now'))
-         AND NOT EXISTS (
-           SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url
-             AND d.kind='followup' AND d.status IN ('pending','approved','discarded')
-         )
-         AND (
-           (  (SELECT COUNT(*) FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='followup' AND d.${gesendetOderOffen}) = 0
-              AND c.messaged_at <= datetime('now', ?) )
-           OR
-           (  (SELECT COUNT(*) FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='followup' AND d.${gesendetOderOffen}) = 1
-              AND c.messaged_at <= datetime('now', ?) )
-         )
-       ORDER BY c.messaged_at LIMIT ?`,
+      `SELECT c.*, (SELECT COUNT(*) FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='followup'
+                      AND d.status IN ('pending','approved','sent')) AS n_followups
+         FROM contacts c
+        WHERE c.status='messaged' AND c.messaged_at IS NOT NULL
+          AND COALESCE(c.do_not_contact,0)=0
+          AND COALESCE(c.automation_status,'active')='active'
+          AND (c.snoozed_until IS NULL OR c.snoozed_until<=datetime('now'))
+          AND NOT EXISTS (
+            SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url
+              AND d.kind='followup' AND d.status IN ('pending','approved','discarded')
+          )
+        ORDER BY c.messaged_at`,
     )
-    .all(`-${days} days`, `-${days2} days`, limit) as Contact[];
+    .all() as (Contact & { n_followups: number; messaged_at: string })[];
+  const faellig = rows.filter((c) => {
+    const stufe = plan[c.n_followups];
+    if (!stufe) return false;
+    const letzter = new Date(`${String(c.messaged_at).replace(" ", "T")}${/[zZ]|[+-]\d\d:?\d\d$/.test(String(c.messaged_at)) ? "" : "Z"}`);
+    return now.getTime() - letzter.getTime() >= stufe.nachTagen * 86_400_000;
+  });
+  return faellig.slice(0, limit);
 }
 
 export function countByStatus(): Record<string, number> {
