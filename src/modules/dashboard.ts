@@ -641,9 +641,20 @@ export function getDashboardData() {
       (db.prepare("SELECT COALESCE(zielgruppe,'?') z, COUNT(*) n FROM contacts WHERE status='new' GROUP BY z").all() as { z: string; n: number }[])
         .map((r) => [r.z, r.n]),
     ),
+    /**
+     * Offene Übergaben mit Namen. Alte Autopilot-Einträge hatten keinen Teilnehmer gespeichert –
+     * dann kommt der Name aus den Entwürfen desselben Chats (real: ein seit 17.07. offener
+     * Fehlalarm ohne Namen, der als „1 Übergabe“ ins Leere führte).
+     */
     bookedLeads: db
-      .prepare("SELECT participant, contact, thread_url, updated_at FROM conversations WHERE status='booked' ORDER BY updated_at DESC")
+      .prepare(
+        `SELECT COALESCE(NULLIF(c.participant,''), (SELECT d.participant FROM drafts d WHERE d.thread_url=c.thread_url AND COALESCE(d.participant,'')<>'' ORDER BY d.id DESC LIMIT 1), 'Unbekannt') AS participant,
+                c.contact, c.thread_url, c.updated_at
+           FROM conversations c WHERE c.status='booked' ORDER BY c.updated_at DESC`,
+      )
       .all(),
+    // Termine insgesamt: offene + erledigte Übergaben. Fehlalarme („kein_termin“) zählen nicht.
+    terminCount: (db.prepare("SELECT COUNT(*) n FROM conversations WHERE status IN ('booked','uebergeben')").get() as { n: number }).n,
     convStats: {
       active: (db.prepare("SELECT COUNT(*) n FROM conversations WHERE status='active'").get() as { n: number }).n,
       escalated: (db.prepare("SELECT COUNT(*) n FROM conversations WHERE status='escalated'").get() as { n: number }).n,

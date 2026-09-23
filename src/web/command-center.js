@@ -322,7 +322,9 @@ function renderDecisions() {
   $("decisions-count").textContent = att.total || "";
   const zeilen = [];
   if (att.systemIssues) zeilen.push({ dringend: true, art: "Technik", name: `${att.systemIssues} technische${att.systemIssues === 1 ? "s Problem" : " Probleme"}`, text: "Sendeweg oder unklare Zustellung prüfen", ziel: () => showView("settings") });
-  if (att.meetings) zeilen.push({ dringend: true, art: "Termin", name: `${att.meetings} Übergabe${att.meetings === 1 ? "" : "n"}`, text: "Gebuchte Gespräche übernehmen", ziel: () => showView("contacts") });
+  // Übergaben einzeln – mit Name, Nummer, Chat-Link und Abhaken. Vorher eine Sammelzeile, die
+  // nur auf die Kontaktliste sprang und nie verschwand.
+  for (const u of state.bookedLeads || []) zeilen.push({ uebergabe: u, dringend: true, art: "Termin", name: u.participant || "Unbekannt", text: u.contact ? `Kontakt: ${u.contact}` : "Gespräch übernehmen", zeit: u.updated_at });
   for (const d of drafts) {
     const wichtig = WICHTIG_INTENT[d.intent];
     const badge = d.phase === "approach" ? `<span class="quick-badge neutral">Richtung wählen</span>`
@@ -334,12 +336,18 @@ function renderDecisions() {
   }
   const sichtbar = entscheidungenAlle ? zeilen : zeilen.slice(0, 12);
   $("decision-list").innerHTML = zeilen.length
-    ? sichtbar.map((z, i) => `<button class="decision ${z.dringend ? "dringend" : ""}" data-decision="${i}"><i></i><span class="d-art">${esc(z.art)}</span><b class="d-name">${esc(z.name)}</b><span class="d-text">${esc(String(z.text || "").replace(/\s+/g, " ").slice(0, 140))}</span>${z.badge || "<span></span>"}<small class="d-zeit">${z.zeit ? esc(relativeTime(z.zeit)) : ""}</small><span class="d-go" aria-hidden="true">›</span></button>`).join("")
+    ? sichtbar.map((z, i) => z.uebergabe ? `<div class="decision handover dringend"><i></i><span class="d-art">${esc(z.art)}</span><b class="d-name">${esc(z.name)}</b><span class="d-text">${esc(z.text)}</span><span class="handover-actions"><a class="icon-link wide" href="${esc(z.uebergabe.thread_url)}" target="_blank" rel="noopener">Chat öffnen ↗</a><button data-uebergabe="${i}" data-aktion="erledigt">Erledigt</button><button data-uebergabe="${i}" data-aktion="kein_termin" title="Fehlalarm – war kein echter Termin">Kein Termin</button></span><small class="d-zeit">${z.zeit ? esc(relativeTime(z.zeit)) : ""}</small><span></span></div>` : `<button class="decision ${z.dringend ? "dringend" : ""}" data-decision="${i}"><i></i><span class="d-art">${esc(z.art)}</span><b class="d-name">${esc(z.name)}</b><span class="d-text">${esc(String(z.text || "").replace(/\s+/g, " ").slice(0, 140))}</span>${z.badge || "<span></span>"}<small class="d-zeit">${z.zeit ? esc(relativeTime(z.zeit)) : ""}</small><span class="d-go" aria-hidden="true">›</span></button>`).join("")
       + (zeilen.length > 12 ? `<button class="decision-more" data-more>${entscheidungenAlle ? "Weniger anzeigen" : `Alle ${zeilen.length} anzeigen`}</button>` : "")
     : `<div class="decision-empty"><b>Alles entschieden.</b><span>NextLead arbeitet weiter und meldet sich, sobald du wieder gebraucht wirst.</span></div>`;
   $("decision-list").querySelectorAll("[data-decision]").forEach((b) => b.addEventListener("click", () => {
     const z = sichtbar[Number(b.dataset.decision)];
     if (z.id) oeffneEntwurf(z.id); else z.ziel?.();
+  }));
+  $("decision-list").querySelectorAll("[data-uebergabe]").forEach((b) => b.addEventListener("click", async () => {
+    const z = sichtbar[Number(b.dataset.uebergabe)];
+    b.disabled = true;
+    try { await post("/api/uebergabe", { thread_url: z.uebergabe.thread_url, action: b.dataset.aktion }); toast(b.dataset.aktion === "erledigt" ? "Übergabe erledigt." : "Als Fehlalarm entfernt."); await load(); }
+    catch (error) { toast(error.message); b.disabled = false; }
   }));
   $("decision-list").querySelector("[data-more]")?.addEventListener("click", () => { entscheidungenAlle = !entscheidungenAlle; renderDecisions(); });
   const k = state.warteschlange || [];
@@ -1166,7 +1174,7 @@ function renderInsights() {
   if (!variantenGeladen) ladeVarianten();
   if (!analyseGeladen) ladeAnalyse();
   const historical = state.metrics?.historical || {}; const acceptance = pct(historical.accepted || 0, historical.invited || 0); const reply = pct(historical.replied || 0, historical.messaged || 0);
-  const kpis = [["Anfragen", historical.invited || 0, "versendet"], ["Annahmequote", acceptance == null ? "–" : `${acceptance}%`, `${historical.accepted || 0} angenommen`], ["Antwortquote", reply == null ? "–" : `${reply}%`, `${historical.replied || 0} aus ${historical.messaged || 0} Nachrichten`], ["Termine", (state.bookedLeads || []).length, "persönlich übergeben"]];
+  const kpis = [["Anfragen", historical.invited || 0, "versendet"], ["Annahmequote", acceptance == null ? "–" : `${acceptance}%`, `${historical.accepted || 0} angenommen`], ["Antwortquote", reply == null ? "–" : `${reply}%`, `${historical.replied || 0} aus ${historical.messaged || 0} Nachrichten`], ["Termine", state.terminCount ?? (state.bookedLeads || []).length, "persönlich übergeben"]];
   $("insight-kpis").innerHTML = kpis.map(([label, value, note]) => `<div class="kpi-card"><span>${label}</span><b>${value}</b><small>${note}</small></div>`).join("");
   // Die Wirkungs-Auswertung hat einen eigenen Ladepfad. Sie wird EINMAL geholt und danach nur
   // noch, wenn der Nutzer einen Filter ändert — der 30-Sekunden-Takt des Dashboards soll die

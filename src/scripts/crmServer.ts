@@ -1063,6 +1063,24 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // ÜBERGABE abhaken: „erledigt“ (Gespräch übernommen, zählt weiter als Termin) oder
+  // „kein_termin“ (Fehlalarm – verschwindet und zählt nicht). Nur offene Übergaben.
+  if (url.pathname === "/api/uebergabe" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { thread_url, action } = JSON.parse(body || "{}");
+        const status = action === "erledigt" ? "uebergeben" : action === "kein_termin" ? "kein_termin" : null;
+        if (!status) throw new Error("Unbekannte Aktion.");
+        const n = db.prepare("UPDATE conversations SET status=?, updated_at=datetime('now') WHERE thread_url=? AND status='booked'").run(status, String(thread_url || "")).changes;
+        res.writeHead(n ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: n > 0, reason: n ? undefined : "Übergabe nicht mehr offen." }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
   // KI-WOCHENANALYSE: GET = letzte gespeicherte, POST = jetzt neu (ein Claude-Aufruf).
   if (url.pathname === "/api/ki-analyse") {
     if (req.method === "GET") { res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify({ analyse: letzteAnalyse() })); return; }
