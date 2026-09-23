@@ -202,6 +202,57 @@ Cockpit-Panel „Bericht“ in der Auswertung (eigener Ladepfad `ladeBericht` mi
 Befehle /tag /woche /vorwoche; die KI-Trefferquoten-Bilanz heißt jetzt /bilanz bzw. /kibilanz.
 Geschäftszeit seit 2026-09-22: 7–22 Uhr; alle Morgen-Crons hängen an `START_STUNDE` in index.ts.
 
+## UPDATE 2026-09-23 — Vertrieblicher (Hormozi), Warteschlange, Selbstlernen
+Sinans Vorgabe: „Nachrichten besser und vertrieblicher, im Hintergrund muss mehr gehen.“
+Fünf Phasen, alle live. Leitplanken unverändert: Versand nur über den Governor, Caps und
+Lese-Budget nicht angehoben, Messregeln von `crm_stage_events`, lieber kein Entwurf als ein falscher.
+- **SERVER-DNS.** Proxmox trägt im LXC nur Tailscale-MagicDNS ein; fiel das aus, scheiterte JEDER
+  Job mit `ERR_NAME_NOT_RESOLVED`/`page.goto Timeout`. `dns:` in docker-compose.yml (Router + 1.1.1.1)
+  und auf dem Host `nameserver 192.168.0.1` vor dem PVE-Block.
+- **WARTESCHLANGE** (`modules/warteschlange.ts`, Block „Was noch rausgeht“ auf „Heute“): je Kanal
+  Status mit Grund, nächster Versuch, Tageslimit, wartende Entwürfe, nächste fünf Kontakte. Der Grund
+  kommt aus `governor.canDoAction()` – dieselbe Prüfung wie beim echten Versand, nie nachgebaut.
+- **AUSBILDUNGSSTAND** (`core/ausbildungsStand.ts`): „Bankkaufmann bei X“ ist der ABSCHLUSS. Fester
+  Code (nicht die KI) bestimmt in_ausbildung/nicht/unklar; harte Prompt-Vorgabe + Nachprüfung
+  (`behauptetLaufendeAusbildung`, ein Neuversuch, sonst kein Entwurf). Quelle ist die frische Rolle
+  aus den Profil-Fakten, sonst die Headline.
+- **ANGEBOT** (`modules/angebot.ts`, Cockpit-Karte „Dein Angebot“, `/api/angebot`): strukturierte
+  Lead Magnets im Profil (`leadMagnete[{route: karriere|finanzen, nutzen, ablauf, cta, …}]`, `beweise`,
+  `buchungslink`). `getProfil()` lädt bei Dateiänderung neu (Dashboard und Engine sind getrennte
+  Prozesse). Der Agent wählt in den Angebotsphasen nach Signal (vorher IMMER Potenzialanalyse, auch bei
+  Geldfragen) und bekommt zwei ECHTE Terminvorschläge (`zweiTermine`) bzw. den Buchungslink.
+  Angeboten wird nur, was aktiv ist; Unterlagen nur mit Link. Speichern fasst nur diese drei Felder an.
+- **PLAYBOOK** (`modules/playbook.ts`): Nachfass-Plan einstellbar (State `followup_plan`, 1–3 Stufen,
+  2–30 Tage, letzte IMMER `abschied`), Zwecke wert/beweis/anknuepfen/abschied statt „wollte nochmal
+  nachfragen“. Stufe am Entwurf eingefroren (`drafts.sequence_stage`); `followupStufe()` ist die eine
+  Quelle (vorher schickte die Voll-Automatik Stufe 2 als Stufe 1). Erstnachricht: Bezug MIT einem
+  nützlichen Gedanken, dann eine leichte Frage – weiter kein Pitch, kein Link.
+- **AUSGANGSPRÜFUNG** (`core/ausgehendCheck.ts`): Fragenzahl, Länge, Emoji, Gedankenstrich, Floskeln
+  und Verkaufssprache (Listen aus dem Agent-Validator exportiert), Platzhalter, falsche Anrede, nicht
+  hinterlegte Links. `drafts.mitAusgangsCheck`: ein Neuversuch mit den Gründen, sonst kein Entwurf.
+- **FREIGABE-STAU** (`modules/freigabe.ts`): `pendingDrafts()` nach Wert sortiert; ungeprüfte
+  Nachfassungen verfallen nach 10 Tagen (`expired`, blockiert nichts, kein Lernsignal);
+  Schnellprüfung mit Häkchen + `/api/drafts/bulk`; Tastenkürzel A/R/J/K. AUTOMATISCHE FREIGABE ist
+  Opt-in (Standard AUS): Karenz, Ausgangsprüfung, Tageslimit und „verdientes Vertrauen“ (≥10 eigene
+  Entscheidungen, ≥80 % UNVERÄNDERT genehmigt). `drafts.freigabe_quelle` trennt mensch/auto – die
+  Automatik erzeugt weder Lernsignale noch eigenes Vertrauen. Läuft in index.ts vor jedem
+  `sendApprovedDrafts`; gesendet wird unverändert über den Governor.
+- **SELBSTLERNEN** (`modules/varianten.ts`, Tabelle `message_variants`, Panel „Was wirkt“): 2–3 Stile
+  je Slot, Thompson Sampling auf POSITIVE Antworten. Regeln wie beim Funnel: fachlicher Dedupe-Key
+  `variant:contact:<id>:<kind>:<stufe>`, Zuordnung beim Schreiben eingefroren, Antwort/Termin genau
+  einmal über den Hook in `recordCrmStage` an die letzte Variante VOR dem Ereignis. Misserfolg erst
+  nach 10 Tagen ohne Antwort; mind. 15 ausgewertete Versände je Stil; Sinans Veto (≥50 % abgelehnt).
+  Verbucht wird erst nach nachgewiesenem Versand. Kein Nachrichtentext gespeichert.
+- **PROFIL-FAKTEN** (`modules/profilFakten.ts`, Tabelle `contact_profile_facts`): beim Vernetzen und
+  Anschreiben EIN `innerText` von `main` – kein Klick, keine Navigation, Lese-Budget unberührt.
+  Überschriften statt CSS-Klassen. Nur Rolle/Firma/seit/Info-Auszug (≤500 Zeichen, ohne
+  Kontaktdaten/Links); beim Merge mitgenommen, beim Löschen mitgelöscht. Selektorfrei, aber NICHT
+  live getestet – `engine.log` auf „[profil-fakten]“ prüfen.
+- **ARBEITSWEISE:** Das Repo liegt in iCloud-Dokumente; bei voller Platte werden Dateien sekundenschnell
+  „dataless“ (ETIMEDOUT beim Lesen). Gearbeitet wurde in einem Klon außerhalb von iCloud, Deploy per
+  Bundle. Beim Deploy das Bundle in einem EIGENEN ssh-Aufruf übertragen – `docker compose exec` frisst stdin.
+- Tests: 149/149 grün, `tsc --noEmit` sauber.
+
 ## UPDATE 2026-09-22 (2) — Lautlose Neustarts sichtbar, „warum steht der Bot?"
 Auslöser: „Läuft der Bot? Ich habe seit 2h nichts auf Telegram bekommen." Die Diagnose dauerte
 eine SSH-Sitzung, obwohl alle Daten im System lagen. Zwei getrennte Ursachen, beide behoben.
