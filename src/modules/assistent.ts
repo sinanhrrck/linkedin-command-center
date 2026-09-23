@@ -132,5 +132,5 @@ REGELN:
 
 ${bisher ? `BISHERIGES GESPRÄCH:\n${bisher}\n` : ""}
 FRAGE: ${f}`;
-  return (await generateText(prompt)).trim();
+  return (await generateText(prompt, 1500)).trim();
 }

@@ -21,11 +21,13 @@ export function claudeAvailable(): boolean {
  * Kein Thinking (kurze Chat-Antwort, spart Tokens); der Prompt fordert reines JSON,
  * das der Aufrufer robust herausschneidet.
  */
-export async function generateClaude(prompt: string): Promise<string> {
+export async function generateClaude(prompt: string, maxTokens = 1024): Promise<string> {
   if (!client) throw new Error("ANTHROPIC_API_KEY fehlt – Claude-Kanal nicht verfügbar");
   const res = await client.messages.create({
     model: config.llm.model,
-    max_tokens: 1024,
+    // 1024 reicht für eine Nachricht; Sammel-Antworten (z. B. 20 Lead-Bewertungen als JSON)
+    // brauchen mehr, sonst wird mitten im Array abgeschnitten (real 2026-09-23).
+    max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
   });
   const block = res.content.find((b) => b.type === "text");

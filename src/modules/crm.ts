@@ -103,7 +103,7 @@ export function nextNewContacts(limit: number): Contact[] {
              AND ct.status = 'awaiting_connection'
              AND c.active = 1
          ) THEN 0 ELSE 1 END,
-         COALESCE(lead_score, 50) DESC,
+         COALESCE(ki_score, lead_score, 50) DESC,
          created_at
        LIMIT ?`,
     )

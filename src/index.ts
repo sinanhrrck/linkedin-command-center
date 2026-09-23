@@ -12,6 +12,7 @@ import { feedTick } from "./modules/leadFeed.js";
 import { generateInboxDrafts, generateFollowups, sendApprovedDrafts as sendeFreigegebene, reviveChat, pitchZuNachricht } from "./modules/drafts.js";
 import { autoFreigabe } from "./modules/freigabe.js";
 import { kiWochenanalyse } from "./modules/kiAnalyse.js";
+import { kiLeadBewertung } from "./modules/leadBewertung.js";
 
 /** Vor jedem Versandlauf: automatische Freigabe (Opt-in, standardmäßig aus), dann Versand über den Governor. */
 async function sendApprovedDrafts(limit: number): Promise<number> {
@@ -550,6 +551,9 @@ cron.schedule(`5 ${START_STUNDE} * * 1`, () => events.emit("bilanz:woche"));
 // Die Berechnung liegt in modules/berichte.ts, der Text wird dort gebaut; Telegram sendet nur.
 cron.schedule("5 22 * * *", () => events.emit("bericht:tag"));
 cron.schedule(`10 ${START_STUNDE} * * 1`, () => events.emit("bericht:woche"));
+// KI-Lead-Bewertung: stündlich bis zu 60 neue Kontakte (3 KI-Aufrufe), damit die knappen
+// Vernetzungsanfragen an die passendsten Leute gehen. Kein Profilaufruf, nur CRM-Daten.
+cron.schedule(`40 ${START_STUNDE}-21 * * *`, () => einzeln("leadbewertung", () => kiLeadBewertung(60), 15));
 // KI-Wochenanalyse: montags nach dem Wochenbericht, ein Claude-Aufruf, Ergebnis per Telegram + Cockpit.
 cron.schedule(`20 ${START_STUNDE} * * 1`, () => einzeln("kianalyse", async () => {
   const a = await kiWochenanalyse();

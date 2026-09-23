@@ -30,9 +30,9 @@ export function setTextGeneratorForTests(fn: TextGenerator | null): void {
   testGenerator = fn;
 }
 
-export async function generateText(prompt: string): Promise<string> {
+export async function generateText(prompt: string, maxTokens?: number): Promise<string> {
   if (testGenerator) return testGenerator(prompt);
   if (!claudeAvailable())
     throw new Error("Kein ANTHROPIC_API_KEY gesetzt – Textgenerierung braucht jetzt Claude (Gemini wurde entfernt).");
-  return generateClaude(prompt);
+  return generateClaude(prompt, maxTokens);
 }

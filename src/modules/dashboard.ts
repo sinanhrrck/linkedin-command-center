@@ -72,6 +72,9 @@ type ContactRow = {
   aus_netzwerk: number | null;
   created_at: string;
   lead_score: number | null;
+  ki_score?: number | null;
+  ki_fit?: string | null;
+  ki_grund?: string | null;
   campaign_id: number | null;
   campaign_name: string | null;
   outcome_stage: string | null;
@@ -98,7 +101,7 @@ export function getDashboardData() {
   const contacts = db
     .prepare(
       `SELECT c.id, c.full_name, c.headline, c.profile_url, c.status, c.invited_at, c.accepted_at,
-              c.messaged_at,c.replied_at,c.aus_netzwerk,c.created_at,c.lead_score,c.campaign_id,ca.name AS campaign_name,
+              c.messaged_at,c.replied_at,c.aus_netzwerk,c.created_at,c.lead_score,c.ki_score,c.ki_fit,c.ki_grund,c.campaign_id,ca.name AS campaign_name,
               c.automation_status,c.snoozed_until,c.snooze_label,c.snooze_reason,c.do_not_contact,
               o.stage AS outcome_stage,o.note AS outcome_note,o.value_cents AS outcome_value_cents,
               ls.label AS quelle,

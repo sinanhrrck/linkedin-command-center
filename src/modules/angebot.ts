@@ -271,7 +271,7 @@ ${KI_REGELN}
 
 Antworte AUSSCHLIESSLICH mit einem JSON-Array aus 3 Objekten:
 [{"titel":"…","route":"karriere|finanzen","nutzen":"…","ablauf":"…","cta":"…","naechsterSchritt":"…","warum":"ein Satz, warum das nach der Wertformel stark ist"}]`;
-  const liste = jsonAus<Record<string, unknown>[]>(await generateText(prompt), "[");
+  const liste = jsonAus<Record<string, unknown>[]>(await generateText(prompt, 2000), "[");
   return (Array.isArray(liste) ? liste : []).slice(0, 3).map((x, i) => ({ ...alsVorschlag(x, i), warum: String(x.warum ?? "").slice(0, 240) }) as LeadMagnet & { warum: string });
 }
 

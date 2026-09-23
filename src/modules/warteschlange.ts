@@ -204,7 +204,7 @@ export function warteschlange(now = new Date()): Kanal[] {
   const anfragenOffen = (db.prepare(`SELECT COUNT(*) n FROM contacts WHERE ${offenBedingung}`).get() as { n: number }).n;
   const anfragenListe = db.prepare(
     `SELECT full_name name, created_at seit FROM contacts WHERE ${offenBedingung}
-      ORDER BY COALESCE(lead_score,50) DESC, created_at LIMIT 5`,
+      ORDER BY COALESCE(ki_score,lead_score,50) DESC, created_at LIMIT 5`,
   ).all() as { name: string | null; seit: string }[];
   const tagesLimit = g.connect.allowedCap || g.connect.effectiveCap;
   const anfragen: Kanal = {

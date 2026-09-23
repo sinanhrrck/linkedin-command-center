@@ -54,6 +54,10 @@ try {
 } catch {
   /* Spalte existiert schon */
 }
+// KI-Lead-Bewertung (2026-09-23, modules/leadBewertung.ts): Note, Weg, kurzer Grund.
+for (const [column, definition] of [["ki_score", "INTEGER"], ["ki_fit", "TEXT"], ["ki_grund", "TEXT"], ["ki_bewertet_at", "TEXT"]] as const) {
+  try { db.exec(`ALTER TABLE contacts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
+}
 try {
   db.exec("ALTER TABLE lead_sources ADD COLUMN zielgruppe TEXT"); // azubi | student -> Fokus-Steuerung
 } catch {
