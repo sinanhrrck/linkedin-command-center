@@ -1059,7 +1059,7 @@ async function ladeVarianten() {
     const r = await (await fetch("/api/varianten", { cache: "no-store" })).json();
     if (nr !== variantenAnfrage) return;
     variantenGeladen = true;
-    $("varianten-body").innerHTML = r.slots.map((s) => `<div class="var-slot"><b>${esc(SLOT_TITEL[s.slot] || s.slot)}</b><table class="var-table"><thead><tr><th>Stil</th><th>gesendet</th><th>ausgewertet</th><th>Antworten</th><th>positiv</th><th>Quote</th><th>Status</th></tr></thead><tbody>${s.arme.map((a) => `<tr><td>${esc(a.titel)}</td><td>${a.gesendet}</td><td>${a.reif}</td><td>${a.antworten}</td><td>${a.positiv}</td><td>${a.quote == null ? "–" : `${Math.round(a.quote * 100)} %`}</td><td class="muted">${esc(a.status)}</td></tr>`).join("")}</tbody></table></div>`).join("");
+    $("varianten-body").innerHTML = r.slots.map((s) => `<div class="var-slot"><b>${esc(SLOT_TITEL[s.slot] || s.slot)}</b><table class="var-table"><thead><tr><th>Stil</th><th>gesendet</th><th>ausgewertet</th><th>Antworten</th><th>positiv</th><th>Quote</th><th>Status</th></tr></thead><tbody>${s.arme.map((a) => `<tr><td>${esc(a.titel)}${a.ki ? ` <i class="ki-mark" title="Von der KI erfundener Herausforderer">KI</i>` : ""}</td><td>${a.gesendet}</td><td>${a.reif}</td><td>${a.antworten}</td><td>${a.positiv}</td><td>${a.quote == null ? "–" : `${Math.round(a.quote * 100)} %`}</td><td class="muted">${esc(a.status)}</td></tr>`).join("")}</tbody></table></div>`).join("");
   } catch (error) { if (nr === variantenAnfrage) $("varianten-body").textContent = `Nicht geladen: ${error.message}`; }
 }
 $("varianten-reload").onclick = ladeVarianten;

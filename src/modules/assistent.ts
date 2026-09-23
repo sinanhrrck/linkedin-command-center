@@ -66,7 +66,7 @@ NextLead ist ein LinkedIn-Vertriebsassistent. Er findet passende Leute (vor alle
 Standard aus. Eingeschaltet genehmigt NextLead nur Entwürfe, die die Prüfung bestehen, frühestens nach einer Wartezeit, höchstens X pro Tag und erst, wenn du diese Art vorher mindestens 10-mal entschieden und zu 80 % unverändert genehmigt hast.
 
 ## Selbstlernen ("Was wirkt")
-Je Nachrichtenart testet der Bot 2 bis 3 Stile und bevorzugt den, der mehr positive Antworten bringt. Ein Versand zählt erst nach 10 Tagen ohne Antwort als Misserfolg. Stile, die du oft ablehnst, pausieren.
+Je Nachrichtenart testet der Bot 2 bis 3 Stile und bevorzugt den, der mehr positive Antworten bringt. Gibt es einen klaren Gewinner, erfindet die KI montags einen neuen Herausforderer (mit "KI" markiert); verliert er klar, wird er beendet. Ein Versand zählt erst nach 10 Tagen ohne Antwort als Misserfolg. Stile, die du oft ablehnst, pausieren.
 
 ## Telegram
 /status, /warum (warum steht der Bot), /entwuerfe (freigeben per Knopf), /leads, /pause, /resume, /tag, /woche, /vorwoche, /bilanz.`;

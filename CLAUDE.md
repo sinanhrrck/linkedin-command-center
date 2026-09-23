@@ -248,10 +248,27 @@ Lese-Budget nicht angehoben, Messregeln von `crm_stage_events`, lieber kein Entw
   Überschriften statt CSS-Klassen. Nur Rolle/Firma/seit/Info-Auszug (≤500 Zeichen, ohne
   Kontaktdaten/Links); beim Merge mitgenommen, beim Löschen mitgelöscht. Selektorfrei, aber NICHT
   live getestet – `engine.log` auf „[profil-fakten]“ prüfen.
+- **KI-AUSBAU (gleicher Tag, Sinan: „mehr KI“)** – alle über `generateText` (Claude, bezahlt;
+  `max_tokens` je Aufruf einstellbar, Sammel-JSON brauchte mehr als 1024), alle mit KI-Stub getestet:
+  * `angebot.ts` `kiAngebotsVorschlaege`/`kiAngebotSchaerfen` (Hormozi-Wertformel, Tabuwörter der
+    Ausgangsprüfung als Regel): speichern NIE selbst, Vorschläge sind nie automatisch aktiv. `/api/angebot/ki`.
+  * `assistent.ts` – Chat unten rechts: Handbuch (Alltagssprache) + frische Lage aus denselben
+    Funktionen wie das Cockpit; rein lesend; Verlauf nur im Browser-Tab. `/api/assistent`.
+    NEUE FUNKTIONEN IMMER AUCH INS HANDBUCH SCHREIBEN, sonst kennt der Assistent sie nicht.
+  * `coach.ts` – KI-Coach im Einzel-Prüfer: Urteil + verbesserter Text, Vorschlag läuft durch die
+    Ausgangsprüfung; Übernehmen füllt nur das Textfeld. `/api/draft/coach`.
+  * `kiAnalyse.ts` – Wochenanalyse (Mo START_STUNDE:20, Telegram, `/analyse`, Cockpit): laufende Woche
+    + Vorwoche, Stil-Test, Ablehnungen, echte Antworten OHNE Namen → 3 Empfehlungen mit Ort; der
+    Prompt listet, was das Tool wirklich kann (sonst empfahl sie Nicht-Existentes).
+  * `leadBewertung.ts` – stündlich (:40) bis 60 neue Kontakte in 20er-Gruppen: `contacts.ki_score/
+    ki_fit/ki_grund`; Outreach + Warteschlange sortieren danach; nur `keiner` UND Note < 20 → skipped.
+  * `kiStile.ts` – Mo START_STUNDE:30: bei klarem Gewinner (≥30 reif, ≥80 % Chance) EIN
+    KI-Herausforderer je Slot (`variant_arme_ki`), klarer Verlierer (≥40 reif, <5 %) wird beendet.
+    `varianten.armeFuer()` = feste + aktive KI-Arme; Versand eines beendeten Arms zählt noch.
 - **ARBEITSWEISE:** Das Repo liegt in iCloud-Dokumente; bei voller Platte werden Dateien sekundenschnell
   „dataless“ (ETIMEDOUT beim Lesen). Gearbeitet wurde in einem Klon außerhalb von iCloud, Deploy per
   Bundle. Beim Deploy das Bundle in einem EIGENEN ssh-Aufruf übertragen – `docker compose exec` frisst stdin.
-- Tests: 149/149 grün, `tsc --noEmit` sauber.
+- Tests: 158/158 grün, `tsc --noEmit` sauber.
 
 ## UPDATE 2026-09-22 (2) — Lautlose Neustarts sichtbar, „warum steht der Bot?"
 Auslöser: „Läuft der Bot? Ich habe seit 2h nichts auf Telegram bekommen." Die Diagnose dauerte

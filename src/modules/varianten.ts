@@ -50,10 +50,25 @@ export const ARME: Record<string, Arm[]> = {
   ],
 };
 
+/**
+ * Feste Arme + von der KI erfundene Herausforderer (modules/kiStile.ts, Tabelle variant_arme_ki).
+ * Beendete KI-Arme fallen raus – ihre Versände bleiben in message_variants erhalten.
+ */
+export function armeFuer(slot: string): (Arm & { ki?: boolean })[] {
+  const fest = ARME[slot] || [];
+  if (!fest.length) return [];
+  let ki: (Arm & { ki: boolean })[] = [];
+  try {
+    ki = (db.prepare("SELECT key, titel, anweisung FROM variant_arme_ki WHERE slot=? AND status='aktiv' ORDER BY id").all(slot) as Arm[])
+      .map((a) => ({ ...a, ki: true }));
+  } catch { /* Tabelle fehlt in sehr alten DBs – dann nur feste Arme */ }
+  return [...fest, ...ki];
+}
+
 type ArmStand = { arm: string; gesendet: number; reif: number; positiv: number; antworten: number; entscheidungen: number; abgelehnt: number };
 
 function armStaende(slot: string): ArmStand[] {
-  const arme = ARME[slot] || [];
+  const arme = armeFuer(slot);
   const versand = db.prepare(
     `SELECT arm,
             COUNT(*) gesendet,
@@ -89,11 +104,11 @@ function gamma(k: number, rng: () => number): number {
   for (let i = 0; i < k; i++) s -= Math.log(1 - rng());
   return s;
 }
-const beta = (a: number, b: number, rng: () => number) => { const x = gamma(a, rng); return x / (x + gamma(b, rng)); };
+export const beta = (a: number, b: number, rng: () => number) => { const x = gamma(a, rng); return x / (x + gamma(b, rng)); };
 
 /** Wählt den Arm für einen Slot. `null`, wenn der Slot keine Varianten kennt. */
 export function waehleArm(slot: string, rng: () => number = Math.random): Wahl | null {
-  const arme = ARME[slot];
+  const arme = armeFuer(slot);
   if (!arme?.length) return null;
   let kandidaten = armStaende(slot).filter((s) => !vetoed(s));
   if (!kandidaten.length) kandidaten = armStaende(slot); // alle abgelehnt → nicht blockieren, weiter testen
@@ -127,7 +142,10 @@ export function variantenBlock(w: Wahl | null): string {
 export function registriereVersand(input: {
   contactId: number; draftId?: number | null; kind: string; stufe?: number | null; slot: string; arm: string; goalCode?: string | null; zielgruppe?: string | null;
 }): boolean {
-  if (!ARME[input.slot]?.some((a) => a.key === input.arm)) return false;
+  // Auch ein inzwischen beendeter KI-Arm zählt noch: der Entwurf entstand, als er aktiv war.
+  const bekannt = armeFuer(input.slot).some((a) => a.key === input.arm)
+    || !!db.prepare("SELECT 1 FROM variant_arme_ki WHERE slot=? AND key=?").get(input.slot, input.arm);
+  if (!bekannt) return false;
   const stufe = input.stufe ?? 0;
   return db.prepare(
     `INSERT OR IGNORE INTO message_variants(dedupe_key,contact_id,draft_id,kind,stage,slot,arm,goal_code,zielgruppe,sent_at)
@@ -164,7 +182,8 @@ export function aktualisiereAntwortQualitaet(contactId: number, quality: string)
 
 /** Für die Auswertung „Was wirkt“. */
 export function variantenStatistik() {
-  return Object.entries(ARME).map(([slot, arme]) => {
+  return Object.keys(ARME).map((slot) => {
+    const arme = armeFuer(slot);
     const staende = armStaende(slot);
     return {
       slot,
@@ -172,10 +191,28 @@ export function variantenStatistik() {
         const s = staende.find((x) => x.arm === a.key)!;
         const quote = s.reif ? s.positiv / s.reif : null;
         return {
-          key: a.key, titel: a.titel, gesendet: s.gesendet, reif: s.reif, antworten: s.antworten, positiv: s.positiv, quote,
+          key: a.key, titel: a.titel, ki: !!a.ki, gesendet: s.gesendet, reif: s.reif, antworten: s.antworten, positiv: s.positiv, quote,
           status: vetoed(s) ? "pausiert (von dir oft abgelehnt)" : s.reif < MIN_REIF_JE_ARM ? "sammelt Daten" : "im Test",
         };
       }),
     };
   });
+}
+
+/**
+ * Wahrscheinlichkeit je Arm, der beste zu sein (Monte-Carlo über die Beta-Verteilungen der
+ * REIFEN Versände). Grundlage für „klarer Gewinner“ und „klarer Verlierer“ in kiStile.ts.
+ */
+export function gewinnChancen(slot: string, runden = 2000, rng: () => number = Math.random): { arm: string; reif: number; positiv: number; chance: number }[] {
+  const s = armStaende(slot);
+  const siege = new Map(s.map((x) => [x.arm, 0]));
+  for (let r = 0; r < runden; r++) {
+    let best = -1, bestArm = "";
+    for (const x of s) {
+      const v = beta(1 + x.positiv, 1 + Math.max(0, x.reif - x.positiv), rng);
+      if (v > best) { best = v; bestArm = x.arm; }
+    }
+    siege.set(bestArm, (siege.get(bestArm) || 0) + 1);
+  }
+  return s.map((x) => ({ arm: x.arm, reif: x.reif, positiv: x.positiv, chance: (siege.get(x.arm) || 0) / runden }));
 }

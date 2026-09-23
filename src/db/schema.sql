@@ -522,3 +522,18 @@ CREATE TABLE IF NOT EXISTS contact_profile_facts (
   ueber       TEXT,
   captured_at TEXT NOT NULL
 );
+
+-- KI-HERAUSFORDERER für den Varianten-Test (2026-09-23, modules/kiStile.ts). Höchstens einer
+-- aktiv je Slot; beendete bleiben als Historie stehen (ihre Versände in message_variants auch).
+CREATE TABLE IF NOT EXISTS variant_arme_ki (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  slot        TEXT NOT NULL,
+  key         TEXT NOT NULL UNIQUE,
+  titel       TEXT NOT NULL,
+  anweisung   TEXT NOT NULL,
+  vorbild_arm TEXT,
+  status      TEXT NOT NULL DEFAULT 'aktiv',
+  grund       TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  beendet_at  TEXT
+);
