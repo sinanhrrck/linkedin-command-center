@@ -221,6 +221,46 @@ function renderToday() {
   const rows = [["Anfragen", funnel.eingeladen || 0, 100], ["Angenommen", funnel.angenommen || 0, pct(funnel.angenommen || 0, funnel.eingeladen || 0) || 0], ["Nachrichten", funnel.angeschrieben || 0, pct(funnel.angeschrieben || 0, funnel.eingeladen || 0) || 0], ["Antworten", funnel.geantwortet || 0, pct(funnel.geantwortet || 0, funnel.eingeladen || 0) || 0]];
   $("mini-funnel").innerHTML = rows.map(([label, count, width]) => `<div class="mini-row"><span>${label}</span><b>${count}</b><em><i style="width:${width}%"></i></em></div>`).join("");
   renderActivity();
+  renderQueue();
+}
+
+/** Uhrzeit oder Tag des nächsten Versuchs – "um 14:20", "morgen 07:00", "Mo 07:00". */
+const wannText = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso), jetzt = new Date();
+  if (Number.isNaN(d.getTime())) return "";
+  const uhr = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  const tage = Math.round((new Date(d).setHours(0, 0, 0, 0) - new Date(jetzt).setHours(0, 0, 0, 0)) / 86400000);
+  if (tage <= 0) return d <= jetzt ? "jetzt" : `um ${uhr}`;
+  if (tage === 1) return `morgen ${uhr}`;
+  return `${d.toLocaleDateString("de-DE", { weekday: "short" })} ${uhr}`;
+};
+const QUEUE_STATUS = { laeuft: "Läuft", wartet: "Wartet", gestoppt: "Gestoppt", leer: "Leer" };
+function renderQueue() {
+  const box = $("queue-lanes");
+  if (!box) return;
+  const kanaele = state.warteschlange || [];
+  box.innerHTML = kanaele.map((k) => {
+    const limitPct = k.tagesLimit ? Math.min(100, Math.round((k.heute / k.tagesLimit) * 100)) : 0;
+    const wann = wannText(k.naechsterVersuch);
+    const zahlen = [
+      `<div><b>${k.bereit}</b><span>${k.kanal === "anfragen" ? "in der Warteschlange" : "freigegeben, gehen raus"}</span></div>`,
+      k.kanal === "nachrichten" ? `<div class="${k.wartetAufDich ? "needs-you" : ""}"><b>${k.wartetAufDich}</b><span>warten auf deine Freigabe</span></div>` : "",
+      k.inVorbereitung ? `<div><b>${k.inVorbereitung}</b><span>angenommen, Text entsteht</span></div>` : "",
+    ].join("");
+    const naechste = (k.naechste || []).length
+      ? `<ol class="queue-next">${k.naechste.map((e) => `<li><b>${esc(e.name)}</b><span>${esc(e.art)}</span></li>`).join("")}</ol>${k.bereit > k.naechste.length ? `<small class="queue-more">+ ${k.bereit - k.naechste.length} weitere</small>` : ""}`
+      : "";
+    return `<article class="queue-lane ${esc(k.status)}">
+      <header><span class="lane-label">${esc(k.titel)}</span><span class="queue-pill ${esc(k.status)}"><i></i>${QUEUE_STATUS[k.status] || esc(k.status)}</span></header>
+      <p class="queue-why">${esc(k.statusText)}${wann ? ` <strong>Nächster Versuch ${esc(wann)}.</strong>` : ""}</p>
+      <div class="queue-limit"><div><span>Heute gesendet</span><b>${k.heute} / ${k.tagesLimit}</b></div><em><i style="width:${limitPct}%"></i></em>${k.wochenLimit ? `<small>Diese Woche ${k.woche} / ${k.wochenLimit}</small>` : ""}</div>
+      <div class="queue-counts">${zahlen}</div>
+      ${k.reichtTage ? `<small class="queue-reach">Beim heutigen Limit reicht das für etwa ${k.reichtTage} ${k.reichtTage === 1 ? "Tag" : "Tage"}.</small>` : ""}
+      ${naechste ? `<div class="queue-order"><span class="lane-label">Als Nächstes</span>${naechste}</div>` : ""}
+      ${k.zuletzt ? `<small class="queue-last">Zuletzt: ${esc(k.zuletzt.name)}, ${esc(relativeTime(k.zuletzt.at))}</small>` : ""}
+    </article>`;
+  }).join("");
 }
 
 function renderGoalAlerts() {

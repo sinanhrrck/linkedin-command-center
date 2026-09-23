@@ -206,3 +206,39 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 .desk-note:empty{display:none}
 .desk-note{margin:9px 0 0;font-size:11px;color:var(--red)}
 .timeline-item.note .timeline-mark{background:var(--amber)}
+
+/* Warteschlange je Kanal (2026-09-23) */
+.queue-board{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 5px 20px rgba(27,48,83,.045);margin:0 0 16px;overflow:hidden}
+.queue-lanes{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}
+.queue-lane{min-width:0;padding:17px 18px 18px;display:flex;flex-direction:column;gap:12px}
+.queue-lane+.queue-lane{border-left:1px solid var(--line)}
+.queue-lane header{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.queue-lane header .lane-label{margin:0}
+.queue-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:750;padding:4px 10px;border-radius:999px;background:var(--blue-soft);color:var(--blue)}
+.queue-pill i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.queue-pill.laeuft{background:var(--green-soft);color:var(--green)}
+.queue-pill.laeuft i{animation:queuePulse 1.6s ease-in-out infinite}
+.queue-pill.wartet{background:var(--amber-soft);color:var(--amber)}
+.queue-pill.gestoppt{background:var(--red-soft);color:var(--red)}
+.queue-pill.leer{background:#f0f2f6;color:var(--muted)}
+@keyframes queuePulse{50%{opacity:.35}}
+.queue-why{margin:0;font-size:13px;line-height:1.45;color:var(--ink)}
+.queue-why strong{font-weight:700}
+.queue-limit div{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.queue-limit b{color:var(--ink)}
+.queue-limit em{display:block;height:6px;border-radius:6px;background:#eef1f6;margin-top:6px;overflow:hidden}
+.queue-limit em i{display:block;height:100%;background:var(--blue);border-radius:6px}
+.queue-limit small{display:block;margin-top:5px;font-size:11px;color:var(--muted)}
+.queue-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.queue-counts div{background:var(--bg);border-radius:12px;padding:10px 12px}
+.queue-counts b{display:block;font-size:22px;line-height:1.1;color:var(--ink)}
+.queue-counts span{font-size:11px;color:var(--muted)}
+.queue-counts .needs-you{background:var(--amber-soft)}
+.queue-counts .needs-you b{color:var(--amber)}
+.queue-reach,.queue-last,.queue-more{font-size:11px;color:var(--muted)}
+.queue-order .lane-label{margin-bottom:6px}
+.queue-next{margin:0;padding-left:18px;display:grid;gap:4px;font-size:12.5px}
+.queue-next li{display:flex;justify-content:space-between;gap:10px}
+.queue-next li b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.queue-next li span{color:var(--muted);flex:none}
+@media(max-width:760px){.queue-lanes{grid-template-columns:1fr}.queue-lane+.queue-lane{border-left:0;border-top:1px solid var(--line)}}

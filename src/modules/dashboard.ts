@@ -20,6 +20,7 @@ import { readSavingsToday } from "./lowRead.js";
 import { contactIdentityHealth } from "./contactIdentity.js";
 import { sendHealthStand } from "../core/sendHealth.js";
 import { openJobFailures } from "../core/jobReliability.js";
+import { warteschlange } from "./warteschlange.js";
 
 const APP_VERSION = (() => {
   try { return String(createRequire(import.meta.url)("../../package.json").version || "unbekannt"); }
@@ -467,6 +468,8 @@ export function getDashboardData() {
       `SELECT id, kind, status, participant, thread_url, draft, created_at, blockiert_grund
          FROM drafts WHERE status IN ('blockiert','unknown') ORDER BY created_at DESC LIMIT 50`,
     ).all() as Array<{ id: number; kind: string; status: string; participant: string | null; thread_url: string; draft: string; created_at: string; blockiert_grund: string | null }>,
+    /** Warteschlange je Kanal (Nachrichten / Anfragen): was wartet, läuft es, wann geht es weiter. */
+    warteschlange: warteschlange(),
     blockaden: (() => {
       /**
        * `aktion` macht jeden Eintrag KLICKBAR (Sinans Vorgabe 2026-08-06): entweder wird die
