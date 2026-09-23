@@ -24,22 +24,26 @@
   <main>
     <header class="topbar">
       <div><p id="page-kicker">DEIN ARBEITSTAG</p><h1 id="page-title">Heute</h1></div>
-      <div class="top-actions"><span id="updated-at">–</span><button id="feedback-open" class="support-button">Feedback</button><button id="emergency" class="danger-ghost">Not-Aus</button></div>
+      <div class="top-actions"><span id="top-status" class="top-status"></span><span id="updated-at">–</span><button id="feedback-open" class="support-button">Feedback</button><button id="emergency" class="danger-ghost">Not-Aus</button></div>
     </header>
 
     <section class="view active" id="view-today">
-      <div class="status-strip" id="status-strip"></div>
       <section id="blockaden" class="blockaden hidden"></section>
       <section id="goal-alerts" class="goal-alerts hidden" aria-live="polite"></section>
-      <section class="today-hero">
-        <div><span class="eyebrow">Was braucht dich jetzt?</span><h2 id="attention-title">Deine Arbeit wird sortiert.</h2><p id="attention-copy">Antworten zuerst, dann Freigaben. NextLead erledigt den Rest im Hintergrund.</p></div>
-        <div class="hero-done"><b id="today-auto">–</b><span>heute automatisch erledigt</span></div>
+      <div id="today-kpis" class="today-kpis" aria-label="Kennzahlen heute"></div>
+      <section class="decisions" aria-labelledby="decisions-title">
+        <div class="section-head"><div><h3 id="decisions-title">Deine Entscheidungen <span id="decisions-count" class="count-chip"></span></h3><p class="muted">Wichtigstes zuerst. Ein Klick öffnet den Entwurf.</p></div><div class="head-side"><button id="scan-offene" type="button" title="Geht alle Chats durch, auch alte, und legt für jeden offenen Fall einen Entwurf zur Prüfung an. Dauert einige Minuten. Es wird nichts gesendet.">Postfach durchsuchen</button><button id="quick-open" type="button" class="primary" title="Alle offenen Entwürfe als Liste, mehrere auf einmal genehmigen">Alle schnell prüfen</button></div></div>
+        <div id="decision-list" class="decision-list"></div>
       </section>
-      <section class="queue-board" aria-labelledby="queue-title">
+      <section id="quick-review" class="quick-review hidden" aria-live="polite"></section>
+      <section id="reviewer" class="reviewer hidden" aria-live="polite"></section>
+      <details class="bot-details" id="bot-details">
+        <summary><span>Was der Bot gerade macht</span><small id="bot-summary"></small></summary>
+        <section class="queue-board" aria-labelledby="queue-title">
         <div class="activity-head"><div><span class="eyebrow">Warteschlange</span><h3 id="queue-title">Was noch rausgeht</h3></div></div>
         <div id="queue-lanes" class="queue-lanes"></div>
       </section>
-      <section class="activity-board" aria-labelledby="activity-title">
+        <section class="activity-board" aria-labelledby="activity-title">
         <div class="activity-head"><div><span class="eyebrow">Bot-Aktivität</span><h3 id="activity-title">Was läuft und was kommt</h3></div><span class="activity-live"><i></i><span id="activity-live-label">Live</span></span></div>
         <div class="activity-lanes">
           <div class="activity-lane current-lane"><span class="lane-label">Jetzt</span><div id="activity-current"></div></div>
@@ -47,12 +51,16 @@
           <div class="activity-lane"><span class="lane-label">Zuletzt erledigt</span><div id="activity-recent" class="activity-list recent-list"></div></div>
         </div>
       </section>
-      <div class="today-grid">
-        <section><div class="section-head"><div><span class="eyebrow">Arbeitskorb</span><h3>Nach Wirkung priorisiert</h3></div><div class="head-side"><button id="quick-open" type="button" class="primary" title="Alle offenen Entwürfe als Liste, mehrere auf einmal genehmigen">Schnellprüfung</button><button id="scan-offene" type="button" title="Geht alle Chats durch, auch alte, und legt für jeden offenen Fall einen Entwurf zur Prüfung an. Dauert einige Minuten. Es wird nichts gesendet.">Alle Chats prüfen</button><span class="muted" id="work-total"></span></div></div><div id="work-groups" class="work-groups"></div></section>
+      </details>
+      <!-- Altbausteine: bleiben im DOM, weil ältere render-Funktionen sie füllen; sichtbar ist
+           nur die neue Startseite (Designrunde 2, 2026-09-23). -->
+      <div hidden class="legacy-today"><div class="status-strip" id="status-strip"></div><section class="today-hero">
+        <div><span class="eyebrow">Was braucht dich jetzt?</span><h2 id="attention-title">Deine Arbeit wird sortiert.</h2><p id="attention-copy">Antworten zuerst, dann Freigaben. NextLead erledigt den Rest im Hintergrund.</p></div>
+        <div class="hero-done"><b id="today-auto">–</b><span>heute automatisch erledigt</span></div>
+      </section><div class="today-grid">
+        <section><div class="section-head"><div><span class="eyebrow">Arbeitskorb</span><h3>Nach Wirkung priorisiert</h3></div><div class="head-side"><span class="muted" id="work-total"></span></div></div><div id="work-groups" class="work-groups"></div></section>
         <aside class="result-card"><span class="eyebrow">Ergebnis · Outreach</span><div id="mini-funnel" class="mini-funnel"></div><p>Bestehendes Netzwerk wird getrennt gemessen.</p></aside>
-      </div>
-      <section id="quick-review" class="quick-review hidden" aria-live="polite"></section>
-      <section id="reviewer" class="reviewer hidden" aria-live="polite"></section>
+      </div></div>
     </section>
 
     <section class="view" id="view-campaigns">
@@ -107,13 +115,14 @@
     <section class="view" id="view-contacts">
       <section class="page-intro compact"><div><span class="eyebrow">Eine Kontaktbasis</span><h2>Kontakte und Gespräche</h2><p>Jede Person erscheint nur einmal. Filter zeigen, wo der Kontakt gerade steht.</p></div></section>
       <div class="contact-toolbar"><input id="contact-search" type="search" placeholder="Name oder Headline suchen"/><select id="contact-filter"><option value="all">Alle Kontakte</option><option value="attention">Braucht Entscheidung</option><option value="paused">Wiedervorlagen</option><option value="excluded">Nicht mehr anschreiben</option><option value="new">Noch nicht kontaktiert</option><option value="invited">Anfrage offen</option><option value="accepted">Angenommen</option><option value="messaged">Angeschrieben</option><option value="replied">Hat geantwortet</option><option value="closed">Abgeschlossen</option></select><span id="identity-quality" class="identity-quality"></span><span id="contact-count"></span></div>
-      <div class="contact-table"><div class="contact-scroll"><div class="contact-row contact-head"><button type="button" data-sort="name">Kontakt</button><button type="button" data-sort="status">Status</button><button type="button" data-sort="stufe">Stufe</button><button type="button" data-sort="score">Score</button><button type="button" data-sort="quelle">Quelle</button><button type="button" data-sort="beruehrung">Letzte Berührung</button><span>Nächster Schritt</span><span>Offen</span><span></span></div><div id="contact-rows"></div></div></div>
+      <div class="contact-table"><div class="contact-scroll"><div class="contact-row contact-head"><button type="button" data-sort="name">Kontakt</button><button type="button" data-sort="status">Status</button><button type="button" data-sort="score">Score</button><button type="button" data-sort="beruehrung">Letzte Berührung</button><span>Nächster Schritt</span><span></span></div><div id="contact-rows"></div></div></div>
     </section>
 
     <section class="view" id="view-insights">
       <section class="page-intro compact"><div><span class="eyebrow">Belastbare Zahlen</span><h2>Was funktioniert wirklich?</h2><p>Nur Kontakte aus deinem Outreach-Funnel. Bestehende Verbindungen verzerren die Quoten nicht.</p></div></section>
-      <div id="insight-kpis" class="insight-kpis"></div>
-      <section class="insight-panel planning-lab">
+      <nav class="subtabs" id="insight-tabs" role="tablist" aria-label="Auswertung"><button role="tab" data-insight-tab="ueberblick">Überblick</button><button role="tab" data-insight-tab="wirkt">Was wirkt</button><button role="tab" data-insight-tab="rechner">Rechner</button><button role="tab" data-insight-tab="berichte">Berichte</button></nav>
+      <div data-tab="ueberblick" id="insight-kpis" class="insight-kpis"></div>
+      <section data-tab="rechner" class="insight-panel planning-lab">
         <div class="section-head"><div><span class="eyebrow">Zielweg-Rechner</span><h3>Vom Monatsziel zur nötigen Kontaktzahl</h3></div><span class="planning-badge">B1 · P1 · AEC</span></div>
         <div class="planning-controls">
           <label><span>Zielweg</span><select id="planning-goal"><option value="B1">B1 · Kunde</option><option value="P1">P1 · Vertriebspartner</option><option value="AEC">AEC</option></select></label>
@@ -147,16 +156,16 @@
       </section>
       <!-- TAGES-/WOCHENBERICHT (2026-09-22): fester Zeitraum, Vergleich zum Zeitraum davor.
            Eigener Ladepfad (/api/bericht) mit laufender Anfragenummer wie bei der Wirkung. -->
-      <section class="insight-panel ki-analyse-panel">
+      <section data-tab="ueberblick" class="insight-panel ki-analyse-panel">
         <div class="section-head"><div><span class="eyebrow">KI-Wochenanalyse</span><h3>Wo es hakt und was du ändern solltest</h3></div><button id="ki-analyse-run" title="Analysiert Zahlen, Stile, Ablehnungen und echte Antworten (ein Claude-Aufruf). Läuft sonst automatisch montags.">✨ Jetzt analysieren</button></div>
         <div id="ki-analyse-body"><p class="muted">Läuft automatisch jeden Montag und kommt per Telegram.</p></div>
       </section>
-      <section class="insight-panel varianten-panel">
+      <section data-tab="wirkt" class="insight-panel varianten-panel">
         <div class="section-head"><div><span class="eyebrow">Was wirkt</span><h3>Welche Formulierung mehr Antworten bringt</h3></div><button id="varianten-reload">Aktualisieren</button></div>
         <p class="muted">Der Bot probiert je Nachrichtenart mehrere Stile und bevorzugt automatisch den, der mehr positive Antworten bringt. Ein Versand zählt erst nach 10 Tagen als „ohne Antwort“. Stile, die du oft ablehnst, pausieren.</p>
         <div id="varianten-body"></div>
       </section>
-      <section class="insight-panel bericht">
+      <section data-tab="berichte" class="insight-panel bericht">
         <div class="section-head">
           <div><span class="eyebrow">Bericht</span><h3 id="bericht-titel">Tagesbericht</h3></div>
           <div class="wirkung-group" role="group" aria-label="Zeitraum">
@@ -176,7 +185,7 @@
       <!-- WIRKUNG (Phase 5.2/5.3): eine Kette, eine Quelle. Alle Zahlen kommen aus dem
            Ereignisprotokoll `crm_stage_events`, nicht aus Kontakt-Zeitstempeln. Jede Stufe ist
            anklickbar und zeigt exakt die Kontakte, die sie erzeugt haben. -->
-      <section class="insight-panel wirkung">
+      <section data-tab="ueberblick" class="insight-panel wirkung">
         <div class="section-head">
           <div><span class="eyebrow">Wirkung</span><h3>Von der Quelle zum Ergebnis</h3></div>
           <div class="wirkung-group" role="group" aria-label="Vergleich">
@@ -199,8 +208,8 @@
         <div id="wirkung-inhalt" aria-live="polite"></div>
         <section id="wirkung-drill" class="wirkung-drill hidden" aria-live="polite"></section>
       </section>
-      <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Aktivität heute</span><h3>Was NextLead ausgeführt hat</h3></div></div><div id="today-actions" class="today-actions"></div></section>
-      <section class="insight-panel"><div class="section-head"><div><span class="eyebrow">Stetiges Lernen</span><h3>Was NextLead aus deinen Entscheidungen lernt</h3></div><span id="learning-privacy" class="learning-privacy"></span></div><div id="learning-summary"></div></section>
+      <section data-tab="berichte" class="insight-panel"><div class="section-head"><div><span class="eyebrow">Aktivität heute</span><h3>Was NextLead ausgeführt hat</h3></div></div><div id="today-actions" class="today-actions"></div></section>
+      <section data-tab="wirkt" class="insight-panel"><div class="section-head"><div><span class="eyebrow">Stetiges Lernen</span><h3>Was NextLead aus deinen Entscheidungen lernt</h3></div><span id="learning-privacy" class="learning-privacy"></span></div><div id="learning-summary"></div></section>
     </section>
 
     <section class="view" id="view-settings">

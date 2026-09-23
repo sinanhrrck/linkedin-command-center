@@ -123,7 +123,8 @@ function renderStatus() {
    * Datenbank. Jede Blockade heute (Checkpoint, Akzeptanzquote, leere Warteschlange, fehlende
    * Freigaben) war fachlich korrekt und trotzdem unsichtbar: Sinan sah nur einen stillen Bot.
    */
-  const blockaden = state.blockaden || [];
+  // „N Entwürfe warten“ steht schon in der Entscheidungsliste – hier nur echte Störungen.
+  const blockaden = (state.blockaden || []).filter((b) => !['review', 'campaignReview'].includes(b.aktion?.art));
   const box = $("blockaden");
   if (box) {
     box.classList.toggle("hidden", !blockaden.length);
@@ -223,6 +224,9 @@ function renderToday() {
   renderActivity();
   renderQueue();
   renderQuick();
+  renderTopStatus();
+  renderTodayKpis();
+  renderDecisions();
 }
 
 /** Uhrzeit oder Tag des nächsten Versuchs – "um 14:20", "morgen 07:00", "Mo 07:00". */
@@ -262,6 +266,84 @@ function renderQueue() {
       ${k.zuletzt ? `<small class="queue-last">Zuletzt: ${esc(k.zuletzt.name)}, ${esc(relativeTime(k.zuletzt.at))}</small>` : ""}
     </article>`;
   }).join("");
+}
+
+/**
+ * STARTSEITE „HEUTE“ – Designrunde 2 (2026-09-23, Sinan: „zu unübersichtlich“).
+ * Vorher sieben Blöcke untereinander, „Engine läuft nicht“ stand an drei Stellen. Jetzt:
+ * eine Statuszeile oben rechts, vier Zahlen, die Entscheidungsliste als Hauptsache, und die
+ * Bot-Details (Warteschlange, Aktivität) nur noch aufklappbar.
+ */
+const ENTSCHEIDUNG_ART = { message: "Antwort", pitchidee: "Antwort · Richtung", first: "Erstnachricht", followup: "Nachfassung", reaktivierung: "Netzwerk", comment: "Kommentar", event: "Einladung" };
+const WICHTIG_INTENT = { chance: "Chance", meeting: "Termin", einwand: "Einwand", goal_deviation: "Zielwechsel" };
+let entscheidungenAlle = false;
+const zeitKurz = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
+
+function renderTopStatus() {
+  const el = $("top-status"); if (!el) return;
+  const alive = !!state.engine?.alive, notAus = !!state.governor?.notAus, pause = !!state.governor?.paused;
+  const k = state.warteschlange || [];
+  const laeuft = k.some((x) => x.status === "laeuft");
+  const naechster = k.map((x) => x.naechsterVersuch).filter(Boolean).sort()[0];
+  const [ton, text] = notAus ? ["bad", "Not-Aus aktiv"]
+    : !alive ? ["bad", "Bot ist aus"]
+    : pause ? ["warn", "Sicherheitspause"]
+    : laeuft ? ["ok", "Bot sendet"]
+    : ["warn", naechster ? `Bot wartet · weiter ${zeitKurz(naechster)}` : "Bot wartet"];
+  el.className = `top-status ${ton}`;
+  el.innerHTML = `<i></i>${esc(text)}`;
+  el.title = k.map((x) => `${x.titel}: ${x.statusText}`).join("\n");
+}
+
+function renderTodayKpis() {
+  const k = state.warteschlange || [], n = k[0] || {}, a = k[1] || {};
+  const zellen = [
+    { wert: state.attention?.total || 0, text: "Entscheidungen für dich", akzent: true, ziel: "quick" },
+    { wert: `${n.heute ?? 0}/${n.tagesLimit ?? 0}`, text: "Nachrichten heute" },
+    { wert: `${a.heute ?? 0}/${a.tagesLimit ?? 0}`, text: "Anfragen heute" },
+    { wert: a.bereit ?? 0, text: "Kontakte in der Warteschlange" },
+  ];
+  $("today-kpis").innerHTML = zellen.map((z) => `<${z.ziel ? "button" : "div"} class="today-kpi ${z.akzent ? "akzent" : ""}" ${z.ziel ? `data-kpi="${z.ziel}"` : ""}><b>${esc(String(z.wert))}</b><span>${esc(z.text)}</span></${z.ziel ? "button" : "div"}>`).join("");
+  $("today-kpis").querySelector("[data-kpi=quick]")?.addEventListener("click", () => $("quick-open").click());
+}
+
+function oeffneEntwurf(id) {
+  const d = (state.drafts || []).find((x) => x.id === id); if (!d) return;
+  const gruppe = GROUPS.find((g) => g.kinds.includes(d.kind));
+  reviewCampaign = null; reviewKinds = gruppe ? gruppe.kinds : [d.kind];
+  reviewIndex = Math.max(0, reviewList().findIndex((x) => x.id === id));
+  renderReviewer();
+  $("reviewer").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderDecisions() {
+  const att = state.attention || {};
+  const drafts = (state.drafts || []).filter((d) => d.kind !== "event");
+  $("decisions-count").textContent = att.total || "";
+  const zeilen = [];
+  if (att.systemIssues) zeilen.push({ dringend: true, art: "Technik", name: `${att.systemIssues} technische${att.systemIssues === 1 ? "s Problem" : " Probleme"}`, text: "Sendeweg oder unklare Zustellung prüfen", ziel: () => showView("settings") });
+  if (att.meetings) zeilen.push({ dringend: true, art: "Termin", name: `${att.meetings} Übergabe${att.meetings === 1 ? "" : "n"}`, text: "Gebuchte Gespräche übernehmen", ziel: () => showView("contacts") });
+  for (const d of drafts) {
+    const wichtig = WICHTIG_INTENT[d.intent];
+    const badge = d.phase === "approach" ? `<span class="quick-badge neutral">Richtung wählen</span>`
+      : wichtig ? `<span class="quick-badge warn">${esc(wichtig)}</span>`
+      : d.pruefung ? (d.pruefung.ok ? `<span class="quick-badge ok">geprüft</span>` : `<span class="quick-badge bad" title="${esc(d.pruefung.gruende.join(", "))}">prüfen</span>`)
+      : "";
+    const vorschau = d.kind === "message" && d.incoming && !String(d.incoming).startsWith("campaign:") ? `„${d.incoming}“` : d.phase === "approach" ? "Neue Gesprächsrichtung auswählen" : d.draft;
+    zeilen.push({ dringend: !!wichtig || d.kind === "message", art: ENTSCHEIDUNG_ART[d.kind] || d.kind, name: d.participant || d.profile?.fullName || "Kontakt", text: vorschau, badge, zeit: d.created_at, id: d.id });
+  }
+  const sichtbar = entscheidungenAlle ? zeilen : zeilen.slice(0, 12);
+  $("decision-list").innerHTML = zeilen.length
+    ? sichtbar.map((z, i) => `<button class="decision ${z.dringend ? "dringend" : ""}" data-decision="${i}"><i></i><span class="d-art">${esc(z.art)}</span><b class="d-name">${esc(z.name)}</b><span class="d-text">${esc(String(z.text || "").replace(/\s+/g, " ").slice(0, 140))}</span>${z.badge || "<span></span>"}<small class="d-zeit">${z.zeit ? esc(relativeTime(z.zeit)) : ""}</small><span class="d-go" aria-hidden="true">›</span></button>`).join("")
+      + (zeilen.length > 12 ? `<button class="decision-more" data-more>${entscheidungenAlle ? "Weniger anzeigen" : `Alle ${zeilen.length} anzeigen`}</button>` : "")
+    : `<div class="decision-empty"><b>Alles entschieden.</b><span>NextLead arbeitet weiter und meldet sich, sobald du wieder gebraucht wirst.</span></div>`;
+  $("decision-list").querySelectorAll("[data-decision]").forEach((b) => b.addEventListener("click", () => {
+    const z = sichtbar[Number(b.dataset.decision)];
+    if (z.id) oeffneEntwurf(z.id); else z.ziel?.();
+  }));
+  $("decision-list").querySelector("[data-more]")?.addEventListener("click", () => { entscheidungenAlle = !entscheidungenAlle; renderDecisions(); });
+  const k = state.warteschlange || [];
+  $("bot-summary").textContent = k.map((x) => `${x.titel}: ${({ laeuft: "sendet", wartet: "wartet", gestoppt: "gestoppt", leer: "nichts zu tun" })[x.status] || x.status}`).join(" · ");
 }
 
 function renderGoalAlerts() {
@@ -961,7 +1043,9 @@ function renderContacts() {
       contact.offene_aufgaben ? `<i class="${faellig ? "faellig" : ""}" title="offene Aufgaben">${contact.offene_aufgaben}✓</i>` : "",
       contact.notizen ? `<i title="Notizen">${contact.notizen}✎</i>` : "",
     ].join("");
-    return `<div class="contact-row"><div class="contact-person"><b>${esc(contact.full_name || "Unbekannt")}</b><span>${esc(contact.headline || "Keine Headline")}</span>${protectedState ? `<i class="relationship-state ${contact.automation_status === "excluded" ? "excluded" : ""}">${esc(protectedState)}</i>` : ""}</div><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span>${stufe}<span class="contact-score" title="${esc(contact.ki_grund ? `KI: ${contact.ki_score} · ${({ beratung: "Beratung", partner: "Partner", beide: "Beratung + Partner", keiner: "passt nicht" })[contact.ki_fit] || ""} · ${contact.ki_grund}` : "Regel-Note (noch nicht von der KI bewertet)")}">${contact.ki_score ?? contact.lead_score ?? "–"}${contact.ki_score != null ? `<i class="ki-mark">KI</i>` : ""}</span><span class="contact-meta" title="${esc(contact.quelle || "")}">${esc(contact.quelle || "–")}</span><span class="contact-meta">${contact.letzte_beruehrung ? esc(relativeTime(contact.letzte_beruehrung)) : "–"}</span><span class="next-step">${esc(nextStep(contact))}</span><span class="contact-open">${offen}</span><span class="contact-actions"><button class="contact-history" data-contact-history="${contact.id}">Verlauf</button><button class="contact-policy ${protectedState ? "resume" : ""}" data-contact-policy="${contact.id}">${protectedState ? "Freigeben" : "Pausieren"}</button><a href="${esc(contact.profile_url)}" target="_blank" rel="noopener">Profil ↗</a></span></div>`;
+    // Designrunde 2: sechs Spalten statt neun – Stufe steht unter dem Status, Aufgaben/Notizen
+    // als Symbole am Namen, die Quelle im Tooltip.
+    return `<div class="contact-row"><div class="contact-person" title="${esc(contact.quelle ? `Quelle: ${contact.quelle}` : "")}"><b>${esc(contact.full_name || "Unbekannt")}${offen ? `<span class="contact-open">${offen}</span>` : ""}</b><span>${esc(contact.headline || "Keine Headline")}</span>${protectedState ? `<i class="relationship-state ${contact.automation_status === "excluded" ? "excluded" : ""}">${esc(protectedState)}</i>` : ""}</div><div class="contact-status"><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span>${contact.outcome_stage ? stufe : ""}</div><span class="contact-score" title="${esc(contact.ki_grund ? `KI: ${contact.ki_score} · ${({ beratung: "Beratung", partner: "Partner", beide: "Beratung + Partner", keiner: "passt nicht" })[contact.ki_fit] || ""} · ${contact.ki_grund}` : "Regel-Note (noch nicht von der KI bewertet)")}">${contact.ki_score ?? contact.lead_score ?? "–"}${contact.ki_score != null ? `<i class="ki-mark">KI</i>` : ""}</span><span class="contact-meta">${contact.letzte_beruehrung ? esc(relativeTime(contact.letzte_beruehrung)) : "–"}</span><span class="next-step">${esc(nextStep(contact))}</span><span class="contact-actions"><button class="contact-history" data-contact-history="${contact.id}">Verlauf</button><button class="contact-policy icon-only ${protectedState ? "resume" : ""}" data-contact-policy="${contact.id}" title="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}" aria-label="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}">${protectedState ? "▶" : "⏸"}</button><a class="icon-link" href="${esc(contact.profile_url)}" target="_blank" rel="noopener" title="LinkedIn-Profil öffnen" aria-label="LinkedIn-Profil öffnen">↗</a></span></div>`;
   }).join("") || `<div class="empty-work">Keine Kontakte in diesem Filter.</div>`;
   $("contact-rows").querySelectorAll("[data-contact-history]").forEach((button) => button.addEventListener("click", () => {
     const contact = (state.contacts || []).find((item) => item.id === Number(button.dataset.contactHistory));
@@ -1801,3 +1885,19 @@ $("source-add").onclick = async () => { await post("/api/source", { action: "add
 // Alle 20s aktualisieren. Ist ein Prüfbereich offen, bleibt NUR dieser stehen – der Rest der
 // Seite (Arbeitskorb, Kampagnen, Status) zieht trotzdem nach.
 load(); setInterval(() => load(!!(reviewKinds || reviewCampaign)), 20000);
+
+/**
+ * AUSWERTUNG IN REITERN (Designrunde 2, 2026-09-23): statt acht Blöcken untereinander vier Reiter.
+ * Der zuletzt gewählte Reiter bleibt in diesem Browser gemerkt (localStorage, in try/catch).
+ */
+function zeigeInsightTab(tab) {
+  const erlaubt = ["ueberblick", "wirkt", "rechner", "berichte"];
+  if (!erlaubt.includes(tab)) tab = "ueberblick";
+  document.querySelectorAll("#view-insights [data-tab]").forEach((el) => el.classList.toggle("tab-aus", el.dataset.tab !== tab));
+  document.querySelectorAll("[data-insight-tab]").forEach((b) => { b.classList.toggle("active", b.dataset.insightTab === tab); b.setAttribute("aria-selected", String(b.dataset.insightTab === tab)); });
+  try { localStorage.setItem("insight-tab", tab); } catch { /* egal */ }
+}
+document.querySelectorAll("[data-insight-tab]").forEach((b) => b.addEventListener("click", () => zeigeInsightTab(b.dataset.insightTab)));
+let gemerkterTab = "ueberblick";
+try { gemerkterTab = localStorage.getItem("insight-tab") || "ueberblick"; } catch { /* egal */ }
+zeigeInsightTab(gemerkterTab);
