@@ -479,9 +479,53 @@ async function tippenUndSenden(
     imVerlauf = await fenster.locator(SEL.threadItem).filter({ hasText: marker }).count().catch(() => 0);
     if (!imVerlauf) imVerlauf = await page.locator(SEL.threadItem).filter({ hasText: marker }).count().catch(() => 0);
   }
+  /**
+   * AUFFANGNETZ (2026-09-25): 5 von 5 Versänden ohne Treffer, obwohl alle nachweislich ankamen
+   * (Sinan hat es in LinkedIn geprüft, Antworten liefen ein). LinkedIn baut den Verlauf im
+   * Chatfenster offenbar nicht mehr mit `SEL.threadItem`. Darum hier seitenweit nach dem Text
+   * suchen – das Eingabefeld ist zu diesem Zeitpunkt nachweislich leer, ein Treffer ist also die
+   * gesendete Nachricht. Gefunden wird festgehalten, WO er stand (Tag + Klassen der Vorfahren),
+   * damit `SEL.threadItem` gezielt nachgezogen werden kann. Keine Inhalte, keine Namen.
+   */
+  if (imVerlauf === 0) {
+    const fund = await page.evaluate(findeVerlaufsElement, marker).catch(() => null);
+    if (fund) {
+      imVerlauf = 1;
+      try { setState("verlauf_beleg_fundort", `${new Date().toISOString()} ${fund}`.slice(0, 600)); } catch { /* nur Diagnose */ }
+      console.info(`[send] Verlaufsbeleg über Auffangsuche gefunden – SEL.threadItem nachziehen. Fundort: ${fund}`);
+    }
+  }
   merkeVerlaufsBeleg(imVerlauf > 0);
   if (imVerlauf === 0)
     console.warn("[send] Feld geleert (= gesendet), aber Text nicht im Verlauf gefunden – Verlaufsprüfung unsicher, kein erneuter Versand.");
+}
+
+/**
+ * Läuft IM BROWSER. Sucht das innerste Element (außerhalb von Eingabefeldern), dessen Text den
+ * Marker enthält, und beschreibt seine Vorfahren-Kette als "tag.klasse > tag.klasse …".
+ * Muss eigenständig sein (keine Bezüge nach außen), weil Playwright nur den Funktionstext überträgt.
+ */
+export function findeVerlaufsElement(marker: string): string | null {
+  // KEINE benannten Hilfsfunktionen hier drin: tsx/esbuild umhüllt sie mit `__name(...)`, das es
+  // im Browser nicht gibt → ReferenceError, und die Suche schlüge still fehl (real gemessen).
+  const unsichtbar = /[\u200b-\u200d\u2060\ufeff]/g;
+  const soll = marker.replace(unsichtbar, "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!soll) return null;
+  let treffer: Element | null = null;
+  for (const el of Array.from(document.querySelectorAll("p, span, div, li"))) {
+    if (el.closest("[contenteditable='true'], textarea, input")) continue;
+    const ist = ((el as HTMLElement).innerText || el.textContent || "").replace(unsichtbar, "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!ist.includes(soll)) continue;
+    // innerstes Element gewinnt: ein Kind, das ebenfalls passt, ist genauer
+    if (!treffer || treffer.contains(el)) treffer = el;
+  }
+  if (!treffer) return null;
+  const kette: string[] = [];
+  for (let el: Element | null = treffer; el && el !== document.body && kette.length < 6; el = el.parentElement) {
+    const klassen = Array.from(el.classList).filter((k) => !/^ember|^artdeco-|^t-\d|^p\d|^m\d/.test(k)).slice(0, 3);
+    kette.push(el.tagName.toLowerCase() + (klassen.length ? "." + klassen.join(".") : ""));
+  }
+  return kette.join(" < ");
 }
 
 /**
