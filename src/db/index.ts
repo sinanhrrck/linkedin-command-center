@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { config } from "../config.js";
 import { repairContactDuplicates } from "./dataIntegrity.js";
+import { pruefeZielgruppe } from "../core/zielgruppenRegel.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -269,6 +270,44 @@ try { db.exec("CREATE INDEX IF NOT EXISTS idx_crm_stage_attribution ON crm_stage
 const integrity = repairContactDuplicates(db);
 if (integrity.removed) console.info(`[daten] ${integrity.groups} doppelte Kontaktgruppen zusammengefuehrt (${integrity.removed} Altzeilen).`);
 try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_normalized_url ON contacts(normalized_url) WHERE normalized_url IS NOT NULL"); } catch { /* wird beim naechsten Start erneut versucht */ }
+
+// ZIELGRUPPEN (2026-09-25). `zg_passt` ist die Regel aus core/zielgruppenRegel.ts als SQL-Funktion,
+// damit jede Auswahl-Abfrage direkt filtern kann. Sie bekommt alle Werte als Argumente und fragt
+// selbst NICHTS ab – better-sqlite3 verbietet Abfragen innerhalb einer laufenden Abfrage.
+db.function("zg_passt", (headline, rolle, seit, erkennung, ausschluss, maxJahre) =>
+  pruefeZielgruppe(
+    { headline: headline as string | null, rolle: rolle as string | null, seit: seit as string | null },
+    { erkennung: erkennung as string | null, ausschluss: ausschluss as string | null, max_berufsjahre: maxJahre == null ? null : Number(maxJahre) },
+  ).ok ? 1 : 0,
+);
+for (const tabelle of ["contacts", "lead_sources"]) {
+  try { db.exec(`ALTER TABLE ${tabelle} ADD COLUMN zielgruppe_id INTEGER`); } catch { /* existiert */ }
+}
+/**
+ * Erststart: Aus dem bisherigen „Fokus“ (azubi/student/beides) und der Quellen-Kennung zwei
+ * Zielgruppen anlegen, damit nach dem Update nichts stillsteht. Nur wenn noch KEINE existiert –
+ * danach gehören die Zielgruppen allein Sinan. Ausschlusswörter decken den Vorfall vom 25.09. ab.
+ */
+if (!(db.prepare("SELECT COUNT(*) n FROM zielgruppen").get() as { n: number }).n) {
+  const fokus = (db.prepare("SELECT value FROM state WHERE key='focus'").get() as { value: string } | undefined)?.value || "azubi";
+  const neu = db.prepare("INSERT INTO zielgruppen(name, aktiv, erkennung, ausschluss, max_berufsjahre) VALUES(?,?,?,?,?)");
+  const azubi = Number(neu.run(
+    "Azubis",
+    fokus === "student" ? 0 : 1,
+    "Ausbildung, Auszubildend, Azubi, Dual, Trainee, Lehrjahr, Angehend",
+    "Leiter, Leitung, Manager, Direktor, Vorstand, Head of, Senior, Prokurist, Geschäftsführ, Inhaber, Ausbilder, Recruit, Personalreferent, Dozent, Coach, Berater für",
+    5,
+  ).lastInsertRowid);
+  const student = Number(neu.run(
+    "Studenten",
+    fokus === "azubi" ? 0 : 1,
+    "Student, Studium, Studier, Bachelor, Master",
+    "Professor, Dozent, Lehrbeauftragt, Recruit, Geschäftsführ, Inhaber, Coach, Alumni, Leiter, Manager, Senior",
+    5,
+  ).lastInsertRowid);
+  db.prepare("UPDATE lead_sources SET zielgruppe_id=? WHERE zielgruppe_id IS NULL AND zielgruppe='student'").run(student);
+  db.prepare("UPDATE lead_sources SET zielgruppe_id=? WHERE zielgruppe_id IS NULL").run(azubi);
+}
 
 /** Key/Value-State */
 export const getState = (key: string): string | undefined =>

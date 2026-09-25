@@ -3,6 +3,7 @@ import { canonicalProfileUrl } from "../core/profileUrl.js";
 import { proactiveDecision } from "./relationshipPolicy.js";
 import { linkContactIdentity, resolveContactIdentity } from "./contactIdentity.js";
 import { recordCrmStage, replyQualityFromIntent, type ReplyQuality } from "./crmStages.js";
+import { zgBedingung } from "../core/zielgruppenRegel.js";
 
 export type Contact = {
   id: number;
@@ -53,6 +54,12 @@ export function upsertContact(c: { profileUrl: string; fullName?: string; headli
   // Quellengebundene Aufträge nehmen ausschließlich die Kontakte auf, die über genau diese
   // Quelle gefunden wurden. Bestehende Kontakte werden beim Anlegen eines neuen Auftrags nicht
   // rückwirkend vereinnahmt; Duplikate bleiben durch INSERT OR IGNORE sicher.
+  // Zielgruppe der Quelle beim ersten Fund übernehmen, danach eingefroren (wie source_id).
+  if (c.sourceId) {
+    db.prepare(
+      "UPDATE contacts SET zielgruppe_id=(SELECT zielgruppe_id FROM lead_sources WHERE id=?) WHERE normalized_url=? AND zielgruppe_id IS NULL",
+    ).run(c.sourceId, profileUrl);
+  }
   const row = db.prepare("SELECT id,status,accepted_at,aus_netzwerk,full_name FROM contacts WHERE normalized_url=?").get(profileUrl) as
     | { id: number; status: string; accepted_at: string | null; aus_netzwerk: number | null; full_name: string | null }
     | undefined;
@@ -94,6 +101,8 @@ export function nextNewContacts(limit: number): Contact[] {
          AND COALESCE(automation_status,'active')='active'
          AND (snoozed_until IS NULL OR snoozed_until<=datetime('now'))
          AND (retry_after IS NULL OR retry_after <= datetime('now'))
+         -- Nur Kontakte einer AKTIVEN Zielgruppe, die noch zu ihr passen (2026-09-25).
+         AND ${zgBedingung("contacts")}
        ORDER BY
          CASE WHEN EXISTS (
            SELECT 1
@@ -324,6 +333,8 @@ export function messagedAwaitingFollowup(plan: { nachTagen: number }[], limit: n
             SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url
               AND d.kind='followup' AND d.status IN ('pending','approved','discarded')
           )
+          -- Pausierte/geänderte Zielgruppe = kein automatisches Nachfassen mehr (2026-09-25).
+          AND ${zgBedingung("c")}
         ORDER BY c.messaged_at`,
     )
     .all() as (Contact & { n_followups: number; messaged_at: string })[];

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
-import { pruefNameFuer } from "../modules/outreach.js";
+
+// EIGENE Test-Datenbank, VOR dem ersten Import (2026-09-25). Vorher lief diese Datei gegen die
+// echte DB: im Container schrieb der Beleg-Test bei jedem Testlauf „00000“ in `verlauf_belege`
+// und löste im Cockpit die Warnung „0 von 5 Versänden im Verlauf“ aus – ganz ohne Versand.
+process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "nextlead-empfaenger-")), "test.sqlite");
+const { pruefNameFuer } = await import("../modules/outreach.js");
 
 /**
  * Die Empfänger-Prüfung verlangt, dass der Name auf der Seite steht. LinkedIn kürzt Nachnamen

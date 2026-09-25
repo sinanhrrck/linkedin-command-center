@@ -1726,7 +1726,15 @@ function renderSettings() {
     + `<div class="safety-line"><span>Diese Woche</span><b>${connect.week || 0} / ${connect.weeklyCap || "–"}</b></div>`
     + `<div class="safety-line"><span>Geschäftszeiten</span><b>${g.zeitfenster === false ? "Aus" : "Aktiv"}</b></div>`
     + `<div class="safety-line"><span>Sendeweg</span><b>${esc(({ ok: "Geprüft", broken: "Defekt", stale: "Prüfung fällig", unknown: "Noch nicht geprüft" })[state.systemHealth?.sendeWeg] || "Unbekannt")}</b></div>`;
-  $("source-list").innerHTML = (state.leadSources || []).map((source) => `<div class="source-item"><b>${esc(source.label || "Quelle")}</b><span>${source.active ? "aktiv" : "pausiert"} · zuletzt ${source.last_added || 0} Leads</span></div>`).join("") || `<p>Noch keine Quellen hinterlegt.</p>`;
+  const zgOptionen = (gewaehlt) => (state.zielgruppen || []).map((z) => `<option value="${z.id}" ${Number(gewaehlt) === z.id ? "selected" : ""}>${esc(z.name)}${z.aktiv ? "" : " (pausiert)"}</option>`).join("");
+  $("source-list").innerHTML = (state.leadSources || []).map((source) => `<div class="source-item"><b>${esc(source.label || "Quelle")}</b><span>${source.active ? "aktiv" : "pausiert"} · zuletzt ${source.last_added || 0} Leads · <select data-source-zg="${source.id}"><option value="">– keine Zielgruppe (wird nicht durchsucht) –</option>${zgOptionen(source.zielgruppe_id)}</select></span></div>`).join("") || `<p>Noch keine Quellen hinterlegt.</p>`;
+  $("source-list").querySelectorAll("[data-source-zg]").forEach((sel) => sel.addEventListener("change", async () => {
+    try { await post("/api/source", { action: "zielgruppe", id: Number(sel.dataset.sourceZg), zielgruppeId: sel.value ? Number(sel.value) : null }); toast("Quelle zugeordnet."); await load(true); }
+    catch (error) { toast(`Nicht möglich: ${error.message}`); }
+  }));
+  const zgSel = $("source-zg"); const zgWert = zgSel.value;
+  zgSel.innerHTML = `<option value="">Zielgruppe wählen…</option>${zgOptionen(zgWert)}`;
+  renderZielgruppen();
   renderTechnischeFaelle();
 }
 
@@ -1901,7 +1909,92 @@ $("acceptance-protection-toggle").onclick = async (event) => {
 };
 $("backup-now").onclick = async () => { await post("/api/backup"); toast("Sicherung erstellt."); };
 document.querySelectorAll("[data-level]").forEach((button) => button.addEventListener("click", async () => { await post("/api/automatik", { level: button.dataset.level }); await load(); toast("Automatik aktualisiert."); }));
-$("source-add").onclick = async () => { await post("/api/source", { action: "add", label: $("source-label").value, url: $("source-url").value }); $("source-label").value = ""; $("source-url").value = ""; await load(); toast("Quelle gespeichert. Nachschub wird geholt."); };
+$("source-add").onclick = async () => {
+  try {
+    await post("/api/source", { action: "add", label: $("source-label").value, url: $("source-url").value, zielgruppeId: Number($("source-zg").value) || null });
+    $("source-label").value = ""; $("source-url").value = ""; await load(); toast("Quelle gespeichert. Nachschub wird geholt.");
+  } catch (error) { toast(error.message); }
+};
+
+/**
+ * ZIELGRUPPEN (2026-09-25). Die Liste wird bei jedem Abruf neu gezeichnet; der Editor NICHT – sonst
+ * überschriebe das 20-Sekunden-Nachladen, was Sinan gerade tippt. Er wird nur beim Öffnen befüllt.
+ */
+let zgOffen = null; // null = zu, 0 = neue Zielgruppe, >0 = id
+const zgZahl = (n, text) => `<span><b>${n || 0}</b> ${text}</span>`;
+function renderZielgruppen() {
+  const liste = state.zielgruppen || [];
+  $("zg-liste").innerHTML = liste.map((z) => `<article class="zg-item ${z.aktiv ? "" : "aus"}">
+      <div class="zg-kopf"><b>${esc(z.name)}</b><span class="pill ${z.aktiv ? "live" : ""}">${z.aktiv ? "aktiv" : "pausiert"}</span><span class="pill">${z.erstnachricht ? "eigene Erstnachricht" : "Standard-Erstnachricht"}</span></div>
+      <div class="zg-knoepfe"><button class="switch-control ${z.aktiv ? "active" : ""}" role="switch" aria-checked="${z.aktiv ? "true" : "false"}" data-zg-aktiv="${z.id}"><span class="switch-track"><i></i></span><span><b>${z.aktiv ? "Aktiv" : "Pausiert"}</b><small>${z.aktiv ? "wird angeschrieben" : "keine Ansprache"}</small></span></button><button data-zg-edit="${z.id}">Bearbeiten</button></div>
+      <div class="zg-zahlen">${zgZahl(z.zahlen.passend, "passen")}${zgZahl(z.zahlen.neu, "warten auf Vernetzung")}${zgZahl(z.zahlen.erstnachricht, "warten auf Erstnachricht")}${zgZahl(z.zahlen.angeschrieben, "schon angeschrieben")}${z.zahlen.gesamt - z.zahlen.passend > 0 ? zgZahl(z.zahlen.gesamt - z.zahlen.passend, "passen nicht mehr") : ""}</div>
+      <div class="zg-quellen">Quellen: ${z.quellen.length ? z.quellen.map((q) => esc(q.label || "Quelle")).join(" · ") : "noch keine – unten bei „Lead-Quellen“ zuordnen"}</div>
+    </article>`).join("") || `<p class="muted">Noch keine Zielgruppe. Ohne aktive Zielgruppe sucht und schreibt der Bot niemanden an.</p>`;
+  const ohne = state.ohneZielgruppe || { gesamt: 0, wartend: 0 };
+  $("zg-ohne").textContent = ohne.gesamt ? `${ohne.gesamt} Kontakte passen zu keiner Zielgruppe und werden nicht automatisch angeschrieben${ohne.wartend ? ` (davon ${ohne.wartend} bereits vernetzt)` : ""}.` : "";
+  $("zg-liste").querySelectorAll("[data-zg-aktiv]").forEach((b) => b.addEventListener("click", async () => {
+    const z = liste.find((x) => x.id === Number(b.dataset.zgAktiv)); if (!z) return;
+    b.disabled = true;
+    try { await post("/api/zielgruppe", { action: "aktiv", id: z.id, aktiv: !z.aktiv }); toast(z.aktiv ? `„${z.name}“ pausiert – keine automatische Ansprache mehr.` : `„${z.name}“ aktiv – der Bot sucht und schreibt wieder.`); await load(true); }
+    catch (error) { toast(`Nicht möglich: ${error.message}`); b.disabled = false; }
+  }));
+  $("zg-liste").querySelectorAll("[data-zg-edit]").forEach((b) => b.addEventListener("click", () => oeffneZielgruppe(Number(b.dataset.zgEdit))));
+}
+function oeffneZielgruppe(id) {
+  const z = (state.zielgruppen || []).find((x) => x.id === id) || null;
+  zgOffen = z ? z.id : 0;
+  $("zg-name").value = z?.name || "";
+  $("zg-jahre").value = z?.max_berufsjahre ?? "";
+  $("zg-erkennung").value = z?.erkennung || "";
+  $("zg-ausschluss").value = z?.ausschluss || "";
+  $("zg-erst").value = z?.erstnachricht || state.standardErstnachricht || "";
+  $("zg-wunsch").value = "";
+  ["zg-vorschau-box", "zg-ki-box", "zg-probe-box"].forEach((k) => $(k).classList.add("hidden"));
+  $("zg-loeschen").classList.toggle("hidden", !z);
+  $("zg-probe").disabled = !z; $("zg-probe").title = z ? "Schreibt drei Beispiele für echte Kontakte dieser Zielgruppe – nichts wird gesendet" : "Erst speichern, dann gibt es Kontakte für eine Probe";
+  $("zg-note").textContent = "";
+  $("zg-editor").classList.remove("hidden");
+  $("zg-name").focus();
+  $("zg-editor").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+const zgFormular = () => ({ id: zgOffen || undefined, name: $("zg-name").value, max_berufsjahre: $("zg-jahre").value, erkennung: $("zg-erkennung").value, ausschluss: $("zg-ausschluss").value, erstnachricht: $("zg-erst").value });
+async function zgKnopf(button, laufText, fn) {
+  const alt = button.textContent; button.disabled = true; button.textContent = laufText; $("zg-note").textContent = "";
+  try { await fn(); } catch (error) { $("zg-note").textContent = error.message; }
+  finally { button.disabled = false; button.textContent = alt; }
+}
+$("zg-neu").onclick = () => oeffneZielgruppe(0);
+$("zg-abbrechen").onclick = () => { zgOffen = null; $("zg-editor").classList.add("hidden"); };
+$("zg-standard").onclick = () => { $("zg-erst").value = state.standardErstnachricht || ""; $("zg-note").textContent = "Standard eingesetzt – mit „Speichern“ übernehmen."; };
+$("zg-vorschau").onclick = () => zgKnopf($("zg-vorschau"), "prüfe…", async () => {
+  const { vorschau: v } = await post("/api/zielgruppe", { action: "vorschau", ...zgFormular() });
+  const box = $("zg-vorschau-box"); box.classList.remove("hidden");
+  box.innerHTML = `<b>${v.passend} von ${v.geprueft}</b> ${zgOffen ? "Kontakten dieser Zielgruppe" : "noch nicht zugeordneten Kontakten"} passen${v.wartendAufErstnachricht ? `, davon ${v.wartendAufErstnachricht} vernetzt und bereit für die Erstnachricht` : ""}.`
+    + (v.beispieleRaus.length ? `<p class="muted">Fallen heraus, zum Beispiel:</p><ul>${v.beispieleRaus.map((r) => `<li>${esc(r.headline)} <span class="muted">(${esc(r.grund)})</span></li>`).join("")}</ul>` : "")
+    + (v.beispieleDrin.length ? `<p class="muted">Bleiben drin, zum Beispiel:</p><ul>${v.beispieleDrin.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>` : "");
+});
+$("zg-ki").onclick = () => zgKnopf($("zg-ki"), "KI denkt nach…", async () => {
+  const r = await post("/api/zielgruppe", { action: "ki", text: $("zg-erst").value, wunsch: $("zg-wunsch").value, name: $("zg-name").value });
+  const box = $("zg-ki-box"); box.classList.remove("hidden");
+  box.innerHTML = `<b>Vorschlag der KI</b> <span class="muted">(noch nicht übernommen)</span>${r.warum ? `<p>${esc(r.warum)}</p>` : ""}<pre>${esc(r.text)}</pre><div class="button-row"><button id="zg-ki-uebernehmen" class="primary">Übernehmen</button><button id="zg-ki-weg">Verwerfen</button></div>`;
+  $("zg-ki-uebernehmen").onclick = () => { $("zg-erst").value = r.text; box.classList.add("hidden"); $("zg-note").textContent = "Übernommen – mit „Probe schreiben“ testen, dann „Speichern“."; };
+  $("zg-ki-weg").onclick = () => box.classList.add("hidden");
+});
+$("zg-probe").onclick = () => zgKnopf($("zg-probe"), "schreibt Beispiele…", async () => {
+  const { beispiele } = await post("/api/zielgruppe", { action: "probe", id: zgOffen, text: $("zg-erst").value });
+  const box = $("zg-probe-box"); box.classList.remove("hidden");
+  box.innerHTML = `<b>Probe mit dem Text oben</b> <span class="muted">(nichts gesendet, nichts gespeichert)</span>` + beispiele.map((b) => `<div class="zg-probe"><span class="muted">${esc(b.name)} · ${esc(b.headline)}</span><p>${esc(b.text)}</p></div>`).join("");
+});
+$("zg-speichern").onclick = () => zgKnopf($("zg-speichern"), "speichert…", async () => {
+  await post("/api/zielgruppe", { action: "save", ...zgFormular(), aktiv: zgOffen ? !!(state.zielgruppen || []).find((z) => z.id === zgOffen)?.aktiv : true });
+  zgOffen = null; $("zg-editor").classList.add("hidden"); toast("Zielgruppe gespeichert. Gilt ab sofort für jede automatische Ansprache."); await load(true);
+});
+$("zg-loeschen").onclick = () => zgKnopf($("zg-loeschen"), "löscht…", async () => {
+  const z = (state.zielgruppen || []).find((x) => x.id === zgOffen);
+  if (!z || !confirm(`Zielgruppe „${z.name}“ löschen? Ihre Quellen werden nicht mehr durchsucht, ihre Kontakte nicht mehr automatisch angeschrieben. Kontakte und Verlauf bleiben erhalten.`)) return;
+  await post("/api/zielgruppe", { action: "delete", id: z.id });
+  zgOffen = null; $("zg-editor").classList.add("hidden"); toast("Zielgruppe gelöscht."); await load(true);
+});
 
 // Alle 20s aktualisieren. Ist ein Prüfbereich offen, bleibt NUR dieser stehen – der Rest der
 // Seite (Arbeitskorb, Kampagnen, Status) zieht trotzdem nach.

@@ -32,7 +32,7 @@ export type Wahl = { slot: string; arm: string; anweisung: string };
  */
 export const ARME: Record<string, Arm[]> = {
   first: [
-    { key: "erfahrung", titel: "Eigene Erfahrung + Gedanke", anweisung: "Nutze den Standard-Aufbau: eigene Erfahrung mit einem nützlichen Gedanken, dann die leichte Frage." },
+    { key: "erfahrung", titel: "Eigene Erfahrung + Gedanke", anweisung: "Nutze den Standard-Aufbau: eigene Erfahrung als kurze Tatsache (ohne Lehre oder Rat daraus), dann die leichte Frage." },
     { key: "kurz_direkt", titel: "Kurz und direkt", anweisung: "Höchstens zwei Sätze. Kein Rückblick auf dich selbst, sondern nach der Anrede direkt eine konkrete, leicht zu beantwortende Frage zu ihrem Weg nach der Ausbildung bzw. im Job." },
     { key: "beobachtung", titel: "Beobachtung zum Arbeitgeber", anweisung: "Starte mit einer konkreten Beobachtung zu ihrem Arbeitgeber oder Beruf (nur was die Headline hergibt, nichts erfinden), dann die Frage dazu. Deine eigene Geschichte höchstens als halber Satz." },
   ],

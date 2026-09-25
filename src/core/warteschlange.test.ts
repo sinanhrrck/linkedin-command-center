@@ -7,6 +7,7 @@ import test from "node:test";
 const dir = mkdtempSync(join(tmpdir(), "nextlead-warteschlange-"));
 process.env.DB_PATH = join(dir, "warteschlange.sqlite");
 const { db, setState } = await import("../db/index.js");
+(await import("./testZielgruppe.js")).alleKontakteInZielgruppe(db);
 const { warteschlange } = await import("../modules/warteschlange.js");
 const { recordJobFailure } = await import("../core/jobReliability.js");
 

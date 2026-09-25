@@ -1,3 +1,4 @@
+import { zgBedingung } from "../core/zielgruppenRegel.js";
 import { db, getState, setState } from "../db/index.js";
 import { approveDraft, getDraft } from "./drafts.js";
 import { pruefeAusgehend } from "../core/ausgehendCheck.js";
@@ -122,6 +123,7 @@ export function autoFreigabe(now = new Date()): number {
       WHERE d.status='pending' AND COALESCE(d.phase,'message')='message'
         AND d.kind IN (${arten.map(() => "?").join(",")})
         AND d.contact_id IS NOT NULL AND COALESCE(c.do_not_contact,0)=0
+        AND ${zgBedingung("c")}
         AND d.created_at <= ?
       ORDER BY d.created_at LIMIT 50`,
   ).all(...arten, karenz) as { id: number; kind: "first" | "followup"; draft: string; sequence_stage: number | null; full_name: string | null }[];

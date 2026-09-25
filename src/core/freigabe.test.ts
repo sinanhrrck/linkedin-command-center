@@ -7,6 +7,7 @@ import test from "node:test";
 const dir = mkdtempSync(join(tmpdir(), "nextlead-freigabe-"));
 process.env.DB_PATH = join(dir, "freigabe.sqlite");
 const { db } = await import("../db/index.js");
+(await import("./testZielgruppe.js")).alleKontakteInZielgruppe(db);
 const { lasseAlteNachfassungenVerfallen, approveMany, autoFreigabe, speichereAutoFreigabe, vertrauen } = await import("../modules/freigabe.js");
 const { pendingDrafts } = await import("../modules/drafts.js");
 const { messagedAwaitingFollowup } = await import("../modules/crm.js");

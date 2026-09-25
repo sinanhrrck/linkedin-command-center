@@ -202,6 +202,49 @@ Cockpit-Panel „Bericht“ in der Auswertung (eigener Ladepfad `ladeBericht` mi
 Befehle /tag /woche /vorwoche; die KI-Trefferquoten-Bilanz heißt jetzt /bilanz bzw. /kibilanz.
 Geschäftszeit seit 2026-09-22: 7–22 Uhr; alle Morgen-Crons hängen an `START_STUNDE` in index.ts.
 
+## UPDATE 2026-09-25 — ZIELGRUPPEN steuern Sammeln UND Ansprache
+Auslöser: automatische Erstnachrichten an Filialleiter, Geschäftsstellenleiter und Bankkaufleute mit
+20 Berufsjahren („wie ging's nach der Ausbildung weiter?“). Vor der Erstnachricht gab es keinerlei
+Zielgruppen-Schranke; der alte „Fokus“ steuerte nur, welche Quellen durchsucht werden.
+Sinans Vorgabe: Zielgruppe bestimmen → daraus Leads sammeln → nur sie anschreiben; Ändern/Pausieren
+stoppt den Versand an sie; mehrere gleichzeitig möglich.
+- **Regel an EINER Stelle:** `core/zielgruppenRegel.ts` (rein, Wörterlisten statt Regex: Erkennung
+  = mind. ein Wort, Ausschluss = keins, optional max. Jahre im aktuellen Job aus Profil-Fakten
+  `seit`). `db/index.ts` registriert sie als SQLite-Funktion `zg_passt`; `zgBedingung(alias)` ist der
+  SQL-Baustein für JEDE Auswahl automatischer Ansprache: `nextNewContacts`, Acceptance-Nachholung,
+  `messagedAwaitingFollowup`, `reaktivierbareKontakte`, `autoFreigabe`, `sendApprovedDrafts` (nur
+  auto-freigegebene), `leadBewertung`, Warteschlangen-Zahlen. Einzelprüfung vor
+  `deliverFirstMessage`: `zielgruppenPruefung(contactId)` mit Klartext-Grund im Log. Die UDF darf
+  KEINE Abfragen machen (better-sqlite3 verbietet das während einer laufenden Abfrage) – alle Werte
+  kommen als Argumente. NEUE AUSWAHL-ABFRAGEN FÜR AUTOMATISCHE ANSPRACHE BRAUCHEN `zgBedingung`.
+- **Bewusst NICHT gesperrt:** Antworten in laufenden Gesprächen (Agent, `message`-Entwürfe), alles was
+  Sinan selbst freigibt/sendet (Telegram „Senden“, `freigabe_quelle='mensch'`), „Wiederbeleben“-Knopf.
+- **Zuordnung** `contacts.zielgruppe_id`: aus der Quelle beim ersten Fund (eingefroren wie
+  `source_id`), sonst `ordneZielgruppenZu()` über die Regel (Start + alle 10 Min + Cockpit-Abruf).
+  Wer nirgends passt, bleibt NULL = nie automatisch angeschrieben. `lead_sources.zielgruppe_id`:
+  durchsucht werden NUR Quellen aktiver Zielgruppen (ersetzt `getFocus` in leadFeed.ts).
+  Erststart-Migration legt „Azubis“ (aktiv) und „Studenten“ (aktiv nur bei Fokus student/beides) an.
+  ACHTUNG: Missions-Quellen (`createMission`, Kampagnen-Bereich, derzeit aus) bekommen keine
+  Zielgruppe → werden nicht durchsucht, bis man sie im Cockpit zuordnet.
+- **Erstnachricht je Zielgruppe** (`zielgruppen.erstnachricht`, NULL = `STANDARD_ERSTNACHRICHT`):
+  Aufbau + Beispiele, im Cockpit editierbar, „Mit KI verbessern“ (speichert nie selbst) und „Probe
+  schreiben“ (3 echte Kontakte, nichts gesendet/gespeichert; `firstMessage(..., aufbauOverride)`).
+  Standard jetzt OHNE „nützlichen Gedanken“ (las sich wie Pitch-Vorbereitung); feste Regel + schlechtes
+  Beispiel gegen Lebensweisheiten im Code. Eigene Anleitung = kein Stil-Test (`waehleArm` entfällt).
+- **Cockpit:** Einstellungen → „Zielgruppen“ (Liste mit Schalter, Zahlen passend/wartend/angeschrieben,
+  Editor mit „Wirkung prüfen“-Vorschau), Lead-Quellen mit Zielgruppen-Auswahl. Blockade-Hinweis, wenn
+  keine Zielgruppe aktiv ist. API `POST /api/zielgruppe` (save|aktiv|delete|vorschau|ki|probe),
+  `/api/source` action zielgruppe|toggle.
+- **TEST-FALLE (gefunden am selben Tag):** `empfaengerName.test.ts` lief OHNE eigene `DB_PATH` und
+  schrieb bei jedem Testlauf `verlauf_belege="00000"` in die ECHTE DB → Cockpit-Warnung „0 von 5
+  Versänden im Verlauf“ ohne einen einzigen Versand. JEDER Test, der Module mit DB importiert, setzt
+  `DB_PATH` auf ein Temp-Verzeichnis VOR dem ersten Import. Tests im Container nur mit eigenem
+  `/data`-Mount laufen lassen (`docker compose run -v /tmp/leer:/data …`), nie per `exec` im
+  laufenden Container. `core/testZielgruppe.ts` stellt in Tests, die etwas anderes prüfen, alle
+  Kontakte in eine offene Zielgruppe.
+- Tests: `src/core/zielgruppen.test.ts` (6 Fälle). Gesamt 161 grün (+ updateCheck, der im
+  Server-Image mangels `desktop/` nicht laufen kann), `tsc --noEmit` sauber.
+
 ## UPDATE 2026-09-23 — Vertrieblicher (Hormozi), Warteschlange, Selbstlernen
 Sinans Vorgabe: „Nachrichten besser und vertrieblicher, im Hintergrund muss mehr gehen.“
 Fünf Phasen, alle live. Leitplanken unverändert: Versand nur über den Governor, Caps und

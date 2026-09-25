@@ -8,7 +8,11 @@ import { getAnalytics } from "../modules/analytics.js";
 import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, chooseDraftApproach, deleteDraft, retryBlockierte, pitchZuNachricht } from "../modules/drafts.js";
 import type { RejectionReason } from "../modules/draftDirections.js";
 import { getPost, approvePost, discardPost, generatePostDraft } from "../modules/content.js";
-import { addSource, deleteSource } from "../modules/leadFeed.js";
+import { addSource, deleteSource, setSourceActive } from "../modules/leadFeed.js";
+import {
+  alleZielgruppen, speichereZielgruppe, setzeZielgruppeAktiv, loescheZielgruppe, setzeQuellenZielgruppe,
+  vorschau as zielgruppenVorschau, kiErstnachrichtVerbessern, probeErstnachrichten, zielgruppe as holeZielgruppe,
+} from "../modules/zielgruppen.js";
 import { deleteContact } from "../modules/crm.js";
 import {
   createCampaign, updateCampaign, deleteCampaign, setCampaignActive, previewCampaign, recordOutcome, OUTCOME_STAGES, type OutcomeStage,
@@ -790,19 +794,34 @@ const server = createServer((req, res) => {
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       try {
-        const { action, url: srcUrl, label, zielgruppe, campaignId, id } = JSON.parse(body || "{}");
+        const { action, url: srcUrl, label, zielgruppe, zielgruppeId, campaignId, id, active } = JSON.parse(body || "{}");
         if (action === "add") {
           if (typeof srcUrl !== "string" || !/linkedin\.com/i.test(srcUrl)) {
             res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "Bitte eine LinkedIn-Such-Adresse einfügen (beginnt mit linkedin.com)." }));
             return;
           }
+          // Seit 2026-09-25 gehört jede Quelle zu einer Zielgruppe – ohne wird sie nie durchsucht.
+          const gruppen = alleZielgruppen();
+          const zgId = Number(zielgruppeId) || (gruppen.length === 1 ? gruppen[0].id : 0);
+          if (!zgId || !holeZielgruppe(zgId)) {
+            res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "Bitte wählen, zu welcher Zielgruppe die Quelle gehört." }));
+            return;
+          }
           const zg = ["azubi", "student"].includes(zielgruppe) ? zielgruppe : undefined;
           const campaign = Number.isInteger(Number(campaignId)) && Number(campaignId) > 0 ? Number(campaignId) : undefined;
           addSource(srcUrl.trim(), (typeof label === "string" && label.trim()) || undefined, undefined, zg, campaign);
+          const neu = db.prepare("SELECT id FROM lead_sources WHERE search_url=?").get(srcUrl.trim()) as { id: number } | undefined;
+          if (neu) setzeQuellenZielgruppe(neu.id, zgId);
           setState("feed_now", "1"); // Bot holt beim nächsten Tick Nachschub aus der neuen Quelle
           res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, running: engineAlive() }));
         } else if (action === "delete") {
           deleteSource(Number(id));
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+        } else if (action === "zielgruppe") {
+          setzeQuellenZielgruppe(Number(id), zielgruppeId ? Number(zielgruppeId) : null);
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+        } else if (action === "toggle") {
+          setSourceActive(Number(id), !!active);
           res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
         } else if (action === "feednow") {
           setState("feed_now", "1");
@@ -1155,6 +1174,29 @@ const server = createServer((req, res) => {
         res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...ergebnis }));
       } catch (e) {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+  // ZIELGRUPPEN (2026-09-25): anlegen/ändern/pausieren/löschen, Vorschau, KI-Hilfe für die
+  // Erstnachricht. Fehler gehen als 400 mit `reason` zurück (liest der Cockpit-`post()`).
+  if (url.pathname === "/api/zielgruppe" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      try {
+        const e = JSON.parse(body || "{}");
+        let ergebnis: Record<string, unknown> = {};
+        if (e.action === "save") ergebnis = { zielgruppe: speichereZielgruppe(e) };
+        else if (e.action === "aktiv") { setzeZielgruppeAktiv(Number(e.id), !!e.aktiv); if (e.aktiv) setState("feed_now", "1"); }
+        else if (e.action === "delete") loescheZielgruppe(Number(e.id));
+        else if (e.action === "vorschau") ergebnis = { vorschau: zielgruppenVorschau(e) };
+        else if (e.action === "ki") ergebnis = await kiErstnachrichtVerbessern(String(e.text || ""), String(e.wunsch || ""), String(e.name || ""));
+        else if (e.action === "probe") ergebnis = { beispiele: await probeErstnachrichten(Number(e.id), String(e.text || "")) };
+        else throw new Error("Unbekannte Aktion.");
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...ergebnis }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((err as Error)?.message || err) }));
       }
     });
     return;

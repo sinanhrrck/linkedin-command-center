@@ -222,6 +222,31 @@
         <h2 class="settings-group"><span>Betrieb</span><small>Läuft der Bot, und wie viel entscheidet er selbst?</small></h2>
         <section class="setting-card"><span class="eyebrow">Engine</span><h3 id="engine-title">Lokale Engine</h3><p id="engine-copy"></p><div class="button-row"><button id="engine-toggle" class="primary"></button><button id="backup-now">Jetzt sichern</button></div></section>
         <section class="setting-card"><span class="eyebrow">Automatik</span><h3>Wer entscheidet?</h3><div id="automation-levels" class="segmented"><button data-level="vorschlaege">Ich prüfe alles</button><button data-level="halb">Erstkontakt automatisch</button><button data-level="agent_test">Gespräche testen</button><button data-level="agent_live">Gespräche automatisch</button></div><p id="automation-copy"></p></section>
+        <h2 class="settings-group"><span>Zielgruppen</span><small>Wen der Bot sucht und automatisch anschreibt.</small></h2>
+        <section id="zg-card" class="setting-card wide-card zg-card">
+          <div class="section-head"><div><span class="eyebrow">Zielgruppen</span><h3>Nur wer hier aktiv ist, wird angeschrieben</h3></div><button id="zg-neu">+ Neue Zielgruppe</button></div>
+          <p>Aus den Quellen einer aktiven Zielgruppe sammelt der Bot Leads. Vernetzen, Erstnachricht und Nachfassen gehen nur an Kontakte, deren Profil zur Zielgruppe passt. Pausierst oder änderst du eine Zielgruppe, stoppt die automatische Ansprache sofort. Wer schon mit dir schreibt, bekommt weiter Antworten.</p>
+          <div id="zg-liste" class="zg-liste"></div>
+          <p id="zg-ohne" class="muted"></p>
+          <div id="zg-editor" class="zg-editor hidden">
+            <div class="zg-grid">
+              <label class="report-field"><span>Name</span><input id="zg-name" maxlength="80" placeholder="z. B. Azubis Bank" /></label>
+              <label class="report-field"><span>Höchstens so viele Jahre im aktuellen Job <i>(leer = egal, zählt nur, wenn das Profil es verrät)</i></span><input id="zg-jahre" type="number" min="1" max="50" placeholder="5" /></label>
+              <label class="report-field wide"><span>Erkennungswörter <i>(mindestens eins muss im Profil stehen, mit Komma trennen)</i></span><textarea id="zg-erkennung" rows="2" placeholder="Ausbildung, Azubi, Dual, Trainee"></textarea></label>
+              <label class="report-field wide"><span>Ausschlusswörter <i>(steht eins davon im Profil, wird die Person nie angeschrieben)</i></span><textarea id="zg-ausschluss" rows="2" placeholder="Leiter, Manager, Senior, Direktor"></textarea></label>
+            </div>
+            <div class="button-row"><button id="zg-vorschau">Wirkung prüfen</button></div>
+            <div id="zg-vorschau-box" class="zg-box hidden"></div>
+            <h4 class="zg-sub">Erstnachricht für diese Zielgruppe</h4>
+            <p class="muted">Aufbau und Beispiele, nach denen die KI jede Erstnachricht schreibt. Diese Regeln gelten immer zusätzlich: Du-Form, keine Emojis, höchstens eine Frage, kein Pitch, kein Angebot, keine Ratschläge.</p>
+            <textarea id="zg-erst" class="zg-erst" rows="12"></textarea>
+            <div class="zg-ki-row"><input id="zg-wunsch" maxlength="500" placeholder="Was soll besser werden? z. B. „noch kürzer“, „mehr Bezug zur Bank“ (optional)" /><button id="zg-ki">✨ Mit KI verbessern</button><button id="zg-probe">Probe schreiben</button><button id="zg-standard">Standard</button></div>
+            <div id="zg-ki-box" class="zg-box hidden"></div>
+            <div id="zg-probe-box" class="zg-box hidden"></div>
+            <div class="zg-actions"><button id="zg-loeschen" class="danger-ghost">Zielgruppe löschen</button><span></span><button id="zg-abbrechen">Abbrechen</button><button id="zg-speichern" class="primary">Speichern</button></div>
+            <p id="zg-note" class="form-note" role="status"></p>
+          </div>
+        </section>
         <h2 class="settings-group"><span>Nachrichten & Angebot</span><small>Was der Bot anbietet, wie er nachfasst und was er selbst freigeben darf.</small></h2>
         <section class="setting-card wide-card offer-card" id="offer-card">
           <div class="section-head"><div><span class="eyebrow">Dein Angebot</span><h3>Wozu die Leute leicht Ja sagen</h3></div><div class="head-side"><button id="offer-ki" title="Die KI schlägt aus deinem Profil drei neue kostenlose Angebote vor (ein Claude-Aufruf)">✨ KI-Vorschläge holen</button><button id="offer-save" class="primary">Angebot speichern</button></div></div>
@@ -249,7 +274,7 @@
         </section>
         <h2 class="settings-group"><span>Sicherheit & Daten</span><small>Grenzen, die das Konto schützen, und woher neue Kontakte kommen.</small></h2>
         <section class="setting-card"><span class="eyebrow">Schutz</span><h3>Globale Grenzen</h3><div id="safety-summary"></div></section>
-        <section class="setting-card"><span class="eyebrow">Lead-Quellen</span><h3>Automatischer Nachschub</h3><div class="source-form"><input id="source-label" placeholder="Name der Quelle"/><input id="source-url" placeholder="LinkedIn-Such-URL"/><button id="source-add">Quelle hinzufügen</button></div><div id="source-list"></div></section>
+        <section class="setting-card"><span class="eyebrow">Lead-Quellen</span><h3>Automatischer Nachschub</h3><div class="source-form"><input id="source-label" placeholder="Name der Quelle"/><input id="source-url" placeholder="LinkedIn-Such-URL"/><select id="source-zg" aria-label="Zielgruppe der Quelle"></select><button id="source-add">Quelle hinzufügen</button></div><div id="source-list"></div></section>
         <section id="faelle-card" class="setting-card wide-card"><div class="section-head"><div><span class="eyebrow">Technische Fälle</span><h3 id="faelle-title">Nicht zugestellt</h3></div><button id="faelle-retry" class="primary">Alle erneut prüfen</button></div><p>Hier hat eine Sicherung eingegriffen und NICHT gesendet. „Alle erneut prüfen" schickt behebbare Fälle zurück in die Freigabe und verwirft, was hinfällig ist (schon angeschrieben, schon beantwortet).</p><div id="faelle-liste"></div></section>
       </div>
     </section>

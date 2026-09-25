@@ -7,6 +7,7 @@ import test from "node:test";
 const dir = mkdtempSync(join(tmpdir(), "nextlead-low-read-"));
 process.env.DB_PATH = join(dir, "low-read.sqlite");
 const { db } = await import("../db/index.js");
+(await import("./testZielgruppe.js")).alleKontakteInZielgruppe(db);
 const { shouldOpenConversation, rememberConversationPreview, deferProfile, readSavingsToday, runReadJobWhenDue } = await import("../modules/lowRead.js");
 const { nextNewContacts } = await import("../modules/crm.js");
 

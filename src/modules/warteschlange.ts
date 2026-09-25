@@ -1,3 +1,4 @@
+import { zgBedingung } from "../core/zielgruppenRegel.js";
 import { db, getState, getMode } from "../db/index.js";
 import { governor, type ActionType } from "../core/safetyGovernor.js";
 import { leseStand } from "../core/leseBudget.js";
@@ -171,7 +172,8 @@ export function warteschlange(now = new Date()): Kanal[] {
       WHERE c.status='accepted' AND COALESCE(c.aus_netzwerk,0)=0 AND c.messaged_at IS NULL
         AND COALESCE(c.do_not_contact,0)=0
         AND NOT EXISTS (SELECT 1 FROM drafts d WHERE d.thread_url=c.profile_url AND d.kind='first'
-                         AND d.status IN ('pending','approved','sent'))`,
+                         AND d.status IN ('pending','approved','sent'))
+        AND ${zgBedingung("c")}`,
   ).get() as { n: number }).n;
   // Im Halb-Automatik-Modus gehen Erstnachrichten ohne Freigabe raus → zählen als „bereit".
   const autoErst = getMode() === "manual" ? 0 : inVorbereitung;
@@ -200,7 +202,8 @@ export function warteschlange(now = new Date()): Kanal[] {
   const offenBedingung = `status='new' AND COALESCE(do_not_contact,0)=0
       AND COALESCE(automation_status,'active')='active'
       AND (snoozed_until IS NULL OR snoozed_until<=datetime('now'))
-      AND (retry_after IS NULL OR retry_after<=datetime('now'))`;
+      AND (retry_after IS NULL OR retry_after<=datetime('now'))
+      AND ${zgBedingung("contacts")}`;
   const anfragenOffen = (db.prepare(`SELECT COUNT(*) n FROM contacts WHERE ${offenBedingung}`).get() as { n: number }).n;
   const anfragenListe = db.prepare(
     `SELECT full_name name, created_at seit FROM contacts WHERE ${offenBedingung}

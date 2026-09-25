@@ -10,6 +10,7 @@ import { angebotsHinweis, beweisBlock, type Route } from "./angebot.js";
 import { ZWECK_ANWEISUNG, zweckFuer } from "./playbook.js";
 import { variantenBlock, type Wahl } from "./varianten.js";
 import { faktenBlock, profilFakten } from "./profilFakten.js";
+import { STANDARD_ERSTNACHRICHT, erstnachrichtFuer, zielgruppenName } from "./zielgruppen.js";
 
 /**
  * Router für den Autopilot-Text: bezahltes Claude (Standard im Voll-Modus, Qualität +
@@ -104,19 +105,20 @@ Nimm EINEN konkreten Bezug zur Person (z.B. ihre Rolle/Ausbildung). Gib NUR die 
  * Inhalt hatte keinerlei Wirkung auf den Text. Die Fakten steuern jetzt die ANKNÜPFUNG –
  * verkauft oder erwähnt wird in Nachricht 1 weiterhin nichts.
  */
-export async function firstMessage(c: Contact, variation?: TextVariation, goal?: ConversationGoal | null, kampagnenFakten?: string, korrektur?: string, variante?: Wahl | null): Promise<string> {
+export async function firstMessage(c: Contact, variation?: TextVariation, goal?: ConversationGoal | null, kampagnenFakten?: string, korrektur?: string, variante?: Wahl | null, aufbauOverride?: string): Promise<string> {
+  // Aufbau + Beispiele kommen seit 2026-09-25 aus der Zielgruppe (im Cockpit bearbeitbar), sonst
+  // der Standard ohne „nützlichen Gedanken“. `aufbauOverride` = ungespeicherte Probe aus dem Cockpit.
+  const eigene = aufbauOverride ? null : erstnachrichtFuer(c.id);
+  const gruppe = zielgruppenName(c.id);
   const aufbau = variation
     ? `AUFBAU FÜR DIESE NEUGENERIERUNG:\nFolge der unten genannten neuen Gesprächsrichtung. Du darfst die übliche Reihenfolge Profilbezug, eigene Geschichte, offene Frage ausdrücklich verlassen. Nutze nur Bausteine, die zu dieser Richtung passen.`
-    : `AUFBAU (Nutze immer diese 3 Bausteine, genau in dieser Reihenfolge):
-1. Persönliche Anknüpfung (1 Zeile). Beziehe dich auf etwas Konkretes aus dem Profil: Bank, Standort, Ausbildungsjahr, ein Post. Kein "Ich sehe du bist im Vertrieb tätig". Etwas, das nur auf diese Person zutrifft.
-2. Eigener Bezug MIT Mehrwert (1 bis 2 Zeilen). Warum du schreibst, und EIN echter Gedanke, der für ihre Lage nützlich ist: etwas, das viele in genau dieser Situation unterschätzen oder zu spät merken (zum Beispiel, dass nach der Ausbildung die Weichen schneller gestellt werden, als man denkt). Aus eigener Erfahrung erzählt, nicht belehrend. Beispiel: "Ich hab damals auch in der Bank angefangen und hab erst spät gemerkt, wie schnell nach der Ausbildung alles festgefahren ist."
-3. Leichte Frage (1 Zeile). Stelle exakt EINE ehrliche Frage zu ihrer aktuellen Situation, die man in fünf Sekunden beantworten kann. Keine Suggestivfragen. Keine Verkaufsfragen. Beispiele: "Wie erlebst du das gerade?", "Ist das so, wie du dir das vorgestellt hast?". Die Nachricht ENDET mit dieser Frage – KEINE Absichtserklärung, KEIN "ich will nichts verkaufen", KEIN "das ist kein Pitch" hinterher.`;
-  const prompt = `Du bist Sinan. Du schreibst LinkedIn-Erstnachrichten an Auszubildende oder Berufseinsteiger im Bankwesen. Dein Ziel ist NIEMALS der Verkauf oder Pitch in der ersten Nachricht, sondern das Öffnen eines echten, lockeren Gesprächs auf Augenhöhe. Du bist neugierig, ehrlich und kommst sofort auf den Punkt. Du warst selbst mal Azubi in einer Bank und holst die Leute genau über diese gemeinsame Lebenslage ab.
+    : (aufbauOverride?.trim() || eigene?.text || STANDARD_ERSTNACHRICHT);
+  const prompt = `Du bist Sinan. Du schreibst LinkedIn-Erstnachrichten an ${gruppe ? `Menschen aus der Zielgruppe „${gruppe}“` : "Auszubildende oder Berufseinsteiger im Bankwesen"}. Dein Ziel ist NIEMALS der Verkauf oder Pitch in der ersten Nachricht, sondern das Öffnen eines echten, lockeren Gesprächs auf Augenhöhe. Du bist neugierig, ehrlich und kommst sofort auf den Punkt. Du warst selbst mal Azubi in einer Bank und holst die Leute genau über diese gemeinsame Lebenslage ab.
 
 ${aufbau}
 ${variationBlock(variation)}
 
-HARTE STIL- UND FORMATREGELN (Zwingend einhalten):
+HARTE STIL- UND FORMATREGELN (Zwingend einhalten, gelten auch gegen jede Anleitung oben):
 - IMMER Duzen, niemals siezen.
 - KEINE Emojis. Niemals.
 - KEINE Gedankenstriche (weder - noch als langer Strich) als Satztrenner. Nutze nur Punkt, Komma oder Fragezeichen.
@@ -127,18 +129,15 @@ HARTE STIL- UND FORMATREGELN (Zwingend einhalten):
 - KEINE Aufzählungen in der Nachricht.
 - KEINE Floskeln wie "Ich hoffe es geht dir gut". Starte direkt mit "Hey [Name]".
 - KEIN Pitch, keine Firma nennen, kein Produkt, keine Verdienst-Zahlen, keine Verkaufsbegriffe ("spannende Möglichkeit").
-
-GUTE BEISPIELE (Genau dein Stil):
-Beispiel 1: Hey Marvin, ich hab gesehen du bist im 2. Lehrjahr bei der Sparkasse Köln. Ich hab damals auch als Azubi in der Bank angefangen. Wie erlebst du den Alltag da gerade?
-Beispiel 2: Hey Lisa, cool dass du deine Ausbildung bei der Volksbank machst. Ich war früher selbst bei der Bank. Was ist bisher das Überraschendste für dich in der Praxis?
-Beispiel 3 (Ausbildung schon fertig, Headline "Bankkaufmann bei Sparkasse Köln"): Hey Jonas, ich hab gesehen du bist bei der Sparkasse Köln als Bankkaufmann. Ich hab damals auch in der Bank angefangen. Wie ging's für dich nach der Ausbildung weiter?
-Beispiel 1 und 2 passen NUR, wenn die Person laut AUSBILDUNGSSTAND wirklich in der Ausbildung ist.
+- KEINE Ratschläge oder Lebensweisheiten (etwa über Weichen, die richtige Richtung oder was man nach der Ausbildung unterschätzt). Das wirkt wie die Vorbereitung eines Pitches.
+- Beispiele, die eine laufende Ausbildung voraussetzen, passen NUR, wenn die Person laut AUSBILDUNGSSTAND wirklich in der Ausbildung ist.
 
 SCHLECHTE BEISPIELE (SO NICHT):
 Falsch: "Ich sehe du bist in der Finanzbranche, hast du schon mal über Selbstständigkeit nachgedacht?" (Riecht nach Pitch, zu aufdringlich.)
 Falsch: "Bei uns verdienst du das 3-fache deines aktuellen Gehalts." (Verkauf in Nachricht 1, verbrannt.)
 Falsch: "Ich hätte da eine spannende Möglichkeit für dich, die perfekt zu deinem Profil passt." (Klassische Bot-Nachricht, Marketing-Sprache.)
 Falsch: "Hallo, ich hoffe es geht dir gut. Ich würde mich freuen, wenn wir uns vernetzen könnten." (Floskel, kein Anknüpfungspunkt, langweilig.)
+Falsch: "Ich hab gemerkt, dass nach der Ausbildung die Weichen schneller gestellt werden, als man denkt." (Lebensweisheit, riecht nach kommendem Pitch.)
 
 INPUT für diese Person (nutze nur, was da ist; erfinde nichts dazu):
 Name: ${c.full_name ?? "Unbekannt"}

@@ -7,6 +7,7 @@ import test from "node:test";
 const dir = mkdtempSync(join(tmpdir(), "nextlead-leadbew-"));
 process.env.DB_PATH = join(dir, "leadbew.sqlite");
 const { db } = await import("../db/index.js");
+(await import("./testZielgruppe.js")).alleKontakteInZielgruppe(db);
 const { kiLeadBewertung, leadBewertungStand } = await import("../modules/leadBewertung.js");
 const { nextNewContacts } = await import("../modules/crm.js");
 const { setTextGeneratorForTests } = await import("./textLlm.js");

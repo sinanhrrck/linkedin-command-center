@@ -5,6 +5,7 @@ import { db, getState, getMode, getFocus, getAgentMode } from "../db/index.js";
 import { governor } from "../core/safetyGovernor.js";
 import { leseStand } from "../core/leseBudget.js";
 import { verlaufsBelegStand } from "./outreach.js";
+import { zielgruppenUebersicht, ohneZielgruppe, STANDARD_ERSTNACHRICHT } from "./zielgruppen.js";
 import { config } from "../config.js";
 import { pendingDrafts, approvedCount } from "./drafts.js";
 import { pendingPosts } from "./content.js";
@@ -211,7 +212,7 @@ export function getDashboardData() {
 
   const leadSources = db
     .prepare(
-      `SELECT s.id, s.label, s.search_url, s.cursor_page, s.active, s.last_added, s.last_run, s.zielgruppe,
+      `SELECT s.id, s.label, s.search_url, s.cursor_page, s.active, s.last_added, s.last_run, s.zielgruppe, s.zielgruppe_id,
               s.campaign_id, c.name AS campaign_name
          FROM lead_sources s LEFT JOIN campaigns c ON c.id=s.campaign_id
         ORDER BY s.created_at`,
@@ -426,6 +427,10 @@ export function getDashboardData() {
     leseBudget: leseStand(),
     lowRead: readSavingsToday(),
     leadSources,
+    // ZIELGRUPPEN (2026-09-25): Steuerung, wer gesammelt und automatisch angeschrieben wird.
+    zielgruppen: zielgruppenUebersicht(),
+    ohneZielgruppe: ohneZielgruppe(),
+    standardErstnachricht: STANDARD_ERSTNACHRICHT,
     // Kampagnen sind stillgelegt (config.campaigns.enabled). Die Liste bleibt im State, damit
     // ein Zurückstellen des Schalters genügt; das Cockpit blendet den Bereich anhand des
     // Flags aus, statt die Daten wegzuwerfen.
@@ -528,6 +533,8 @@ export function getDashboardData() {
       } else if (acc.armed && acc.rate < acc.minRate) {
         liste.push({ was: acc.protectionActive ? "Vernetzungen (Schutzmodus)" : "Annahmequote niedrig – Schutz ist aus", grund: acc.protectionActive ? `Annahmequote ${(acc.rate * 100).toFixed(0)}% – maximal ${acc.reducedCap} statt ${acc.normalCap} Anfragen pro Tag` : `Annahmequote ${(acc.rate * 100).toFixed(0)}% – normales Limit ${acc.normalCap} pro Tag`, tun: "Anfragen einstellen", aktion: { art: "gehe", ziel: "settings", anker: "acceptance-warning", text: "Anfragen einstellen" } });
       }
+      if (!(db.prepare("SELECT COUNT(*) n FROM zielgruppen WHERE aktiv=1").get() as { n: number }).n)
+        liste.push({ was: "Lead-Suche und Ansprache", grund: "Keine Zielgruppe ist aktiv – der Bot sucht und schreibt niemanden an", tun: "Zielgruppe aktivieren", aktion: { art: "gehe", ziel: "settings", anker: "zg-card", text: "Zielgruppen öffnen" } });
       if (sendHealth.status !== "ok") liste.push({ was: "Nachrichtenversand", grund: sendHealth.reason || "Sendeweg noch nicht geprüft", tun: "Sendeweg prüfen", aktion: { art: "sofort", befehl: "sendeweg_pruefen", text: "Jetzt prüfen" } });
       for (const failure of jobFailures) {
         liste.push({

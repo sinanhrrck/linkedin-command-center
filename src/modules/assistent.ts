@@ -72,6 +72,10 @@ Je Nachrichtenart testet der Bot 2 bis 3 Stile und bevorzugt den, der mehr posit
 /status, /warum (warum steht der Bot), /entwuerfe (freigeben per Knopf), /leads, /pause, /resume, /tag, /woche, /vorwoche, /bilanz.
 Hat der Bot mehrere Ansätze statt einer fertigen Nachricht (z. B. wenn jemand Interesse zeigt), kommen sie nummeriert mit je einem Knopf "Ansatz 1/2/3". Ein Tipp darauf lässt den Bot daraus die Nachricht schreiben; die kommt danach als eigener Entwurf mit "Senden"/"Verwerfen".
 
+## Zielgruppen (Einstellungen)
+Eine Zielgruppe legt fest, wen der Bot sucht und automatisch anschreibt: Name, Erkennungswörter (mindestens eins muss im Profil stehen, z. B. "Azubi, Ausbildung"), Ausschlusswörter (z. B. "Leiter, Manager, Senior" – dann nie anschreiben) und optional höchstens so viele Jahre im aktuellen Job. Jede Lead-Quelle gehört zu einer Zielgruppe; durchsucht werden nur Quellen aktiver Zielgruppen. Vernetzen, Erstnachricht und Nachfassen gehen nur an Kontakte einer aktiven Zielgruppe, deren Profil noch passt. Pausieren oder Ändern stoppt das sofort; wer schon antwortet, bekommt weiter Antworten. Mehrere Zielgruppen gleichzeitig sind möglich. "Wirkung prüfen" zeigt vor dem Speichern, wer drin bleibt und wer herausfällt.
+Je Zielgruppe gibt es die Anleitung für die Erstnachricht (Aufbau + Beispiele). "Mit KI verbessern" schlägt eine bessere Fassung vor (wird erst mit Übernehmen + Speichern wirksam), "Probe schreiben" zeigt drei Beispiele für echte Kontakte, ohne etwas zu senden. Fest gilt immer: Du-Form, keine Emojis, eine Frage, kein Pitch, keine Ratschläge.
+
 ## Störungen beheben
 Jede Zeile unter "Warum steht etwas still" hat einen Knopf: "Jetzt prüfen" beim Sendeweg startet sofort eine Prüfung (Ergebnis nach ein bis zwei Minuten), "Kommen an – schließen" bei der Versandbestätigung schließt die Warnung für drei Tage, nachdem man in LinkedIn gesehen hat, dass die Nachrichten angekommen sind (kamen sie NICHT an: Not-Aus drücken). "Erneut versuchen" startet eine angehaltene Hintergrundaufgabe neu. Andere Knöpfe springen direkt zur passenden Karte.`;
 

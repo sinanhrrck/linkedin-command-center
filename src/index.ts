@@ -36,6 +36,7 @@ import { ensureDailyBackup } from "./core/backups.js";
 import { syncAnonymousLearning } from "./modules/learning.js";
 import { backfillCrmStages } from "./modules/crmStages.js";
 import { runReadJobWhenDue } from "./modules/lowRead.js";
+import { ordneZielgruppenZu } from "./modules/zielgruppen.js";
 import { backfillRelationshipSignals } from "./modules/relationshipPolicy.js";
 import { backfillContactIdentities } from "./modules/contactIdentity.js";
 import { backfillContactTimeline } from "./modules/contactTimeline.js";
@@ -297,6 +298,7 @@ setTimeout(async () => {
   if (istServerModus()) await einzeln("sitzung", () => pruefeSitzungBeimStart(), 90);
   // ZUERST der Selbst-Check: Funktioniert der Sende-Weg überhaupt? Ist er defekt, blockiert der
   // Governor Nachrichten von vornherein (statt still zu scheitern) und meldet es dir.
+  zielgruppenZuordnen();
   await einzeln("healthcheck", () => runReadJobWhenDue("healthcheck", 360, () => selbstCheck()), 75);
   await einzeln("acceptance", () => runReadJobWhenDue("acceptance", 120, () => checkAcceptances()), 60);
   await einzeln("outreach", () => outreachTick(), 30);
@@ -369,6 +371,17 @@ cron.schedule("* * * * *", () =>
 cron.schedule(`15 ${START_STUNDE}-21/6 * * *`, () => einzeln("healthcheck", () => runReadJobWhenDue("healthcheck", 360, () => selbstCheck()), 75));
 
 // Outreach-Tick alle 12 Minuten. Der Governor drosselt intern (Caps/Warm-up/Zeitfenster/Delays).
+// Neue Kontakte ohne Quelle (Netzwerk-Scan, Annahmen) bekommen ihre Zielgruppe, bevor eine Auswahl
+// sie braucht. Rein lokal, kein Browser – deshalb ohne einzeln().
+function zielgruppenZuordnen() {
+  try {
+    const n = ordneZielgruppenZu();
+    if (n) console.info(`[zielgruppen] ${n} Kontakt(e) einer Zielgruppe zugeordnet`);
+  } catch (e) {
+    console.error(`[zielgruppen] Zuordnung fehlgeschlagen: ${String((e as Error)?.message ?? e).slice(0, 90)}`);
+  }
+}
+cron.schedule("*/10 * * * *", zielgruppenZuordnen);
 cron.schedule("*/12 * * * *", () => einzeln("outreach", () => outreachTick(), 30));
 
 // Acceptance-Tracking alle ZWEI STUNDEN in der Arbeitszeit. Ein Sweep findet weiterhin jede

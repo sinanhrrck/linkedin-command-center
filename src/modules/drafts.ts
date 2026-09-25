@@ -13,6 +13,8 @@ import { erlaubteLinks } from "./angebot.js";
 import { registriereVersand, waehleArm, type Wahl } from "./varianten.js";
 import { zweckFuer } from "./playbook.js";
 import { contactForConversation, recordCrmStage } from "./crmStages.js";
+import { zgBedingung } from "../core/zielgruppenRegel.js";
+import { erstnachrichtFuer, zielgruppenPruefung } from "./zielgruppen.js";
 import { promptKontext, saubern } from "../context.js";
 import { events } from "../core/events.js";
 import { directionOptions, feedbackInstruction, type DraftDirection, type RejectionReason } from "./draftDirections.js";
@@ -97,7 +99,7 @@ export async function createFirstMessageDraft(c: Contact): Promise<boolean> {
     .get(c.profile_url);
   if (exists) return false;
   const auftrag = auftragMitFakten(c.id);
-  const wahl = waehleArm("first");
+  const wahl = erstnachrichtFuer(c.id) ? null : waehleArm("first");
   const text = await mitAusgangsCheck(
     (korrektur) => firstMessage(c, undefined, auftrag.goal, auftrag.fakten, korrektur, wahl).catch((e: Error) => {
       console.error(`[first] ⚠ KI-Fehler (Entwurf) fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
@@ -319,6 +321,14 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
     console.info(`[sicherheit] ${c.full_name ?? c.profile_url} bereits angeschrieben (${st.status}) – Erstnachricht übersprungen (kein Duplikat).`);
     return;
   }
+  // ZIELGRUPPEN-SCHRANKE (2026-09-25): automatische Erstnachrichten nur an Kontakte einer aktiven
+  // Zielgruppe, zu der das Profil noch passt. Gilt für Auto-Versand UND Entwurf. Der Kontakt
+  // bleibt 'accepted' – wird die Zielgruppe wieder aktiv oder passend, geht es normal weiter.
+  const zg = zielgruppenPruefung(c.id);
+  if (!zg.ok) {
+    console.info(`[first] ${c.full_name ?? c.profile_url} nicht angeschrieben: ${zg.grund}.`);
+    return;
+  }
   if (getMode() === "manual") {
     await createFirstMessageDraft(c);
     return;
@@ -327,7 +337,8 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
   // nichts. Real passiert 2026-07-16: Gemini lieferte 503, der Bot ging wortlos weiter.
   // Der Kontakt bleibt 'accepted' und wird beim naechsten stuendlichen Lauf neu versucht.
   const auftrag = auftragMitFakten(c.id);
-  const wahlAuto = waehleArm("first");
+  // Eigene Erstnachricht-Anleitung der Zielgruppe = Sinans Text gilt, kein Stil-Test darüber.
+  const wahlAuto = erstnachrichtFuer(c.id) ? null : waehleArm("first");
   const text = await mitAusgangsCheck(
     (korrektur) => firstMessage(c, undefined, auftrag.goal, auftrag.fakten, korrektur, wahlAuto).catch((e: Error) => {
       console.error(`[first] ⚠ KI konnte keinen Text schreiben fuer ${c.full_name}: ${e.message.split("\n")[0].slice(0, 90)}`);
@@ -658,7 +669,16 @@ export async function sendApprovedDrafts(limit = 10): Promise<number> {
   // Vertagung bis zum nächsten Tag und darf weder als Versandfehler erscheinen noch jeden
   // freigegebenen Entwurf einzeln gegen dasselbe Limit laufen lassen.
   if (leseStand().erschoepft) return 0;
-  const rows = db.prepare("SELECT id FROM drafts WHERE status='approved' ORDER BY created_at LIMIT ?").all(limit) as { id: number }[];
+  // Von der AUTOMATIK freigegebene Ansprache geht nur an eine aktive, passende Zielgruppe. Was
+  // Sinan selbst freigegeben hat (mensch bzw. Altbestand ohne Quelle), geht immer: das ist seine
+  // bewusste Entscheidung, auch für jemanden außerhalb der Zielgruppe.
+  const rows = db.prepare(
+    `SELECT d.id FROM drafts d LEFT JOIN contacts c ON c.id=d.contact_id
+      WHERE d.status='approved'
+        AND (COALESCE(d.freigabe_quelle,'mensch')<>'auto' OR d.kind NOT IN ('first','followup','reaktivierung')
+             OR (c.id IS NOT NULL AND ${zgBedingung("c")}))
+      ORDER BY d.created_at LIMIT ?`,
+  ).all(limit) as { id: number }[];
   let sent = 0;
   for (const { id } of rows) {
     const r = await sendDraft(id).catch((e) => {

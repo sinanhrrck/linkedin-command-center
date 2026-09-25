@@ -338,3 +338,25 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 
 /* Sprungziel aus „Warum steht etwas still“: kurz hervorheben, damit klar ist, wo es weitergeht. */
 .anker-ziel{outline:3px solid var(--blue);outline-offset:3px;transition:outline-color .4s}
+
+/* ZIELGRUPPEN (2026-09-25) */
+.zg-liste{display:grid;gap:10px;margin:14px 0 6px}
+.zg-item{border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center;background:#fff}
+.zg-item.aus{background:#f7f9fc}.zg-item.aus .zg-kopf b{color:var(--muted)}
+.zg-kopf{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.zg-kopf b{font-size:14px}
+.zg-zahlen{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:var(--muted)}.zg-zahlen b{color:var(--ink);font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.zg-quellen{grid-column:1/-1;font-size:10px;color:var(--muted)}
+.zg-knoepfe{display:flex;gap:8px;align-items:center}.zg-knoepfe .switch-control{min-width:0}
+.zg-editor{border-top:1px solid var(--line);margin-top:14px;padding-top:6px}
+.zg-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.zg-grid .wide{grid-column:1/-1}
+.zg-sub{margin:18px 0 4px;font-size:14px}
+.zg-erst{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:11px;padding:12px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);resize:vertical}
+.zg-ki-row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}.zg-ki-row input{flex:1 1 260px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:12px}
+.zg-box{margin-top:10px;border:1px solid #d6e2f2;background:#f6f9fe;border-radius:12px;padding:12px 14px;font-size:12px;line-height:1.55}
+.zg-box ul{margin:6px 0 0;padding-left:18px}.zg-box li{margin:2px 0}.zg-box .muted{font-size:11px}
+.zg-box pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;margin:8px 0;max-height:260px;overflow:auto}
+.zg-probe{border-top:1px solid #dfe7f3;padding:8px 0}.zg-probe:first-child{border-top:0}.zg-probe p{margin:4px 0 0}
+.zg-actions{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;margin-top:16px;align-items:center}
+.source-form select{border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px 11px;font-size:12px}
+.source-item select{font-size:10px;border:1px solid var(--line);border-radius:7px;padding:3px 6px;background:#fff}
+@media(max-width:760px){.zg-grid{grid-template-columns:1fr}.zg-item{grid-template-columns:1fr}.zg-actions{grid-template-columns:1fr 1fr}.zg-actions span{display:none}.source-form{grid-template-columns:1fr}}

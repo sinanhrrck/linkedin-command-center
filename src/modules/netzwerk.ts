@@ -1,5 +1,6 @@
 import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { humanDelay, humanScroll } from "../core/humanize.js";
+import { zgBedingung } from "../core/zielgruppenRegel.js";
 import { db } from "../db/index.js";
 import { upsertContact, type Contact } from "./crm.js";
 import { reaktivierungMessage } from "./personalize.js";
@@ -111,6 +112,7 @@ export function reaktivierbareKontakte(limit: number): Contact[] {
            SELECT 1 FROM drafts d WHERE d.thread_url = contacts.profile_url
              AND d.kind='reaktivierung' AND d.status IN ('pending','approved','sent','discarded')
          )
+         AND ${zgBedingung("contacts")}
        ORDER BY lead_score DESC, created_at
        LIMIT ?`,
     )

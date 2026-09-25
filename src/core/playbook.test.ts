@@ -13,6 +13,7 @@ writeFileSync(process.env.PROFIL_PATH, JSON.stringify({
   beweise: ["Ich hab als Azubi angefangen und nach zwei Jahren gewechselt."],
 }));
 const { db } = await import("../db/index.js");
+(await import("./testZielgruppe.js")).alleKontakteInZielgruppe(db);
 const { normalisierePlan, speichereFollowupPlan, followupPlan, DREI_STUFEN_PLAN } = await import("../modules/playbook.js");
 const { messagedAwaitingFollowup } = await import("../modules/crm.js");
 const { createFollowupDraft } = await import("../modules/drafts.js");

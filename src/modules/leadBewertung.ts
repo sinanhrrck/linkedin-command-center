@@ -1,3 +1,4 @@
+import { zgBedingung } from "../core/zielgruppenRegel.js";
 import { db } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { getProfil } from "../profil.js";
@@ -30,6 +31,7 @@ function kandidaten(limit: number): Kandidat[] {
     `SELECT c.id, c.full_name, c.headline, f.rolle, f.firma
        FROM contacts c LEFT JOIN contact_profile_facts f ON f.contact_id=c.id
       WHERE c.status='new' AND c.ki_bewertet_at IS NULL AND COALESCE(c.do_not_contact,0)=0
+        AND ${zgBedingung("c")}
       ORDER BY COALESCE(c.lead_score,50) DESC, c.created_at
       LIMIT ?`,
   ).all(limit) as Kandidat[];

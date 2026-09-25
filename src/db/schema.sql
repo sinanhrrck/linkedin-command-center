@@ -537,3 +537,19 @@ CREATE TABLE IF NOT EXISTS variant_arme_ki (
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   beendet_at  TEXT
 );
+
+-- ZIELGRUPPEN (2026-09-25, core/zielgruppenRegel.ts + modules/zielgruppen.ts): steuern, aus welchen
+-- Quellen Leads gesammelt und an wen AUTOMATISCH geschrieben wird. Pausieren oder Ändern stoppt die
+-- Ansprache sofort, weil jede Auswahl-Abfrage `zg_passt` gegen die aktuelle Zeile prüft.
+-- `erstnachricht` = Aufbau + Beispiele der Erstnachricht für diese Gruppe (NULL = Standard).
+CREATE TABLE IF NOT EXISTS zielgruppen (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  name            TEXT NOT NULL,
+  aktiv           INTEGER NOT NULL DEFAULT 1,
+  erkennung       TEXT,
+  ausschluss      TEXT,
+  max_berufsjahre INTEGER,
+  erstnachricht   TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);

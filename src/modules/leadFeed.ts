@@ -1,4 +1,4 @@
-import { db, getFocus } from "../db/index.js";
+import { db } from "../db/index.js";
 import { scrapeSearch } from "./leads.js";
 import { countContacts } from "./crm.js";
 
@@ -60,18 +60,17 @@ function pagedUrl(url: string, page: number): string {
  * (Ende erreicht) → zurück auf Seite 1 (Suchergebnisse ändern sich über Zeit).
  */
 export async function feedTick(maxPerSource = 25): Promise<number> {
-  // FOKUS: Sinan stellt im Dashboard ein, auf wen er gerade geht – der Bot holt sich den
-  // Nachschub dann selbst aus den passenden Quellen. Kein manuelles An-/Ausknipsen mehr.
-  // Quellen ohne Zielgruppe laufen immer mit (alte Quellen bleiben so funktionsfähig).
-  const focus = getFocus();
-  const sources = (
-    db.prepare("SELECT * FROM lead_sources WHERE active=1").all() as LeadSource[]
-  ).filter((s) => focus === "beides" || !s.zielgruppe || s.zielgruppe === focus);
+  // ZIELGRUPPEN statt Fokus (2026-09-25): durchsucht werden nur Quellen einer AKTIVEN Zielgruppe.
+  // Eine Quelle ohne Zielgruppe läuft NICHT mehr mit – sie würde Leads sammeln, die der Bot
+  // ohnehin nie anschreiben darf, und dabei Lese-Budget verbrauchen.
+  const sources = db.prepare(
+    `SELECT s.* FROM lead_sources s JOIN zielgruppen z ON z.id=s.zielgruppe_id AND z.aktiv=1 WHERE s.active=1 ORDER BY s.id`,
+  ).all() as LeadSource[];
   if (!sources.length) {
-    console.info(`[feed] keine Quelle für Fokus "${focus}" – nichts zu tun.`);
+    console.info("[feed] keine Quelle einer aktiven Zielgruppe – nichts zu tun.");
     return 0;
   }
-  console.info(`[feed] Fokus "${focus}" → ${sources.length} Quelle(n)`);
+  console.info(`[feed] ${sources.length} Quelle(n) aktiver Zielgruppen`);
   let totalNew = 0;
   for (const s of sources) {
     const before = countContacts();

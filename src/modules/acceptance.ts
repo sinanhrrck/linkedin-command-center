@@ -2,6 +2,7 @@ import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { humanScroll, humanDelay } from "../core/humanize.js";
 import { invitedNotAccepted, markAccepted } from "./crm.js";
 import { deliverFirstMessage } from "./drafts.js";
+import { zgBedingung } from "../core/zielgruppenRegel.js";
 import { db } from "../db/index.js";
 import type { Contact } from "./crm.js";
 
@@ -89,6 +90,9 @@ export async function checkAcceptances(): Promise<number> {
          AND COALESCE(c.aus_netzwerk,0)=0
          AND NOT EXISTS (SELECT 1 FROM drafts d WHERE d.thread_url = c.profile_url AND d.kind='first'
                           AND d.status IN ('pending','approved','sent'))
+         -- Zielgruppen-Schranke IN der Abfrage, nicht erst danach: sonst belegen zehn unpassende
+         -- Annahmen (Filialleiter & Co., Vorfall 2026-09-25) dauerhaft die zehn Plätze.
+         AND ${zgBedingung("c")}
        ORDER BY c.accepted_at DESC LIMIT 10`,
     )
     .all() as Contact[];
