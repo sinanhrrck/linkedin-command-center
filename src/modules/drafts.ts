@@ -2,7 +2,8 @@ import { vertriebswissen } from "../core/vertriebswissen.js";
 import { db, getMode } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { fetchThreads, type ThreadContext } from "./inbox.js";
-import { sendThreadReply, sendMessage, sendComment, VersandNichtVersucht, ZielgruppePasstNicht } from "./outreach.js";
+import { sendThreadReply, sendMessage, sendComment, VersandNichtVersucht, ZielgruppePasstNicht, VerlaufVorhanden } from "./outreach.js";
+import { heileKontakt, heileKontaktNachUrl } from "./postfachAbgleich.js";
 import { firstMessage, followupMessage, reaktivierungMessage, converseStep, pitchIdeen, messageAusIdee } from "./personalize.js";
 import { GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
@@ -275,13 +276,18 @@ export async function generateFollowups(limit = 5): Promise<number> {
       );
       if (!text) continue;
       try {
-        await sendMessage(c.profile_url, text, "message", "streng");
+        await sendMessage(c.profile_url, text, "message", "streng", { art: "nachfass", stufe });
         if (wahl) registriereVersand({ contactId: c.id, kind: "followup", stufe, slot: wahl.slot, arm: wahl.arm, zielgruppe: c.zielgruppe ?? null });
         done++;
       } catch (e) {
         if (e instanceof ZielgruppePasstNicht) {
           console.info(`[followup] ${c.full_name ?? c.profile_url} nicht nachgefasst – ${e.grund}.`);
           continue; // KEIN Ersatz-Entwurf: die Person gehört nicht (mehr) zur Zielgruppe
+        }
+        if (e instanceof VerlaufVorhanden) {
+          console.info(`[followup] ${c.full_name ?? c.profile_url} nicht nachgefasst – ${e.grund}.`);
+          heileKontakt(c.id, { personHatGeschrieben: e.fremde > 0 }, "Chat beim Nachfassen");
+          continue;
         }
         if (!(e instanceof GovernorBlocked)) console.error("[followup] Sendefehler → Entwurf:", (e as Error)?.message);
         if (await createFollowupDraft(c).catch(() => false)) done++;
@@ -363,12 +369,17 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
     return;
   }
   try {
-    await sendMessage(c.profile_url, text, "message", "streng"); // setzt Status 'messaged' bei Erfolg
+    await sendMessage(c.profile_url, text, "message", "streng", { art: "erst" }); // setzt Status 'messaged' bei Erfolg
     if (wahlAuto) registriereVersand({ contactId: c.id, kind: "first", slot: wahlAuto.slot, arm: wahlAuto.arm, goalCode: auftrag.goal?.code ?? null, zielgruppe: c.zielgruppe ?? null });
     console.info(`[first] ✅ Erstnachricht auto-gesendet an ${c.full_name}`);
   } catch (e) {
     if (e instanceof ZielgruppePasstNicht) {
       console.info(`[first] ${c.full_name ?? c.profile_url} NICHT angeschrieben – ${e.grund}.`);
+      return;
+    }
+    if (e instanceof VerlaufVorhanden) {
+      console.info(`[first] ${c.full_name ?? c.profile_url} NICHT angeschrieben – ${e.grund}.`);
+      heileKontakt(c.id, { personHatGeschrieben: e.fremde > 0 }, "Chat bei der Erstnachricht");
       return;
     }
     // GovernorBlocked (z.B. Sonntag/außerhalb der Zeit/Limit) = nur vertagt: Kontakt bleibt
@@ -794,6 +805,8 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
         // Automatisch freigegeben = streng; von Sinan freigegeben = nur prüfen, wenn der Kontakt
         // einer Zielgruppe angehört (dann muss das Profil passen). Einladungen sind ein Sonderweg.
         d.kind === "event" ? "aus" : d.freigabe_quelle === "auto" ? "streng" : "wenn_zielgruppe",
+        d.kind === "followup" ? { art: "nachfass", stufe: d.sequence_stage ?? followupStufe(d.thread_url, d.id) }
+          : d.kind === "event" ? undefined : { art: "erst" },
       );
     else await sendThreadReply(d.thread_url, d.draft, d.participant ?? "");
     db.prepare("UPDATE drafts SET status='sent', sent_at=datetime('now') WHERE id=? AND status='sending'").run(id);
@@ -808,6 +821,16 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
   } catch (e) {
     // Profil passt nicht (Ausbilder, zu viele Berufsjahre …): NIE erneut versuchen – sonst öffnete
     // jeder 10-Minuten-Lauf dasselbe Profil wieder und blockierte die Freigaben dahinter.
+    // Chat hat schon Verlauf (z. B. nach einem Datenverlust): Entwurf ist überholt, Kontakt wird
+    // auf den LinkedIn-Stand gebracht. Nicht erneut versuchen.
+    if (e instanceof VerlaufVorhanden) {
+      const grund = `Abgleich mit LinkedIn: ${e.grund}`;
+      db.prepare("UPDATE drafts SET status='discarded', blockiert_grund=? WHERE id=? AND status='sending'").run(grund, id);
+      syncCampaignTargetForDraft(id, "discarded", grund);
+      heileKontaktNachUrl(d.thread_url, { personHatGeschrieben: e.fremde > 0 }, "Chat beim Senden eines Entwurfs");
+      console.info(`[send] Entwurf #${id} nicht gesendet – ${grund}`);
+      return { ok: false, reason: grund };
+    }
     if (e instanceof ZielgruppePasstNicht) {
       const grund = `Profil passt nicht zur Zielgruppe: ${e.grund}`;
       db.prepare("UPDATE drafts SET status='blockiert', blockiert_grund=? WHERE id=? AND status='sending'").run(grund, id);

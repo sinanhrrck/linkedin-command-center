@@ -169,6 +169,31 @@ export class ZielgruppePasstNicht extends GovernorBlocked {
   }
 }
 export type Zielgruppencheck = "streng" | "wenn_zielgruppe" | "aus";
+
+/**
+ * VERLAUFS-SCHUTZ (2026-09-25). Anlass: Nach einem Neuaufbau lief der Bot mit einer Datenbank vom
+ * August – er hielt Dutzende längst angeschriebene Kontakte für „neu“ und legte Erstnachrichten an.
+ * Die Wahrheit steht im Chat selbst, und der ist beim Senden ohnehin offen. Deshalb zählt der Bot
+ * unmittelbar vor dem Tippen die vorhandenen Nachrichten und bricht ab, wenn sie der Absicht
+ * widersprechen. Unabhängig vom Datenstand, kein zusätzlicher Seitenaufruf.
+ *  - "erst": Erstnachricht/Reaktivierung → Chat muss LEER sein.
+ *  - "nachfass": Nachfassung Stufe n → Gegenüber hat NICHT geantwortet und es stehen nicht schon
+ *    mehr eigene Nachrichten drin als erwartet (1 + n-1). Nur bei positivem Befund abbrechen:
+ *    findet der Zähler gar nichts (Selektor/Ladezeit), wird nicht blockiert.
+ */
+export type Verlaufsregel = { art: "erst" } | { art: "nachfass"; stufe: number };
+export class VerlaufVorhanden extends GovernorBlocked {
+  constructor(public eigene: number, public fremde: number, public grund: string) {
+    super(`Chat hat schon Verlauf: ${grund}`);
+    this.name = "VerlaufVorhanden";
+  }
+}
+export function verlaufsWiderspruch(regel: Verlaufsregel, eigene: number, fremde: number): string | null {
+  if (regel.art === "erst") return eigene + fremde > 0 ? `${eigene} eigene und ${fremde} Nachricht(en) der Person – keine Erstnachricht mehr` : null;
+  if (fremde > 0) return `die Person hat schon geschrieben (${fremde}) – keine Nachfassung`;
+  if (eigene > regel.stufe) return `schon ${eigene} eigene Nachrichten, Nachfassung ${regel.stufe} erwartet höchstens ${regel.stufe}`;
+  return null;
+}
 function pruefeProfilGegenZielgruppe(profileUrl: string, modus: Zielgruppencheck): void {
   if (modus === "aus") return;
   const c = db.prepare("SELECT id, zielgruppe_id FROM contacts WHERE profile_url=?").get(profileUrl) as { id: number; zielgruppe_id: number | null } | undefined;
@@ -362,6 +387,7 @@ async function tippenUndSenden(
   nurHaupt = false,
   urlVerbuergt = false,
   onVersandVersucht: () => void = () => {},
+  verlaufsregel?: Verlaufsregel,
 ) {
   // SICHERHEITSSCHLEIFE 1: kein Kauderwelsch/Fehler-Text. Im Zweifel gar nicht senden.
   const plaus = istPlausibleNachricht(text);
@@ -422,6 +448,23 @@ async function tippenUndSenden(
     throw new UnsichereNachricht(
       `Empfänger "${empfaenger}" am offenen Thread nicht bestätigt – Versand abgebrochen (Schutz vor Fehlleitung), wird Entwurf`,
     );
+
+  // VERLAUFS-SCHUTZ (siehe Verlaufsregel): vor dem ersten Tastendruck, im Fenster dieses Chats.
+  if (verlaufsregel) {
+    await humanDelay(900, 1500); // LinkedIn lädt den Verlauf leicht verzögert nach
+    const zaehlung = await fenster.locator(SEL.threadItem).evaluateAll((els) => {
+      let eigene = 0, fremde = 0;
+      for (const el of els) {
+        if (!(el.textContent || "").trim()) continue;
+        if (/--other\b/.test(el.className) || el.closest(".msg-s-event-listitem--other")) fremde++;
+        else eigene++;
+      }
+      return { eigene, fremde };
+    }).catch(() => ({ eigene: 0, fremde: 0 }));
+    console.info(`[send] Verlauf bei "${empfaenger}": ${zaehlung.eigene} eigene, ${zaehlung.fremde} von der Person`);
+    const widerspruch = verlaufsWiderspruch(verlaufsregel, zaehlung.eigene, zaehlung.fremde);
+    if (widerspruch) throw new VerlaufVorhanden(zaehlung.eigene, zaehlung.fremde, widerspruch);
+  }
 
   const sollNorm = normText(text);
 
@@ -631,7 +674,7 @@ export function verlaufsBelegStand(): { geprueft: number; bestaetigt: number; ve
  * "campaign" für Event-Einladungen – die laufen in ein eigenes Tageskontingent, damit sich
  * Kampagne und Akquise nicht gegenseitig blockieren. Der Sendeweg ist identisch.
  */
-export async function sendMessage(profileUrl: string, text: string, typ: "message" | "campaign" = "message", zielgruppencheck: Zielgruppencheck = "aus") {
+export async function sendMessage(profileUrl: string, text: string, typ: "message" | "campaign" = "message", zielgruppencheck: Zielgruppencheck = "aus", verlaufsregel?: Verlaufsregel) {
   let versandVersucht = false;
   try {
     return await governor.execute(typ, profileUrl, async () => {
@@ -657,7 +700,7 @@ export async function sendMessage(profileUrl: string, text: string, typ: "messag
       // nurHaupt=true: wir haben gezielt den Nachricht-Button DIESES Profils geklickt → der
       // Compose im Hauptbereich gehört dieser Person. Robuster Haupt-Bereich-Weg + text-basierte
       // Namensprüfung (statt der kaputten Fenster-/Klassen-Erkennung, an der Follow-ups hingen).
-      await tippenUndSenden(page, text, empfaenger, true, false, () => { versandVersucht = true; });
+      await tippenUndSenden(page, text, empfaenger, true, false, () => { versandVersucht = true; }, verlaufsregel);
 
       db.prepare(
         "UPDATE contacts SET status='messaged', messaged_at=datetime('now') WHERE profile_url = ?",

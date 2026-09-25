@@ -202,6 +202,22 @@ Cockpit-Panel „Bericht“ in der Auswertung (eigener Ladepfad `ladeBericht` mi
 Befehle /tag /woche /vorwoche; die KI-Trefferquoten-Bilanz heißt jetzt /bilanz bzw. /kibilanz.
 Geschäftszeit seit 2026-09-22: 7–22 Uhr; alle Morgen-Crons hängen an `START_STUNDE` in index.ts.
 
+## UPDATE 2026-09-25 (4) — Datenverlust beim Neuaufbau, Postfach-Abgleich + Verlaufs-Schutz
+Der Heimserver-Container wurde neu aufgesetzt, der alte samt DB und Backups ist WEG. Der neue wurde per
+`umzug` aus der Mac-App befüllt (DB-Stand 26.08./07.09.) → der Bot hielt einen Monat Versände für
+„neu“ und legte Erstnachricht-/Antwort-Entwürfe an. Keine neuere Kopie auffindbar. LinkedIn ist die
+Wahrheit, deshalb zwei Mechanismen, beide ohne zusätzlichen Seitenaufruf:
+- **Verlaufs-Schutz** (outreach.ts `Verlaufsregel`/`VerlaufVorhanden`): `sendMessage(..., verlaufsregel)`
+  zählt im offenen Chat eigene/fremde Nachrichten VOR dem Tippen. Erstnachricht/Reaktivierung nur in
+  leeren Chat; Nachfassung Stufe n nur ohne Antwort und mit höchstens n eigenen Nachrichten. Zählt er
+  nichts, wird NICHT blockiert (fail-open, Selektor/Ladezeit). Aufrufer heilen den Kontakt
+  (`postfachAbgleich.heileKontakt`), `sendDraft` verwirft den Entwurf mit Grund.
+- **Chatlisten-Abgleich** (`heileAusChatliste`, aus `inbox.fetchThreads`): jede sichtbare Chatzeile mit
+  EINDEUTIGEM Namen stuft den Kontakt auf „angeschrieben“/„hat geantwortet“ und verwirft überholte
+  Erstnachricht-/Nachfass-Entwürfe; „Sie:/Du:“ in der Vorschau verwirft Antwort-Entwürfe dieses Chats.
+  Nur hochstufen, nie zurück; closed/skipped bleiben.
+LEHRE: Backups nur im selben Container sind keine Backups. Vor jedem Neuaufbau `data/` sichern.
+
 ## UPDATE 2026-09-25 (3) — Vertriebswissen als Hintergrund (`core/vertriebswissen.ts`)
 Sinans „Vertriebsbibel“ (~67 KB Markdown) liegt als `vertriebswissen.md` im DATENORDNER (nicht im
 öffentlichen Repo; Pfad überschreibbar mit `VERTRIEBSWISSEN_PATH`). Vorgabe: „Baue die Nachrichten

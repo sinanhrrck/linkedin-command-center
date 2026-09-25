@@ -1,6 +1,7 @@
 import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { humanScroll, humanDelay } from "../core/humanize.js";
 import { rememberConversationPreview, shouldOpenConversation } from "./lowRead.js";
+import { heileAusChatliste } from "./postfachAbgleich.js";
 
 /**
  * Liest die LinkedIn-Inbox – REIN LESEND, kein Governor, kein Senden.
@@ -122,6 +123,16 @@ export async function fetchThreads(max = 8, onlyUnread = false): Promise<ThreadC
     if (!snippet) return null; // unbekannt (leere Vorschau)
     return !/^\s*(sie|du|you)\s*:/i.test(snippet);
   };
+
+  // POSTFACH-ABGLEICH: jede sichtbare Chatzeile korrigiert die Datenbank (kostet nichts extra).
+  try {
+    heileAusChatliste(meta.map((m) => {
+      const amZug = personAmZug(m.snippet);
+      return { participant: m.participant, sinanZuletzt: amZug === null ? null : !amZug };
+    }));
+  } catch (e) {
+    console.error(`[abgleich] Chatliste: ${String((e as Error)?.message ?? e).slice(0, 90)}`);
+  }
 
   const targets = meta
     .map((m, index) => ({ ...m, index, amZug: personAmZug(m.snippet) }))
