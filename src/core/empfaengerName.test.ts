@@ -63,4 +63,10 @@ test("Beleg-Quote schlägt erst bei systematischem Ausfall an", async () => {
   assert.equal(stand.verdaechtig, true, "kein einziger Beleg bei fünf Versänden = kaputt");
   assert.equal(stand.geprueft, 5);
   assert.equal(stand.bestaetigt, 0);
+
+  setState("verlauf_beleg_quittiert", new Date().toISOString());
+  assert.equal(verlaufsBelegStand().verdaechtig, false, "nach Quittieren drei Tage Ruhe");
+  setState("verlauf_beleg_quittiert", new Date(Date.now() - 4 * 86_400_000).toISOString());
+  assert.equal(verlaufsBelegStand().verdaechtig, true, "danach meldet es sich wieder");
+  setState("verlauf_beleg_quittiert", "");
 });

@@ -73,7 +73,7 @@ Je Nachrichtenart testet der Bot 2 bis 3 Stile und bevorzugt den, der mehr posit
 Hat der Bot mehrere Ansätze statt einer fertigen Nachricht (z. B. wenn jemand Interesse zeigt), kommen sie nummeriert mit je einem Knopf "Ansatz 1/2/3". Ein Tipp darauf lässt den Bot daraus die Nachricht schreiben; die kommt danach als eigener Entwurf mit "Senden"/"Verwerfen".
 
 ## Störungen beheben
-Jede Zeile unter "Warum steht etwas still" hat einen Knopf: "Jetzt prüfen" beim Sendeweg startet sofort eine Prüfung (Ergebnis nach ein bis zwei Minuten), "Kommen an – schließen" bei der Versandbestätigung schließt die Warnung, nachdem man in LinkedIn gesehen hat, dass die Nachrichten angekommen sind (kamen sie NICHT an: Not-Aus drücken). "Erneut versuchen" startet eine angehaltene Hintergrundaufgabe neu. Andere Knöpfe springen direkt zur passenden Karte.`;
+Jede Zeile unter "Warum steht etwas still" hat einen Knopf: "Jetzt prüfen" beim Sendeweg startet sofort eine Prüfung (Ergebnis nach ein bis zwei Minuten), "Kommen an – schließen" bei der Versandbestätigung schließt die Warnung für drei Tage, nachdem man in LinkedIn gesehen hat, dass die Nachrichten angekommen sind (kamen sie NICHT an: Not-Aus drücken). "Erneut versuchen" startet eine angehaltene Hintergrundaufgabe neu. Andere Knöpfe springen direkt zur passenden Karte.`;
 
 const zahl = (sql: string, ...p: unknown[]) => (db.prepare(sql).get(...p) as { n: number }).n;
 

@@ -495,6 +495,46 @@ async function tippenUndSenden(
       console.info(`[send] Verlaufsbeleg über Auffangsuche gefunden – SEL.threadItem nachziehen. Fundort: ${fund}`);
     }
   }
+  /**
+   * STUFE 2 (2026-09-25, gleicher Tag): auch die seitenweite DOM-Suche fand bei 5 von 5 echten
+   * Versänden nichts. `document.querySelectorAll` sieht nicht in Shadow-DOM-Bereiche, Playwrights
+   * Textsuche schon. Findet auch sie nichts, wird der Seitenaufbau (nur Zahlen und Pfadart, keine
+   * Inhalte) in `verlauf_beleg_diagnose` festgehalten – damit der nächste Schritt belegt ist statt geraten.
+   */
+  if (imVerlauf === 0) {
+    const treffer = page.getByText(marker, { exact: false });
+    const anzahl = await treffer.count().catch(() => 0);
+    for (let i = 0; i < Math.min(anzahl, 5) && imVerlauf === 0; i++) {
+      const el = treffer.nth(i);
+      // Ohne benannte Hilfsfunktionen (tsx-__name, siehe findeVerlaufsElement).
+      const ort = await el.evaluate((start) => {
+        if (start.closest("[contenteditable='true'], textarea, input")) return null;
+        const kette: string[] = [];
+        let knoten: Element | null = start;
+        while (knoten && kette.length < 7) {
+          const k = Array.from(knoten.classList).filter((c) => !/^ember|^artdeco-|^t-\d|^p\d|^m\d/.test(c)).slice(0, 3);
+          kette.push(knoten.tagName.toLowerCase() + (k.length ? "." + k.join(".") : ""));
+          const wurzel: Node | null = knoten.parentElement ? null : knoten.getRootNode();
+          knoten = knoten.parentElement ?? (wurzel instanceof ShadowRoot ? (kette.push("#shadow"), wurzel.host) : null);
+        }
+        return kette.join(" < ");
+      }).catch(() => null);
+      if (ort) {
+        imVerlauf = 1;
+        try { setState("verlauf_beleg_fundort", `${new Date().toISOString()} ${ort}`.slice(0, 600)); } catch { /* nur Diagnose */ }
+        console.info(`[send] Verlaufsbeleg über Textsuche gefunden. Fundort: ${ort}`);
+      }
+    }
+    if (imVerlauf === 0) {
+      const aufbau = await page.evaluate(() => {
+        let schatten = 0;
+        for (const el of Array.from(document.querySelectorAll("*"))) if (el.shadowRoot) schatten++;
+        return `pfad=/${location.pathname.split("/")[1] || ""} fenster=${document.querySelectorAll(".msg-overlay-conversation-bubble").length}`
+          + ` eintraege=${document.querySelectorAll(".msg-s-event-listitem").length} shadowHosts=${schatten} iframes=${document.querySelectorAll("iframe").length}`;
+      }).catch((e) => `nicht lesbar: ${String((e as Error)?.message || e).slice(0, 80)}`);
+      try { setState("verlauf_beleg_diagnose", `${new Date().toISOString()} textTreffer=${anzahl} ${aufbau}`.slice(0, 600)); } catch { /* nur Diagnose */ }
+    }
+  }
   merkeVerlaufsBeleg(imVerlauf > 0);
   if (imVerlauf === 0)
     console.warn("[send] Feld geleert (= gesendet), aber Text nicht im Verlauf gefunden – Verlaufsprüfung unsicher, kein erneuter Versand.");
@@ -548,7 +588,12 @@ export function verlaufsBelegStand(): { geprueft: number; bestaetigt: number; ve
   const bestaetigt = (kette.match(/1/g) || []).length;
   // Erst ab 5 Versänden urteilen; unter 30% Trefferquote stimmt mit hoher Wahrscheinlichkeit
   // der Selektor nicht mehr (bei intaktem Selektor liegt die Quote nahe 100%).
-  return { geprueft, bestaetigt, verdaechtig: geprueft >= 5 && bestaetigt / geprueft < 0.3 };
+  // Nach „Kommen an – schließen“ drei Tage Ruhe: Sinan hat die Zustellung in LinkedIn gesehen, der
+  // Hauptbeleg (Feld geleert) sichert weiter jeden Versand. Ohne diese Frist kam die Warnung nach
+  // den nächsten fünf Versänden sofort zurück und wirkte wie ein kaputter Knopf (2026-09-25).
+  const quittiert = Date.parse(getState("verlauf_beleg_quittiert") || "");
+  const ruhe = Number.isFinite(quittiert) && Date.now() - quittiert < 3 * 86_400_000;
+  return { geprueft, bestaetigt, verdaechtig: !ruhe && geprueft >= 5 && bestaetigt / geprueft < 0.3 };
 }
 
 /**

@@ -180,7 +180,7 @@ function renderStatus() {
         if (a.befehl === "pause_loesen") await post("/api/pause", { an: false });
         if (a.befehl === "sendeweg_pruefen" || a.befehl === "beleg_quittieren") await post("/api/beheben", { befehl: a.befehl });
         toast(a.befehl === "sendeweg_pruefen" ? "Prüfung angestoßen – das Ergebnis steht in ein bis zwei Minuten hier."
-          : a.befehl === "beleg_quittieren" ? "Warnung geschlossen. Sie kommt nur wieder, wenn erneut Belege fehlen."
+          : a.befehl === "beleg_quittieren" ? "Warnung für drei Tage geschlossen. Jeder Versand bleibt weiter über das geleerte Eingabefeld abgesichert."
           : "Erledigt. Der Bot arbeitet weiter.");
         // Engine-Start braucht einen Moment, bis der Heartbeat steht.
         setTimeout(() => load(true), a.befehl === "engine_start" ? 3000 : 600);

@@ -769,7 +769,10 @@ const server = createServer((req, res) => {
         if (befehl === "sendeweg_pruefen") setState("healthcheck_now", "1");
         // Nur nach Sichtprüfung in LinkedIn: die Kette zählt ab jetzt neu, die Warnung kommt
         // wieder, sobald erneut fünf Versände ohne Verlaufsbeleg zusammenkommen.
-        else if (befehl === "beleg_quittieren") setState("verlauf_belege", "");
+        else if (befehl === "beleg_quittieren") {
+          setState("verlauf_belege", "");
+          setState("verlauf_beleg_quittiert", new Date().toISOString());
+        }
         else throw new Error("Unbekannter Befehl.");
         res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, befehl }));
       } catch (e) {
