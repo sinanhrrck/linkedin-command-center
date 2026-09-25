@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cockpit-kopie",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DB_PATH=/private/tmp/claude-501/-Users-sinanharrack-Documents-GitHub-linkedin-command-center/8653315d-9f6d-45e9-98e7-9e2557d94238/scratchpad/ui/data.db",
+        "ENV_PATH=/dev/null",
+        "CRM_PORT=4399",
+        "GEMINI_API_KEY=nur-lokale-ansicht",
+        "PROFIL_PATH=profil.example.json",
+        "PORT=4399",
+        "npx",
+        "tsx",
+        "src/scripts/crmServer.ts"
+      ],
+      "port": 4399
+    }
+  ]
+}
