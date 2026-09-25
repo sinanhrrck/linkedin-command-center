@@ -35,3 +35,24 @@ test("bewertet in Gruppen, ignoriert Fremd-IDs, sortiert aus nur bei klarem Nein
   assert.equal(await kiLeadBewertung(60), 0, "schon bewertete werden nicht erneut bezahlt");
   setTextGeneratorForTests(null);
 });
+
+test("liest Code-Zäune und abgeschnittene Antworten, versucht bei Unlesbarem genau einmal neu", async () => {
+  const { leseBewertungen } = await import("../modules/leadBewertung.js");
+  assert.equal(leseBewertungen('```json\n[{"id":1,"note":50,"fit":"beide","grund":"x"}]\n```')?.length, 1);
+  assert.equal(leseBewertungen('[{"id":1,"note":50,"fit":"beide","grund":"x"},{"id":2,"note":6')?.length, 1, "abgeschnitten → vollständige Objekte zählen");
+  assert.equal(leseBewertungen("Dazu brauche ich mehr Angaben."), null);
+
+  const a = neu("Ben Bank", "Auszubildender Bankkaufmann");
+  const b = neu("Cem Code", "Softwareentwickler");
+  let aufrufe = 0;
+  setTextGeneratorForTests(async () => (++aufrufe === 1 ? "Gern, hier die Bewertung:" : `[{"id":${a},"note":80,"fit":"partner","grund":"Azubi"}]`));
+  assert.equal(await kiLeadBewertung(60), 1);
+  assert.equal(aufrufe, 2);
+
+  aufrufe = 0;
+  setTextGeneratorForTests(async () => { aufrufe++; return "Das kann ich nicht bewerten."; });
+  await assert.rejects(kiLeadBewertung(60), /Antwort: „Das kann ich nicht bewerten\.“/);
+  assert.equal(aufrufe, 2, "genau ein Neuversuch, nicht mehr");
+  assert.equal((db.prepare("SELECT ki_bewertet_at FROM contacts WHERE id=?").get(b) as { ki_bewertet_at: string | null }).ki_bewertet_at, null);
+  setTextGeneratorForTests(null);
+});

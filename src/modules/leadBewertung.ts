@@ -44,17 +44,24 @@ ZIEL: ${p.ziel}
 ${angebote ? `ANGEBOTE:\n${angebote}` : ""}
 Zwei Wege: "beratung" = Kunde für Finanzberatung (Berufseinsteiger mit erstem Gehalt, Geldfragen). "partner" = Karriere/Vertriebspartner (Azubis und junge Bank-/Finanzleute mit Ehrgeiz, Orientierung nach der Ausbildung). "beide" = passt zu beidem. "keiner" = klar unpassend (z. B. Recruiter, Führungskräfte weit über der Zielgruppe, Fake-/Firmenprofile, völlig fremde Branche ohne Bezug).
 
-Bewerte jede Person NUR anhand dieser Angaben, nichts dazuerfinden. Im Zweifel mittlere Note, nicht "keiner".
+Bewerte jede Person NUR anhand dieser Angaben, nichts dazuerfinden. Im Zweifel mittlere Note, nicht "keiner". Fehlen Angaben (Headline "-"), dann Note 40 und "beide" – fehlende Angaben sind kein Ausschlussgrund.
 
 KONTAKTE:
 ${liste.map((k) => `${k.id} | ${k.full_name ?? "?"} | ${k.headline ?? "-"}${k.rolle ? ` | aktuell: ${k.rolle}${k.firma ? ` bei ${k.firma}` : ""}` : ""}`).join("\n")}
 
 Antworte AUSSCHLIESSLICH mit einem JSON-Array, ein Objekt je Kontakt:
 [{"id":123,"note":0-100,"fit":"beratung|partner|beide|keiner","grund":"max. 12 Wörter"}]`;
-  const roh = await generateText(prompt, 3000);
-  const s = roh.indexOf("["), e = roh.lastIndexOf("]");
-  if (s < 0 || e <= s) throw new Error("Lead-Bewertung: kein verwertbares Ergebnis");
-  const ergebnis = JSON.parse(roh.slice(s, e + 1)) as Array<Record<string, unknown>>;
+  // Die KI liefert meist sauberes JSON, aber nicht immer (2026-09-24: drei Fehlschläge in Folge →
+  // Job tot, Rohtext nirgends gesichert). Darum: tolerant lesen, EIN Neuversuch mit klarer Ansage,
+  // und scheitert auch der, steht ein Auszug der Antwort im Fehler – dann ist die Ursache sichtbar.
+  let roh = await generateText(prompt, 3000);
+  let ergebnis = leseBewertungen(roh);
+  if (!ergebnis) {
+    console.warn(`[leadbewertung] unlesbare Antwort, neuer Versuch. Auszug: ${auszug(roh)}`);
+    roh = await generateText(`${prompt}\n\nWICHTIG: Deine Antwort beginnt mit [ und endet mit ]. Kein Text davor oder danach, keine Rückfrage.`, 3000);
+    ergebnis = leseBewertungen(roh);
+  }
+  if (!ergebnis) throw new Error(`Lead-Bewertung: kein verwertbares Ergebnis (Antwort: ${auszug(roh)})`);
   const erlaubt = new Set(liste.map((k) => k.id));
   const speichern = db.prepare(
     `UPDATE contacts SET ki_score=?, ki_fit=?, ki_grund=?, ki_bewertet_at=datetime('now') WHERE id=? AND ki_bewertet_at IS NULL`,
@@ -64,7 +71,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Array, ein Objekt je Kontakt:
   );
   let n = 0;
   const tx = db.transaction(() => {
-    for (const r of Array.isArray(ergebnis) ? ergebnis : []) {
+    for (const r of ergebnis) {
       const id = Number(r.id);
       if (!erlaubt.has(id)) continue; // nur, wonach gefragt wurde
       const note = Math.max(0, Math.min(100, Math.round(Number(r.note))));
@@ -78,6 +85,33 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Array, ein Objekt je Kontakt:
   });
   tx();
   return n;
+}
+
+function auszug(roh: string): string {
+  const t = roh.replace(/\s+/g, " ").trim();
+  return t ? `„${t.slice(0, 160)}${t.length > 160 ? "…" : ""}“` : "leer";
+}
+
+/**
+ * Liest das Bewertungs-Array aus der KI-Antwort. Verträgt Code-Zäune, Text davor/danach und eine
+ * abgeschnittene Antwort (dann zählen die vollständigen Objekte; der Rest bleibt unbewertet und
+ * kommt im nächsten Lauf wieder). `null` = nichts Brauchbares.
+ */
+export function leseBewertungen(roh: string): Array<Record<string, unknown>> | null {
+  const s = roh.indexOf("[");
+  if (s < 0) return null;
+  const e = roh.lastIndexOf("]");
+  if (e > s) {
+    try {
+      const a = JSON.parse(roh.slice(s, e + 1));
+      if (Array.isArray(a)) return a.filter((x) => x && typeof x === "object");
+    } catch { /* unten Objekt für Objekt versuchen */ }
+  }
+  const einzeln: Array<Record<string, unknown>> = [];
+  for (const m of roh.slice(s).matchAll(/\{[^{}]*\}/g)) {
+    try { einzeln.push(JSON.parse(m[0])); } catch { /* kaputtes Objekt überspringen */ }
+  }
+  return einzeln.length ? einzeln : null;
 }
 
 /** Bewertet bis zu `limit` neue Kontakte. Gibt die Zahl der Bewertungen zurück. */
