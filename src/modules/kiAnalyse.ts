@@ -1,3 +1,4 @@
+import { vertriebswissen } from "../core/vertriebswissen.js";
 import { db, getState, setState } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { bericht } from "./berichte.js";
@@ -92,7 +93,7 @@ AUFGABE:
 
 Antworte AUSSCHLIESSLICH mit JSON:
 {"kurzfazit":"2 Sätze","empfehlungen":[{"titel":"…","warum":"1–2 Sätze mit Bezug auf die Zahlen","wo":"…"}]}`;
-  const roh = await generateText(prompt, 2000);
+  const roh = await generateText(prompt, 2000, vertriebswissen("analyse"));
   const s = roh.indexOf("{"), e = roh.lastIndexOf("}");
   if (s < 0 || e <= s) throw new Error("Die KI hat keine verwertbare Analyse geliefert.");
   const x = JSON.parse(roh.slice(s, e + 1)) as { kurzfazit?: unknown; empfehlungen?: unknown };

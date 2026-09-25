@@ -1,3 +1,4 @@
+import { vertriebswissen } from "../core/vertriebswissen.js";
 import { db } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { promptKontext, saubern } from "../context.js";
@@ -61,7 +62,7 @@ Beurteile knapp und ehrlich:
 3. "vorschlag": der verbesserte Text, fertig zum Senden. Gleiche Absicht, gleiche Person, alle Stilregeln oben, höchstens eine Frage${zweck === "abschied" ? " (hier KEINE Frage)" : ""}, keine Emojis, keine Gedankenstriche, nichts erfinden.
 
 Antworte AUSSCHLIESSLICH mit JSON: {"staerke":"…","aendern":"…","vorschlag":"…"}`;
-  const roh = await generateText(prompt);
+  const roh = await generateText(prompt, undefined, vertriebswissen("coach"));
   const start = roh.indexOf("{"), ende = roh.lastIndexOf("}");
   if (start < 0 || ende <= start) throw new Error("Der Coach hat kein verwertbares Ergebnis geliefert. Bitte nochmal versuchen.");
   const x = JSON.parse(roh.slice(start, ende + 1)) as Record<string, unknown>;

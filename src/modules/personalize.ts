@@ -1,3 +1,4 @@
+import { vertriebswissen } from "../core/vertriebswissen.js";
 import { generateText } from "../core/textLlm.js";
 import { generateClaude, claudeAvailable } from "../core/claude.js";
 import { config } from "../config.js";
@@ -20,9 +21,9 @@ import { STANDARD_ERSTNACHRICHT, erstnachrichtFuer, zielgruppenName } from "./zi
  */
 async function generateAutopilot(prompt: string): Promise<string> {
   if (config.llm.autopilotProvider === "claude" && claudeAvailable()) {
-    return generateClaude(prompt);
+    return generateClaude(prompt, undefined, vertriebswissen("gespraech") || undefined);
   }
-  return generateText(prompt);
+  return generateText(prompt, undefined, vertriebswissen("gespraech"));
 }
 
 /** Beschreibt den Lead für den Prompt (inkl. Jobbezeichnung und – falls erfasst – Profil-Fakten). */
@@ -361,7 +362,7 @@ Bisheriger Verlauf:
 ${transcript}
 
 Gib NUR die Nachricht aus, ohne Anführungszeichen.`;
-  return saubern(await generateText(prompt));
+  return saubern(await generateText(prompt, undefined, vertriebswissen("gespraech")));
 }
 
 /** Freundliches Follow-up, wenn die Erstnachricht unbeantwortet blieb. */

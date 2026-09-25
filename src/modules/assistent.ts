@@ -1,3 +1,4 @@
+import { vertriebswissen } from "../core/vertriebswissen.js";
 import { db, getMode, getAgentMode } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { governor } from "../core/safetyGovernor.js";
@@ -77,6 +78,9 @@ Hat der Bot mehrere Ansätze statt einer fertigen Nachricht (z. B. wenn jemand I
 Eine Zielgruppe legt fest, wen der Bot sucht und automatisch anschreibt: Name, Erkennungswörter (mindestens eins muss im Profil stehen, z. B. "Azubi, Ausbildung"), Ausschlusswörter (z. B. "Leiter, Manager, Senior" – dann nie anschreiben) und optional höchstens so viele Jahre Lebenslauf (gezählt ab der ersten Stelle bzw. dem Schul-/Studienabschluss). Ausschlusswörter gelten für ALLE Positionen im Profil, nicht nur die Headline. Unmittelbar vor dem Vernetzen und vor jeder automatischen Erstnachricht oder Nachfassung prüft der Bot das geöffnete Profil noch einmal; passt es nicht (z. B. Ausbilder, zu viele Berufsjahre), passiert nichts. Jede Lead-Quelle gehört zu einer Zielgruppe; durchsucht werden nur Quellen aktiver Zielgruppen. Vernetzen, Erstnachricht und Nachfassen gehen nur an Kontakte einer aktiven Zielgruppe, deren Profil noch passt. Pausieren oder Ändern stoppt das sofort; wer schon antwortet, bekommt weiter Antworten. Mehrere Zielgruppen gleichzeitig sind möglich. "Wirkung prüfen" zeigt vor dem Speichern, wer drin bleibt und wer herausfällt.
 Je Zielgruppe gibt es die Anleitung für die Erstnachricht (Aufbau + Beispiele). "Mit KI verbessern" schlägt eine bessere Fassung vor (wird erst mit Übernehmen + Speichern wirksam), "Probe schreiben" zeigt drei Beispiele für echte Kontakte, ohne etwas zu senden. Fest gilt immer: Du-Form, keine Emojis, eine Frage, kein Pitch, keine Ratschläge.
 
+## Vertriebswissen
+Liegt im Datenordner die Datei "vertriebswissen.md" (Sinans Vertriebsbibel), nutzt die KI sie als Hintergrundwissen: bei Antworten in laufenden Gesprächen, beim KI-Coach, in der Wochenanalyse und hier im Assistenten. Sie ändert keine Vorlage, keinen Ablauf und keine feste Regel; Erstnachricht und Nachfassen bleiben unberührt. Ändern: Datei ersetzen, wirkt beim nächsten KI-Aufruf.
+
 ## Störungen beheben
 Jede Zeile unter "Warum steht etwas still" hat einen Knopf: "Jetzt prüfen" beim Sendeweg startet sofort eine Prüfung (Ergebnis nach ein bis zwei Minuten), "Kommen an – schließen" bei der Versandbestätigung schließt die Warnung für drei Tage, nachdem man in LinkedIn gesehen hat, dass die Nachrichten angekommen sind (kamen sie NICHT an: Not-Aus drücken). "Erneut versuchen" startet eine angehaltene Hintergrundaufgabe neu. Andere Knöpfe springen direkt zur passenden Karte.`;
 
@@ -141,5 +145,5 @@ REGELN:
 
 ${bisher ? `BISHERIGES GESPRÄCH:\n${bisher}\n` : ""}
 FRAGE: ${f}`;
-  return (await generateText(prompt, 1500)).trim();
+  return (await generateText(prompt, 1500, vertriebswissen("assistent"))).trim();
 }

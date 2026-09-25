@@ -202,6 +202,17 @@ Cockpit-Panel „Bericht“ in der Auswertung (eigener Ladepfad `ladeBericht` mi
 Befehle /tag /woche /vorwoche; die KI-Trefferquoten-Bilanz heißt jetzt /bilanz bzw. /kibilanz.
 Geschäftszeit seit 2026-09-22: 7–22 Uhr; alle Morgen-Crons hängen an `START_STUNDE` in index.ts.
 
+## UPDATE 2026-09-25 (3) — Vertriebswissen als Hintergrund (`core/vertriebswissen.ts`)
+Sinans „Vertriebsbibel“ (~67 KB Markdown) liegt als `vertriebswissen.md` im DATENORDNER (nicht im
+öffentlichen Repo; Pfad überschreibbar mit `VERTRIEBSWISSEN_PATH`). Vorgabe: „Baue die Nachrichten
+und die Mechanik nicht um, nutze es nur als Wissen.“ Deshalb: eigener System-Block mit
+`cache_control: ephemeral` (generateClaude/generateText haben dafür ein drittes Argument `wissen`),
+Kapitelauswahl je Zweck (gespraech/coach/analyse/assistent), ausdrücklicher Vorrang der Auftragsregeln.
+Eingebunden: Agent (Analyse + Antwort, gleicher Text → Cache trifft), `replyDraft`, Neuschreiben von
+`message`-Entwürfen, `generateAutopilot`, `messageAusIdee`, Coach, Wochenanalyse, Assistent.
+BEWUSST NICHT: Erstnachricht, Nachfassen, Reaktivierung, Vorlagen, Lead-Bewertung. Fehlt die Datei,
+ist alles wie vorher. Der Block muss byte-gleich bleiben (nichts Veränderliches hinein), sonst kein Cache.
+
 ## UPDATE 2026-09-25 — ZIELGRUPPEN steuern Sammeln UND Ansprache
 Auslöser: automatische Erstnachrichten an Filialleiter, Geschäftsstellenleiter und Bankkaufleute mit
 20 Berufsjahren („wie ging's nach der Ausbildung weiter?“). Vor der Erstnachricht gab es keinerlei

@@ -1,3 +1,4 @@
+import { vertriebswissen } from "../core/vertriebswissen.js";
 import { db, getMode } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { fetchThreads, type ThreadContext } from "./inbox.js";
@@ -78,7 +79,7 @@ ${transcript}
 
 Schreibe Sinans nächste Antwort an ${ctx.participant}. Gehe konkret auf die letzte Nachricht ein.
 Gib NUR den Nachrichtentext aus, ohne Anführungszeichen, ohne Signatur.`;
-  return saubern(await generateText(prompt));
+  return saubern(await generateText(prompt, undefined, vertriebswissen("gespraech")));
 }
 
 /**
@@ -663,6 +664,7 @@ async function regenerateText(d: Draft, instruction: string, rejectedTexts: stri
     `Letzte Nachricht von ${d.participant || "der Person"}:\n"${d.incoming}"\n` +
     `Bisheriger abgelehnter Entwurf als Sachkontext:\n"${d.draft}"\n` +
     `VERBINDLICHE NEUE RICHTUNG: ${instruction}\nSchreibe Sinans Antwort konkret und natürlich.${avoid}\nNur der Nachrichtentext.`,
+    undefined, d.kind === "message" ? vertriebswissen("gespraech") : undefined,
   ));
 }
 

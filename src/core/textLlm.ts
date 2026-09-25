@@ -17,7 +17,7 @@ import { generateClaude, claudeAvailable } from "./claude.js";
  * Gemini-Code bleibt im Repo (gemini.ts) für Tests, wird hier aber nicht mehr aufgerufen.
  * Wirft, wenn kein Claude-Key gesetzt ist – der Aufrufer entscheidet dann (Entwurf/Retry).
  */
-type TextGenerator = (prompt: string) => Promise<string>;
+type TextGenerator = (prompt: string, wissen?: string) => Promise<string>;
 let testGenerator: TextGenerator | null = null;
 
 /**
@@ -30,9 +30,10 @@ export function setTextGeneratorForTests(fn: TextGenerator | null): void {
   testGenerator = fn;
 }
 
-export async function generateText(prompt: string, maxTokens?: number): Promise<string> {
-  if (testGenerator) return testGenerator(prompt);
+/** `wissen` = optionales Hintergrundwissen (core/vertriebswissen.ts), geht als gecachter System-Block mit. */
+export async function generateText(prompt: string, maxTokens?: number, wissen?: string): Promise<string> {
+  if (testGenerator) return testGenerator(prompt, wissen);
   if (!claudeAvailable())
     throw new Error("Kein ANTHROPIC_API_KEY gesetzt – Textgenerierung braucht jetzt Claude (Gemini wurde entfernt).");
-  return generateClaude(prompt, maxTokens);
+  return generateClaude(prompt, maxTokens, wissen || undefined);
 }

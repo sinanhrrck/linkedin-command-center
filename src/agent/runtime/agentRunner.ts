@@ -1,3 +1,4 @@
+import { vertriebswissen } from "../../core/vertriebswissen.js";
 /**
  * AGENT-RUNNER – die Laufzeit-Verdrahtung (das „Umschalten"). Hängt den neuen Sales-Agent an
  * die echte Inbox und den echten Versand. STRENG gated:
@@ -33,8 +34,11 @@ import { angebotsWahl } from "../../modules/angebot.js";
  * Der Voll-Auto-Agent ist ohnehin der bezahlte Pfad; ohne Claude-Key fällt beides auf Gemini zurück.
  */
 const claudeAn = () => config.llm.autopilotProvider === "claude" && claudeAvailable();
-const analyzeLlm = (p: string) => (claudeAn() ? generateClaude(p) : generateText(p));
-const replyLlm = (p: string) => (claudeAn() ? generateClaude(p) : generateText(p));
+// Vertriebswissen als gecachter System-Block – für Analyse UND Antwort derselbe Text, damit der
+// Cache zwischen beiden Aufrufen trifft. Es ändert keine Regel des Agenten (core/vertriebswissen.ts).
+const wissen = () => vertriebswissen("gespraech") || undefined;
+const analyzeLlm = (p: string) => (claudeAn() ? generateClaude(p, undefined, wissen()) : generateText(p, undefined, wissen()));
+const replyLlm = (p: string) => (claudeAn() ? generateClaude(p, undefined, wissen()) : generateText(p, undefined, wissen()));
 
 /** Stabiler Kurz-Fingerabdruck (djb2) der eingegangenen Nachricht – Basis der Idempotenz-Sperre. */
 function fingerprint(text: string): string {
