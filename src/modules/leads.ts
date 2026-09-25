@@ -1,5 +1,6 @@
 import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { humanScroll, humanDelay } from "../core/humanize.js";
+import { istSuchlimitText, markiereSuchlimit } from "../core/suchlimit.js";
 import { upsertContact } from "./crm.js";
 
 /**
@@ -24,6 +25,15 @@ export async function scrapeSearch(
 
   await humanScroll(page);
   await humanDelay(1500, 3500);
+
+  // SUCHLIMIT (siehe core/suchlimit.ts): LinkedIn liefert die Seite weiterhin aus, nur ohne
+  // brauchbare Treffer. Das wird HIER vermerkt, damit der Feed sich selbst stilllegt statt
+  // täglich rund 20 Seitenabrufe in eine Suche zu stecken, die nichts mehr hergibt. Das Parsen
+  // läuft trotzdem weiter: auf Seite 1 stehen vor dem Hinweis noch echte Profile.
+  const seitenText = await page.evaluate(
+    () => (document.querySelector("main") as HTMLElement | null)?.innerText || document.body.innerText || "",
+  );
+  if (istSuchlimitText(seitenText)) markiereSuchlimit();
 
   // LinkedIn verschleiert die CSS-Klassen der Ergebniskarten. Deshalb NICHT über
   // Klassen, sondern über den KARTEN-TEXT parsen: Der Profil-Anchor umschließt die

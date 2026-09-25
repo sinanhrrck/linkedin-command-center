@@ -1,4 +1,5 @@
 import { db } from "../db/index.js";
+import { suchlimitBis } from "../core/suchlimit.js";
 import { scrapeSearch } from "./leads.js";
 import { countContacts } from "./crm.js";
 
@@ -60,6 +61,15 @@ function pagedUrl(url: string, page: number): string {
  * (Ende erreicht) → zurück auf Seite 1 (Suchergebnisse ändern sich über Zeit).
  */
 export async function feedTick(maxPerSource = 25): Promise<number> {
+  // SUCHLIMIT (2026-09-25, core/suchlimit.ts): Ist LinkedIns monatliches Kontingent erschöpft,
+  // liefert JEDE Suche nur noch Dubletten und anonyme Treffer. Dann gar nicht erst laden – das
+  // Lese-Budget ist die Kennzahl, die LinkedIn beobachtet, und es für ein sicher leeres
+  // Ergebnis auszugeben, ist die schlechteste Art, es auszugeben.
+  const limitBis = suchlimitBis();
+  if (limitBis) {
+    console.info(`[feed] LinkedIn-Suchlimit erreicht – keine Lead-Suche bis ${limitBis}.`);
+    return 0;
+  }
   // ZIELGRUPPEN statt Fokus (2026-09-25): durchsucht werden nur Quellen einer AKTIVEN Zielgruppe.
   // Eine Quelle ohne Zielgruppe läuft NICHT mehr mit – sie würde Leads sammeln, die der Bot
   // ohnehin nie anschreiben darf, und dabei Lese-Budget verbrauchen.

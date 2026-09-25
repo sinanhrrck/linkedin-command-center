@@ -366,6 +366,22 @@ export function startTelegram() {
     bot.api.sendMessage(config.telegram.chatId, `✅ *Sende-Weg wieder in Ordnung* – Nachrichten laufen wieder.`, { parse_mode: "Markdown" }).catch(() => {});
   });
 
+  events.on("feed:suchlimit", (d: { bis: string }) => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api
+      .sendMessage(
+        config.telegram.chatId,
+        `🔎 *Keine neuen Leads bis ${d.bis}*\n\n` +
+          `LinkedIn meldet: monatliches Limit für Profilsuchen erreicht. Die Suche liefert nur ` +
+          `noch Bekannte und anonyme Treffer ohne Profil-Link.\n\n` +
+          `Ich habe die Lead-Suche deshalb pausiert – sie würde nur Lese-Budget verbrauchen. ` +
+          `Zum Monatsanfang läuft sie von selbst wieder an.\n` +
+          `Alles andere arbeitet normal weiter: Vernetzen, Annahmen, Postfach, Nachfassen.`,
+        { parse_mode: "Markdown" },
+      )
+      .catch(() => {});
+  });
+
   events.on("llm:fallback", (d: { grund: string; modell: string }) => {
     if (!bot || !config.telegram.chatId) return;
     bot.api

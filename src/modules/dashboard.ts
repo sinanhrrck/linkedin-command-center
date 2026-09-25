@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { db, getState, getMode, getFocus, getAgentMode } from "../db/index.js";
 import { governor } from "../core/safetyGovernor.js";
 import { leseStand } from "../core/leseBudget.js";
+import { suchlimitBis } from "../core/suchlimit.js";
 import { verlaufsBelegStand } from "./outreach.js";
 import { zielgruppenUebersicht, ohneZielgruppe, STANDARD_ERSTNACHRICHT } from "./zielgruppen.js";
 import { zgBedingung } from "../core/zielgruppenRegel.js";
@@ -539,6 +540,16 @@ export function getDashboardData() {
       } else if (acc.armed && acc.rate < acc.minRate) {
         liste.push({ was: acc.protectionActive ? "Vernetzungen (Schutzmodus)" : "Annahmequote niedrig – Schutz ist aus", grund: acc.protectionActive ? `Annahmequote ${(acc.rate * 100).toFixed(0)}% – maximal ${acc.reducedCap} statt ${acc.normalCap} Anfragen pro Tag` : `Annahmequote ${(acc.rate * 100).toFixed(0)}% – normales Limit ${acc.normalCap} pro Tag`, tun: "Anfragen einstellen", aktion: { art: "gehe", ziel: "settings", anker: "acceptance-warning", text: "Anfragen einstellen" } });
       }
+      // Suchlimit erklären, statt den Nutzer rätseln zu lassen, warum keine Leads mehr kommen
+      // (das Schadensbild sieht sonst nach einem kaputten Scraper aus – core/suchlimit.ts).
+      const suchBis = suchlimitBis();
+      if (suchBis)
+        liste.push({
+          was: "Neue Leads sammeln",
+          grund: `LinkedIns monatliches Limit für Profilsuchen ist erreicht – die Suche liefert nur noch bereits bekannte und anonyme Treffer. Das Limit hängt am Konto, weitere Quellen helfen nicht.`,
+          tun: `Läuft am ${suchBis} automatisch weiter`,
+          aktion: { art: "warten", text: `Pausiert bis ${suchBis}` },
+        });
       if (!(db.prepare("SELECT COUNT(*) n FROM zielgruppen WHERE aktiv=1").get() as { n: number }).n)
         liste.push({ was: "Lead-Suche und Ansprache", grund: "Keine Zielgruppe ist aktiv – der Bot sucht und schreibt niemanden an", tun: "Zielgruppe aktivieren", aktion: { art: "gehe", ziel: "settings", anker: "zg-card", text: "Zielgruppen öffnen" } });
       if (sendHealth.status !== "ok") liste.push({ was: "Nachrichtenversand", grund: sendHealth.reason || "Sendeweg noch nicht geprüft", tun: "Sendeweg prüfen", aktion: { art: "sofort", befehl: "sendeweg_pruefen", text: "Jetzt prüfen" } });

@@ -218,6 +218,29 @@ Wahrheit, deshalb zwei Mechanismen, beide ohne zusätzlichen Seitenaufruf:
   Nur hochstufen, nie zurück; closed/skipped bleiben.
 LEHRE: Backups nur im selben Container sind keine Backups. Vor jedem Neuaufbau `data/` sichern.
 
+## UPDATE 2026-09-25 (4) — LinkedIn-Suchlimit erkennen (`core/suchlimit.ts`)
+Auslöser: „0 Profile gefunden" bei allen 11 Quellen, sah nach gebrochenem Selektor aus. Live am
+Container gemessen (Kopie der Sitzung, Wegwerf-DB) war es LinkedIns monatliches Kontingent für
+Personensuchen: Seite 1 zeigt drei echte Profile und darunter „Sie haben das monatliche Limit für
+Profilsuchen erreicht", ab Seite 2 heißen ALLE Treffer „LinkedIn Mitglied" und haben KEINEN
+/in/-Link. `scrapeSearch` findet null Anker → `feedTick` deutet das als Ende der Ergebnisse und
+springt auf Seite 1 zurück → Endlos-Pendel. Gemessene Kosten: 22 der 37 Seitenabrufe des Tages,
+Ertrag ein Kontakt.
+- `istSuchlimitText()` prüft den Seitentext (de+en, whitespace-normalisiert), `markiereSuchlimit()`
+  schreibt den State `such_limit_bis` = erster Tag des FOLGEMONATS und feuert `feed:suchlimit`
+  GENAU EINMAL (ein bestehender Vermerk wird nie verlängert, sonst schiebt jeder Fund das Ende vor
+  sich her). `suchlimitBis()` räumt den abgelaufenen Vermerk beim LESEN weg – kein eigener Cron.
+- Daten kommen aus `leads.ts` (ein zusätzliches `evaluate` je Suche; das Parsen läuft weiter, weil
+  auf Seite 1 vor dem Hinweis echte Profile stehen). `feedTick` bricht bei aktivem Limit ab, BEVOR
+  eine Seite geladen wird. Telegram meldet es, das Cockpit zeigt es in der Blockaden-Liste.
+- Datum wird über `isoTag()` LOKAL gerechnet, nie `toISOString()` – das kippt abends den Tag.
+- WICHTIG fürs Debuggen: Das Schadensbild ist von einem Selektorbruch nicht zu unterscheiden.
+  Bei „0 Profile gefunden" IMMER zuerst den Seitentext ansehen. Das Limit hängt am KONTO – mehr
+  Quellen helfen nicht; betroffen ist NUR die Suche, Profilaufrufe und Postfach laufen weiter.
+- Diagnose ohne Betriebsstörung: `.session` nach `/tmp/.sess-diag` kopieren und mit `SESSION_DIR=`
+  plus `DB_PATH=/tmp/…` fahren. NIE eine zweite Playwright-Instanz auf dem LIVE-Profilordner.
+- Tests: `src/core/suchlimit.test.ts` (6 Fälle). Gesamt 180/180 grün, `tsc --noEmit` sauber.
+
 ## UPDATE 2026-09-25 (3) — Vertriebswissen als Hintergrund (`core/vertriebswissen.ts`)
 Sinans „Vertriebsbibel“ (~67 KB Markdown) liegt als `vertriebswissen.md` im DATENORDNER (nicht im
 öffentlichen Repo; Pfad überschreibbar mit `VERTRIEBSWISSEN_PATH`). Vorgabe: „Baue die Nachrichten
