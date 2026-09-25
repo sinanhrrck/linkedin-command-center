@@ -74,7 +74,7 @@ test("nach Firma gruppiert und englische Oberfläche", () => {
 });
 
 test("unbekannter Text liefert nichts statt Unsinn", () => {
-  assert.deepEqual(extrahiereProfilFakten("Irgendwas\nohne Abschnitte"), { rolle: null, firma: null, seit: null, ueber: null });
+  assert.deepEqual(extrahiereProfilFakten("Irgendwas\nohne Abschnitte"), { rolle: null, firma: null, seit: null, ueber: null, erfahrung: null, erstes_jahr: null });
   const lang = extrahiereProfilFakten(`Info\n${"sehr langer Text ".repeat(60)}\nAktivität`);
   assert.ok(lang.ueber!.length <= 502);
 });
@@ -99,4 +99,47 @@ test("Prompt nutzt die frische Rolle – eine veraltete Azubi-Headline macht kei
   setTextGeneratorForTests(null);
   deleteContact(c.id);
   assert.equal(profilFakten(c.id), null);
+});
+
+test("Zielgruppen-Fakten: alle Positionstitel, frühestes Jahr aus Stelle bzw. Abschluss, kein Seitenfuß", () => {
+  const AUSBILDERIN = `Petra Beispiel
+Bankkauffrau bei Sparkasse KölnBonn
+Berufserfahrung
+Ausbilderin für Bankkaufleute
+Sparkasse KölnBonn · Vollzeit
+Jan. 2012–Heute · 14 Jahre
+Köln
+Privatkundenberaterin
+Sparkasse KölnBonn · Vollzeit
+Aug. 2004–Dez. 2011 · 7 Jahre 5 Monate
+Ausbildung
+Ausbildung
+Sparkassenakademie NRW
+2001 – 2004
+Kenntnisse
+Info
+Barrierefreiheit
+Talent Solutions
+Community-Richtlinien`;
+  const f = extrahiereProfilFakten(AUSBILDERIN);
+  assert.match(f.erfahrung ?? "", /Ausbilderin für Bankkaufleute/);
+  assert.match(f.erfahrung ?? "", /Privatkundenberaterin/);
+  assert.equal(f.erstes_jahr, 2004);
+  assert.equal(f.ueber, null, "Seitenfuß ist kein Info-Text");
+
+  // Gruppiertes Format: „Ausbildung“ als Anstellungsart beendet den Block NICHT.
+  const g = extrahiereProfilFakten(GRUPPIERT);
+  assert.match(g.erfahrung ?? "", /Privatkundenberaterin \| Auszubildende/);
+  assert.equal(g.erstes_jahr, 2022);
+
+  // Azubi: Schulzeit ab 2012 zählt nicht, nur der Abschluss.
+  const azubi = extrahiereProfilFakten(`Berufserfahrung
+Auszubildender
+Sparkasse Köln · Ausbildung
+Aug. 2024–Heute · 1 Jahr 2 Monate
+Ausbildung
+Gymnasium Köln
+2012 – 2024
+Kenntnisse`);
+  assert.equal(azubi.erstes_jahr, 2024);
 });

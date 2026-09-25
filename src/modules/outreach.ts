@@ -8,6 +8,7 @@ import { db, getState, setState } from "../db/index.js";
 import { deferProfile, recordReadSaving } from "./lowRead.js";
 import { recordCrmStage } from "./crmStages.js";
 import { extrahiereProfilFakten, speichereProfilFakten } from "./profilFakten.js";
+import { zielgruppenPruefung } from "./zielgruppen.js";
 
 /** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
 function normText(s: string): string {
@@ -152,6 +153,33 @@ function schonVernetzt(profileUrl: string): boolean {
   return !!row;
 }
 
+/**
+ * LETZTE ZIELGRUPPEN-PRÜFUNG AM OFFENEN PROFIL (2026-09-25). Sinan: „Es werden zum Teil Menschen
+ * angeschrieben, welche Ausbilder sind … seit 20 Jahren aus der Ausbildung. Das darf nicht
+ * passieren.“ Die Auswahl-Abfragen kennen oft nur die Headline; erst hier, mit frisch gelesenen
+ * Profil-Fakten (alle Positionstitel, frühestes Lebenslauf-Jahr), ist die Entscheidung belastbar.
+ * Erbt von GovernorBlocked: kein governor.record(), kein Versand, jeder Aufrufer behandelt es als
+ * „übersprungen“. Die Fakten sind dann gespeichert – die Auswahl-Abfragen schließen die Person ab
+ * jetzt von selbst aus.
+ */
+export class ZielgruppePasstNicht extends GovernorBlocked {
+  constructor(public grund: string) {
+    super(`Profil passt nicht zur Zielgruppe: ${grund}`);
+    this.name = "ZielgruppePasstNicht";
+  }
+}
+export type Zielgruppencheck = "streng" | "wenn_zielgruppe" | "aus";
+function pruefeProfilGegenZielgruppe(profileUrl: string, modus: Zielgruppencheck): void {
+  if (modus === "aus") return;
+  const c = db.prepare("SELECT id, zielgruppe_id FROM contacts WHERE profile_url=?").get(profileUrl) as { id: number; zielgruppe_id: number | null } | undefined;
+  // „wenn_zielgruppe“ = Sinan hat selbst freigegeben: Kontakte außerhalb jeder Zielgruppe sind
+  // dann seine bewusste Entscheidung. Hat der Kontakt aber eine, muss das Profil auch passen.
+  if (!c) { if (modus === "streng") throw new ZielgruppePasstNicht("Kontakt nicht im CRM"); return; }
+  if (modus === "wenn_zielgruppe" && !c.zielgruppe_id) return;
+  const p = zielgruppenPruefung(c.id);
+  if (!p.ok) throw new ZielgruppePasstNicht(p.grund);
+}
+
 /** Eine Vernetzungsanfrage mit optionaler personalisierter Notiz. */
 /**
  * Profil-Fakten mitlesen, während die Profilseite ohnehin offen ist (Phase 5). EIN innerText
@@ -168,7 +196,7 @@ async function erfasseProfilFakten(page: Page, profileUrl: string): Promise<void
   } catch { /* still */ }
 }
 
-export async function sendConnectionRequest(profileUrl: string, note?: string) {
+export async function sendConnectionRequest(profileUrl: string, note?: string, zielgruppencheck: Zielgruppencheck = "streng") {
   try {
     // DOPPEL-VERNETZUNGS-SPERRE: greift auch, wenn versehentlich zwei Engines laufen (z.B. alte
     // Version aus einem DMG neben der installierten App). Dann bekommt dieselbe Person NIE zweimal
@@ -183,6 +211,7 @@ export async function sendConnectionRequest(profileUrl: string, note?: string) {
       if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
       await humanScroll(page); // erst schauen, dann handeln – wie ein Mensch
       await erfasseProfilFakten(page, profileUrl);
+      pruefeProfilGegenZielgruppe(profileUrl, zielgruppencheck); // VOR jedem Klick
 
       const connect = await findConnectButton(page);
       if ((await connect.count()) === 0) {
@@ -602,7 +631,7 @@ export function verlaufsBelegStand(): { geprueft: number; bestaetigt: number; ve
  * "campaign" für Event-Einladungen – die laufen in ein eigenes Tageskontingent, damit sich
  * Kampagne und Akquise nicht gegenseitig blockieren. Der Sendeweg ist identisch.
  */
-export async function sendMessage(profileUrl: string, text: string, typ: "message" | "campaign" = "message") {
+export async function sendMessage(profileUrl: string, text: string, typ: "message" | "campaign" = "message", zielgruppencheck: Zielgruppencheck = "aus") {
   let versandVersucht = false;
   try {
     return await governor.execute(typ, profileUrl, async () => {
@@ -610,6 +639,7 @@ export async function sendMessage(profileUrl: string, text: string, typ: "messag
       await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
       if (await guardAgainstCheckpoint(page)) throw new GovernorBlocked("Checkpoint");
       await erfasseProfilFakten(page, profileUrl);
+      pruefeProfilGegenZielgruppe(profileUrl, zielgruppencheck); // VOR dem Öffnen des Chats
 
       // Sicherheitsnetz: lieber gar nicht senden als an die falsche Person. Wenn der
       // Profil-Button fehlt (LinkedIn-Umbau), abbrechen statt blind irgendwo zu klicken.

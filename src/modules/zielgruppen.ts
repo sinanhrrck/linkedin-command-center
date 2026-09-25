@@ -45,7 +45,7 @@ export function zielgruppe(id: number | null | undefined): Zielgruppe | null {
   return (db.prepare("SELECT * FROM zielgruppen WHERE id=?").get(id) as Zielgruppe | undefined) ?? null;
 }
 
-type PersonRow = { id: number; headline: string | null; rolle: string | null; seit: string | null; zielgruppe_id: number | null; source_id: number | null };
+type PersonRow = { id: number; headline: string | null; rolle: string | null; seit: string | null; erfahrung: string | null; erstes_jahr: number | null; zielgruppe_id: number | null; source_id: number | null };
 
 /**
  * Trägt fehlende Zuordnungen nach: erst aus der Quelle, sonst über die Regel. Idempotent, belegte
@@ -60,7 +60,7 @@ export function ordneZielgruppenZu(): number {
   const gruppen = alleZielgruppen();
   if (!gruppen.length) return ausQuelle;
   const offen = db.prepare(
-    `SELECT c.id, c.headline, f.rolle, f.seit, c.zielgruppe_id, c.source_id
+    `SELECT c.id, c.headline, f.rolle, f.seit, f.erfahrung, f.erstes_jahr, c.zielgruppe_id, c.source_id
        FROM contacts c LEFT JOIN contact_profile_facts f ON f.contact_id=c.id
       WHERE c.zielgruppe_id IS NULL`,
   ).all() as PersonRow[];
@@ -81,7 +81,7 @@ export function ordneZielgruppenZu(): number {
  */
 export function zielgruppenPruefung(contactId: number): { ok: boolean; grund: string; gruppe: Zielgruppe | null } {
   const p = db.prepare(
-    `SELECT c.id, c.headline, f.rolle, f.seit, c.zielgruppe_id, c.source_id
+    `SELECT c.id, c.headline, f.rolle, f.seit, f.erfahrung, f.erstes_jahr, c.zielgruppe_id, c.source_id
        FROM contacts c LEFT JOIN contact_profile_facts f ON f.contact_id=c.id WHERE c.id=?`,
   ).get(contactId) as PersonRow | undefined;
   if (!p) return { ok: false, grund: "Kontakt unbekannt", gruppe: null };
@@ -206,7 +206,7 @@ export function vorschau(e: ZielgruppeEingabe) {
     max_berufsjahre: e.max_berufsjahre === "" || e.max_berufsjahre == null ? null : Number(e.max_berufsjahre),
   };
   const personen = db.prepare(
-    `SELECT c.id, c.headline, f.rolle, f.seit, c.status, c.messaged_at
+    `SELECT c.id, c.headline, f.rolle, f.seit, f.erfahrung, f.erstes_jahr, c.status, c.messaged_at
        FROM contacts c LEFT JOIN contact_profile_facts f ON f.contact_id=c.id
       WHERE ${e.id ? "c.zielgruppe_id=?" : "c.zielgruppe_id IS NULL"} AND COALESCE(c.do_not_contact,0)=0`,
   ).all(...(e.id ? [Number(e.id)] : [])) as (PersonRow & { status: string; messaged_at: string | null })[];

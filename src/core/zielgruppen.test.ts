@@ -34,6 +34,14 @@ test("Regel: Ausschluss schlägt Erkennung, Berufsjahre nur wenn bekannt", () =>
   assert.equal(pruefeZielgruppe({ headline: "Ausbildung Bankkauffrau", seit: "Aug. 2024" }, r, jetzt).ok, true);
 });
 
+test("Regel: Ausbilderin mit harmloser Headline fällt über Positionen und Lebenslauf heraus", () => {
+  const r = { erkennung: "Ausbildung, Azubi", ausschluss: "Ausbilder, Leiter", max_berufsjahre: 8 };
+  const jetzt = new Date("2026-09-25");
+  assert.match(pruefeZielgruppe({ headline: "Bankkauffrau | Ausbildung", erfahrung: "Ausbilderin für Bankkaufleute | Privatkundenberaterin" }, r, jetzt).grund, /ausbilder/);
+  assert.match(pruefeZielgruppe({ headline: "Ausbildung Bankkauffrau", erstes_jahr: 2004 }, r, jetzt).grund, /2004/);
+  assert.equal(pruefeZielgruppe({ headline: "Ausbildung Bankkauffrau", erstes_jahr: 2023, erfahrung: "Auszubildende" }, r, jetzt).ok, true);
+});
+
 test("Erststart legt Azubis (aktiv) und Studenten (pausiert, Fokus azubi) an", () => {
   const namen = zg.alleZielgruppen().map((z) => `${z.name}:${z.aktiv}`);
   assert.deepEqual(namen, ["Azubis:1", "Studenten:0"]);
@@ -97,6 +105,17 @@ test("Standard-Erstnachricht ohne Gedanken; Probe nutzt ungespeicherten Text", a
   assert.match(prompt, /PROBETEXT XYZ/);
   assert.doesNotMatch(prompt, /MEINE ANLEITUNG/, "Probe überschreibt die gespeicherte Anleitung");
   setTextGeneratorForTests(null);
+});
+
+test("Azubis-Zielgruppe schließt Ausbilder- und HR-Rollen aus, Lebenslauf max. 8 Jahre", () => {
+  const azubis = zg.alleZielgruppen().find((z) => z.name === "Azubis")!;
+  for (const w of ["ausbilder", "ausbildungsbeauftragt", "personal", "prüfer"]) assert.ok(azubis.ausschluss!.toLowerCase().includes(w), w);
+  assert.equal(azubis.max_berufsjahre, 8);
+  const petra = kontakt("Ausbildung & Beratung bei Sparkasse", "accepted");
+  db.prepare("INSERT INTO contact_profile_facts(contact_id, erfahrung, erstes_jahr, captured_at) VALUES(?,?,?,datetime('now'))")
+    .run(petra, "Ausbilderin für Bankkaufleute | Privatkundenberaterin", 2004);
+  zg.ordneZielgruppenZu();
+  assert.equal(zg.zielgruppenPruefung(petra).ok, false);
 });
 
 test("Vorschau zeigt Wirkung vor dem Speichern, ändert nichts", () => {

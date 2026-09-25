@@ -271,12 +271,22 @@ const integrity = repairContactDuplicates(db);
 if (integrity.removed) console.info(`[daten] ${integrity.groups} doppelte Kontaktgruppen zusammengefuehrt (${integrity.removed} Altzeilen).`);
 try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_normalized_url ON contacts(normalized_url) WHERE normalized_url IS NOT NULL"); } catch { /* wird beim naechsten Start erneut versucht */ }
 
+/** Rollen rund um Ausbildung und Personal – nie Zielgruppe „Azubis“ (Sinan 2026-09-25). */
+const AUSBILDER_WOERTER = "Ausbilder, Ausbildungsleit, Ausbildungsbeauftragt, Ausbildungsverantwort, Ausbildungsreferent, Referent Ausbildung, Referentin Ausbildung, Ausbildungskoordinat, Ausbildungsberat, Ausbildungsbetreu, Ausbildungsmanag, Ausbildungsmarketing, Nachwuchsgewinnung, Nachwuchsförderung, Nachwuchsentwicklung, Personal, Recruiting, Prüfer, Prüfungsausschuss, Praxisanleit, Trainer, Lehrer, Dozent, Führungskraft";
 // ZIELGRUPPEN (2026-09-25). `zg_passt` ist die Regel aus core/zielgruppenRegel.ts als SQL-Funktion,
 // damit jede Auswahl-Abfrage direkt filtern kann. Sie bekommt alle Werte als Argumente und fragt
 // selbst NICHTS ab – better-sqlite3 verbietet Abfragen innerhalb einer laufenden Abfrage.
-db.function("zg_passt", (headline, rolle, seit, erkennung, ausschluss, maxJahre) =>
+for (const [column, definition] of [["erfahrung", "TEXT"], ["erstes_jahr", "INTEGER"]] as const) {
+  try { db.exec(`ALTER TABLE contact_profile_facts ADD COLUMN ${column} ${definition}`); } catch { /* existiert */ }
+}
+// Der Info-Auszug enthielt bei Profilen ohne „Info“ den LinkedIn-Seitenfuß (2026-09-25 gefunden).
+db.exec("UPDATE contact_profile_facts SET ueber=NULL WHERE ueber LIKE 'Barrierefreiheit%' OR ueber LIKE 'Accessibility%'");
+db.function("zg_passt", (headline, rolle, seit, erfahrung, erstesJahr, erkennung, ausschluss, maxJahre) =>
   pruefeZielgruppe(
-    { headline: headline as string | null, rolle: rolle as string | null, seit: seit as string | null },
+    {
+      headline: headline as string | null, rolle: rolle as string | null, seit: seit as string | null,
+      erfahrung: erfahrung as string | null, erstes_jahr: erstesJahr == null ? null : Number(erstesJahr),
+    },
     { erkennung: erkennung as string | null, ausschluss: ausschluss as string | null, max_berufsjahre: maxJahre == null ? null : Number(maxJahre) },
   ).ok ? 1 : 0,
 );
@@ -295,8 +305,8 @@ if (!(db.prepare("SELECT COUNT(*) n FROM zielgruppen").get() as { n: number }).n
     "Azubis",
     fokus === "student" ? 0 : 1,
     "Ausbildung, Auszubildend, Azubi, Dual, Trainee, Lehrjahr, Angehend",
-    "Leiter, Leitung, Manager, Direktor, Vorstand, Head of, Senior, Prokurist, Geschäftsführ, Inhaber, Ausbilder, Recruit, Personalreferent, Dozent, Coach, Berater für",
-    5,
+    `Leiter, Leitung, Manager, Direktor, Vorstand, Head of, Senior, Prokurist, Geschäftsführ, Inhaber, Recruit, Coach, Berater für, ${AUSBILDER_WOERTER}`,
+    8,
   ).lastInsertRowid);
   const student = Number(neu.run(
     "Studenten",
@@ -307,6 +317,25 @@ if (!(db.prepare("SELECT COUNT(*) n FROM zielgruppen").get() as { n: number }).n
   ).lastInsertRowid);
   db.prepare("UPDATE lead_sources SET zielgruppe_id=? WHERE zielgruppe_id IS NULL AND zielgruppe='student'").run(student);
   db.prepare("UPDATE lead_sources SET zielgruppe_id=? WHERE zielgruppe_id IS NULL").run(azubi);
+}
+
+/**
+ * NACHSCHÄRFUNG „Azubis“ (2026-09-25, zweiter Schritt): Ausbilder und Personaler dürfen nie
+ * angeschrieben werden. Einmalig (Merker im state): fehlende Wörter an die vorhandene Liste
+ * ANHÄNGEN – Sinans eigene Änderungen bleiben –, und die Jahresgrenze von 5 auf 8, weil sie jetzt
+ * ab dem frühesten Lebenslauf-Eintrag zählt (Abschluss/erste Stelle) statt ab der aktuellen Rolle.
+ */
+if (!db.prepare("SELECT 1 FROM state WHERE key='zielgruppen_ausbilder_v1'").get()) {
+  const azubis = db.prepare("SELECT id, ausschluss, max_berufsjahre FROM zielgruppen WHERE name='Azubis'").get() as
+    | { id: number; ausschluss: string | null; max_berufsjahre: number | null } | undefined;
+  if (azubis) {
+    const vorhanden = String(azubis.ausschluss || "").split(",").map((w) => w.trim()).filter(Boolean);
+    const klein = new Set(vorhanden.map((w) => w.toLowerCase()));
+    const neu = AUSBILDER_WOERTER.split(",").map((w) => w.trim()).filter((w) => w && !klein.has(w.toLowerCase()));
+    db.prepare("UPDATE zielgruppen SET ausschluss=?, max_berufsjahre=CASE WHEN max_berufsjahre=5 THEN 8 ELSE max_berufsjahre END, updated_at=datetime('now') WHERE id=?")
+      .run([...vorhanden, ...neu].join(", "), azubis.id);
+  }
+  db.prepare("INSERT OR REPLACE INTO state(key,value) VALUES('zielgruppen_ausbilder_v1', datetime('now'))").run();
 }
 
 /** Key/Value-State */

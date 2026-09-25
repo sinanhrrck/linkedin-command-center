@@ -235,6 +235,18 @@ stoppt den Versand an sie; mehrere gleichzeitig möglich.
   Editor mit „Wirkung prüfen“-Vorschau), Lead-Quellen mit Zielgruppen-Auswahl. Blockade-Hinweis, wenn
   keine Zielgruppe aktiv ist. API `POST /api/zielgruppe` (save|aktiv|delete|vorschau|ki|probe),
   `/api/source` action zielgruppe|toggle.
+- **AUSBILDER-SCHUTZ (gleicher Tag, Sinan: „Ausbilder mit 40 und 20 Jahren im Beruf – das darf nicht
+  passieren“):** Headlines verraten das selten. Deshalb (1) Profil-Fakten lesen jetzt ALLE sichtbaren
+  Positionstitel (`erfahrung`) und das früheste Lebenslauf-Jahr (`erstes_jahr` = min(Start erste
+  Position, Schul-/Studien-ABSCHLUSS)); „Ausbildung“ als Anstellungsart beendet den Erfahrungsblock
+  nicht mehr; der LinkedIn-Seitenfuß landet nicht mehr als Info-Text. (2) Die Regel prüft Ausschluss-
+  wörter gegen Headline + alle Positionen, Jahresgrenze gegen das früheste Jahr. (3) HARTE PRÜFUNG AM
+  OFFENEN PROFIL: `sendConnectionRequest` (immer „streng“) und `sendMessage` (Erstnachricht/Nachfassen
+  automatisch „streng“, von Sinan freigegeben „wenn_zielgruppe“) werfen nach `erfasseProfilFakten`
+  `ZielgruppePasstNicht` (erbt GovernorBlocked → kein record, kein Versand), BEVOR geklickt/getippt
+  wird. `sendDraft` setzt solche Entwürfe auf `blockiert` (kein Endlos-Neuversuch). (4) „Azubis“
+  bekam einmalig (state `zielgruppen_ausbilder_v1`) Ausbilder-/HR-Wörter angehängt und 8 statt 5 Jahre.
+  (5) Lead-Bewertung: Ausbilder/Personaler/Prüfer immer „keiner“ < 10.
 - **TEST-FALLE (gefunden am selben Tag):** `empfaengerName.test.ts` lief OHNE eigene `DB_PATH` und
   schrieb bei jedem Testlauf `verlauf_belege="00000"` in die ECHTE DB → Cockpit-Warnung „0 von 5
   Versänden im Verlauf“ ohne einen einzigen Versand. JEDER Test, der Module mit DB importiert, setzt
@@ -242,7 +254,7 @@ stoppt den Versand an sie; mehrere gleichzeitig möglich.
   `/data`-Mount laufen lassen (`docker compose run -v /tmp/leer:/data …`), nie per `exec` im
   laufenden Container. `core/testZielgruppe.ts` stellt in Tests, die etwas anderes prüfen, alle
   Kontakte in eine offene Zielgruppe.
-- Tests: `src/core/zielgruppen.test.ts` (6 Fälle). Gesamt 161 grün (+ updateCheck, der im
+- Tests: `src/core/zielgruppen.test.ts` (8 Fälle) + Profil-Fakten-Fall. Gesamt 164 grün (+ updateCheck, der im
   Server-Image mangels `desktop/` nicht laufen kann), `tsc --noEmit` sauber.
 
 ## UPDATE 2026-09-23 — Vertrieblicher (Hormozi), Warteschlange, Selbstlernen

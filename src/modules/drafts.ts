@@ -1,7 +1,7 @@
 import { db, getMode } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { fetchThreads, type ThreadContext } from "./inbox.js";
-import { sendThreadReply, sendMessage, sendComment, VersandNichtVersucht } from "./outreach.js";
+import { sendThreadReply, sendMessage, sendComment, VersandNichtVersucht, ZielgruppePasstNicht } from "./outreach.js";
 import { firstMessage, followupMessage, reaktivierungMessage, converseStep, pitchIdeen, messageAusIdee } from "./personalize.js";
 import { GovernorBlocked, DuplikatBlockiert } from "../core/safetyGovernor.js";
 import { istPlausibleNachricht, UnsichereNachricht } from "../core/nachrichtCheck.js";
@@ -274,10 +274,14 @@ export async function generateFollowups(limit = 5): Promise<number> {
       );
       if (!text) continue;
       try {
-        await sendMessage(c.profile_url, text);
+        await sendMessage(c.profile_url, text, "message", "streng");
         if (wahl) registriereVersand({ contactId: c.id, kind: "followup", stufe, slot: wahl.slot, arm: wahl.arm, zielgruppe: c.zielgruppe ?? null });
         done++;
       } catch (e) {
+        if (e instanceof ZielgruppePasstNicht) {
+          console.info(`[followup] ${c.full_name ?? c.profile_url} nicht nachgefasst – ${e.grund}.`);
+          continue; // KEIN Ersatz-Entwurf: die Person gehört nicht (mehr) zur Zielgruppe
+        }
         if (!(e instanceof GovernorBlocked)) console.error("[followup] Sendefehler → Entwurf:", (e as Error)?.message);
         if (await createFollowupDraft(c).catch(() => false)) done++;
       }
@@ -358,10 +362,14 @@ export async function deliverFirstMessage(c: Contact): Promise<void> {
     return;
   }
   try {
-    await sendMessage(c.profile_url, text); // setzt Status 'messaged' bei Erfolg
+    await sendMessage(c.profile_url, text, "message", "streng"); // setzt Status 'messaged' bei Erfolg
     if (wahlAuto) registriereVersand({ contactId: c.id, kind: "first", slot: wahlAuto.slot, arm: wahlAuto.arm, goalCode: auftrag.goal?.code ?? null, zielgruppe: c.zielgruppe ?? null });
     console.info(`[first] ✅ Erstnachricht auto-gesendet an ${c.full_name}`);
   } catch (e) {
+    if (e instanceof ZielgruppePasstNicht) {
+      console.info(`[first] ${c.full_name ?? c.profile_url} NICHT angeschrieben – ${e.grund}.`);
+      return;
+    }
     // GovernorBlocked (z.B. Sonntag/außerhalb der Zeit/Limit) = nur vertagt: Kontakt bleibt
     // 'accepted' und wird beim nächsten Lauf erneut versucht. KEIN Entwurf daraus machen.
     if (e instanceof GovernorBlocked) {
@@ -779,7 +787,12 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
     // Event-Einladungen laufen in den eigenen Kampagnen-Topf des Governors, damit sie das
     // Akquise-Kontingent nicht aufbrauchen (Sinans Vorgabe 2026-08-05). Sendeweg identisch.
     else if (d.kind === "first" || d.kind === "followup" || d.kind === "reaktivierung" || d.kind === "event")
-      await sendMessage(d.thread_url, d.draft, d.kind === "event" ? "campaign" : "message");
+      await sendMessage(
+        d.thread_url, d.draft, d.kind === "event" ? "campaign" : "message",
+        // Automatisch freigegeben = streng; von Sinan freigegeben = nur prüfen, wenn der Kontakt
+        // einer Zielgruppe angehört (dann muss das Profil passen). Einladungen sind ein Sonderweg.
+        d.kind === "event" ? "aus" : d.freigabe_quelle === "auto" ? "streng" : "wenn_zielgruppe",
+      );
     else await sendThreadReply(d.thread_url, d.draft, d.participant ?? "");
     db.prepare("UPDATE drafts SET status='sent', sent_at=datetime('now') WHERE id=? AND status='sending'").run(id);
     syncCampaignTargetForDraft(id, "sent", "Nachricht nachweislich gesendet");
@@ -791,6 +804,15 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
     registriereVarianteFuerEntwurf(d);
     return { ok: true };
   } catch (e) {
+    // Profil passt nicht (Ausbilder, zu viele Berufsjahre …): NIE erneut versuchen – sonst öffnete
+    // jeder 10-Minuten-Lauf dasselbe Profil wieder und blockierte die Freigaben dahinter.
+    if (e instanceof ZielgruppePasstNicht) {
+      const grund = `Profil passt nicht zur Zielgruppe: ${e.grund}`;
+      db.prepare("UPDATE drafts SET status='blockiert', blockiert_grund=? WHERE id=? AND status='sending'").run(grund, id);
+      syncCampaignTargetForDraft(id, "blockiert", grund);
+      console.info(`[send] Entwurf #${id} nicht gesendet – ${grund}`);
+      return { ok: false, reason: grund };
+    }
     if (e instanceof DuplikatBlockiert) {
       db.prepare("UPDATE drafts SET status='discarded' WHERE id=? AND status='sending'").run(id);
       syncCampaignTargetForDraft(id, "discarded", e.message);

@@ -44,7 +44,7 @@ async function bewerteGruppe(liste: Kandidat[]): Promise<number> {
 ÜBER ${p.name.toUpperCase()}: ${p.persona}
 ZIEL: ${p.ziel}
 ${angebote ? `ANGEBOTE:\n${angebote}` : ""}
-Zwei Wege: "beratung" = Kunde für Finanzberatung (Berufseinsteiger mit erstem Gehalt, Geldfragen). "partner" = Karriere/Vertriebspartner (Azubis und junge Bank-/Finanzleute mit Ehrgeiz, Orientierung nach der Ausbildung). "beide" = passt zu beidem. "keiner" = klar unpassend (z. B. Recruiter, Führungskräfte weit über der Zielgruppe, Fake-/Firmenprofile, völlig fremde Branche ohne Bezug).
+Zwei Wege: "beratung" = Kunde für Finanzberatung (Berufseinsteiger mit erstem Gehalt, Geldfragen). "partner" = Karriere/Vertriebspartner (Azubis und junge Bank-/Finanzleute mit Ehrgeiz, Orientierung nach der Ausbildung). "beide" = passt zu beidem. "keiner" = klar unpassend (z. B. Recruiter, Führungskräfte weit über der Zielgruppe, Fake-/Firmenprofile, völlig fremde Branche ohne Bezug). IMMER "keiner" mit Note unter 10: Ausbilder, Ausbildungsverantwortliche, Personaler, Prüfer und alle, die schon viele Jahre im Beruf sind – sie BETREUEN Azubis, sie SIND keine.
 
 Bewerte jede Person NUR anhand dieser Angaben, nichts dazuerfinden. Im Zweifel mittlere Note, nicht "keiner". Fehlen Angaben (Headline "-"), dann Note 40 und "beide" – fehlende Angaben sind kein Ausschlussgrund.
 

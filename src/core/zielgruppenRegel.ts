@@ -31,21 +31,33 @@ export function seitJahr(seit: string | null | undefined): number | null {
   return m ? Number(m[1]) : null;
 }
 
+export type PersonFuerZielgruppe = {
+  headline?: string | null; rolle?: string | null; seit?: string | null;
+  /** Alle sichtbaren Positionstitel aus dem Profil (Profil-Fakten), nicht nur der aktuelle. */
+  erfahrung?: string | null;
+  /** Frühestes Lebenslauf-Jahr (erste Position bzw. Schul-/Studienabschluss). */
+  erstes_jahr?: number | null;
+};
+
 export function pruefeZielgruppe(
-  person: { headline?: string | null; rolle?: string | null; seit?: string | null },
+  person: PersonFuerZielgruppe,
   regel: ZielgruppenRegel,
   jetzt = new Date(),
 ): { ok: boolean; grund: string } {
-  const text = `${person.headline ?? ""} ${person.rolle ?? ""}`.toLowerCase();
+  // Ausschlusswörter gelten für ALLE Positionen im Profil: eine Ausbilderin schreibt das selten in
+  // die Headline („Bankkauffrau bei Volksbank“), aber in ihre Berufserfahrung (2026-09-25).
+  const text = `${person.headline ?? ""} ${person.rolle ?? ""} ${person.erfahrung ?? ""}`.toLowerCase();
   const raus = woerter(regel.ausschluss).find((w) => text.includes(w));
   if (raus) return { ok: false, grund: `Profil enthält „${raus}“` };
   const erkennung = woerter(regel.erkennung);
   if (erkennung.length && !erkennung.some((w) => text.includes(w)))
     return { ok: false, grund: "Kein Erkennungswort im Profil" };
-  const jahr = seitJahr(person.seit);
+  // Maßgeblich ist das FRÜHESTE bekannte Jahr: erste Position/Abschluss oder Start der aktuellen Rolle.
+  const kandidaten = [person.erstes_jahr ?? null, seitJahr(person.seit)].filter((j): j is number => j != null && j > 1900);
+  const jahr = kandidaten.length ? Math.min(...kandidaten) : null;
   const max = regel.max_berufsjahre;
   if (max != null && max > 0 && jahr != null && jetzt.getFullYear() - jahr > max)
-    return { ok: false, grund: `Seit ${jahr} im Job (mehr als ${max} Jahre)` };
+    return { ok: false, grund: `Lebenslauf reicht bis ${jahr} zurück (mehr als ${max} Jahre)` };
   return { ok: true, grund: "" };
 }
 
@@ -57,5 +69,5 @@ export function pruefeZielgruppe(
 export function zgBedingung(alias: string): string {
   return `EXISTS (SELECT 1 FROM zielgruppen zg LEFT JOIN contact_profile_facts zgf ON zgf.contact_id=${alias}.id
     WHERE zg.id=${alias}.zielgruppe_id AND zg.aktiv=1
-      AND zg_passt(${alias}.headline, zgf.rolle, zgf.seit, zg.erkennung, zg.ausschluss, zg.max_berufsjahre)=1)`;
+      AND zg_passt(${alias}.headline, zgf.rolle, zgf.seit, zgf.erfahrung, zgf.erstes_jahr, zg.erkennung, zg.ausschluss, zg.max_berufsjahre)=1)`;
 }
