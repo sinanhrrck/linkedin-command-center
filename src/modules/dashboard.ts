@@ -6,6 +6,7 @@ import { governor } from "../core/safetyGovernor.js";
 import { leseStand } from "../core/leseBudget.js";
 import { verlaufsBelegStand } from "./outreach.js";
 import { zielgruppenUebersicht, ohneZielgruppe, STANDARD_ERSTNACHRICHT } from "./zielgruppen.js";
+import { zgBedingung } from "../core/zielgruppenRegel.js";
 import { config } from "../config.js";
 import { pendingDrafts, approvedCount } from "./drafts.js";
 import { pendingPosts } from "./content.js";
@@ -81,6 +82,8 @@ type ContactRow = {
   outcome_stage: string | null;
   quelle: string | null;
   letzte_beruehrung: string | null;
+  zielgruppe_name: string | null;
+  in_zielgruppe: number;
   offene_aufgaben: number;
   naechste_faelligkeit: string | null;
   notizen: number;
@@ -106,6 +109,8 @@ export function getDashboardData() {
               c.automation_status,c.snoozed_until,c.snooze_label,c.snooze_reason,c.do_not_contact,
               o.stage AS outcome_stage,o.note AS outcome_note,o.value_cents AS outcome_value_cents,
               ls.label AS quelle,
+              zgn.name AS zielgruppe_name,
+              CASE WHEN ${zgBedingung("c")} THEN 1 ELSE 0 END AS in_zielgruppe,
               COALESCE(c.last_meaningful_contact_at,c.replied_at,c.messaged_at,c.accepted_at,c.invited_at,c.created_at) AS letzte_beruehrung,
               (SELECT COUNT(*) FROM sales_tasks t WHERE t.contact_id=c.id AND t.status='open') AS offene_aufgaben,
               (SELECT MIN(t.due_at) FROM sales_tasks t WHERE t.contact_id=c.id AND t.status='open' AND t.due_at IS NOT NULL) AS naechste_faelligkeit,
@@ -117,6 +122,7 @@ export function getDashboardData() {
        LEFT JOIN campaigns ca ON ca.id=c.campaign_id
        LEFT JOIN sales_outcomes o ON o.contact_id=c.id
        LEFT JOIN lead_sources ls ON ls.id=c.source_id
+       LEFT JOIN zielgruppen zgn ON zgn.id=c.zielgruppe_id
        ORDER BY
          CASE c.status WHEN 'replied' THEN 0 WHEN 'messaged' THEN 1 WHEN 'accepted' THEN 2
                      WHEN 'invited' THEN 3 WHEN 'new' THEN 4 ELSE 5 END,

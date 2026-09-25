@@ -360,3 +360,19 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 .source-form select{border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px 11px;font-size:12px}
 .source-item select{font-size:10px;border:1px solid var(--line);border-radius:7px;padding:3px 6px;background:#fff}
 @media(max-width:760px){.zg-grid{grid-template-columns:1fr}.zg-item{grid-template-columns:1fr}.zg-actions{grid-template-columns:1fr 1fr}.zg-actions span{display:none}.source-form{grid-template-columns:1fr}}
+
+/* LEAD-QUELLEN ALS TABELLE (Designrunde 3, 2026-09-25) */
+.quellen-card .source-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) 200px auto;gap:8px;margin:14px 0 12px}
+.source-table{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.source-row{display:grid;grid-template-columns:minmax(0,1.6fr) 150px 140px 220px;gap:12px;align-items:center;padding:9px 14px;border-top:1px solid var(--line);font-size:12px}
+.source-row:first-child{border-top:0}
+.source-row b{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.source-row select{font-size:12px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:#fff;width:100%}
+.source-head{background:var(--bg,#f6f8fb);font:700 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.source-state{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.source-state:before{content:"";width:7px;height:7px;border-radius:50%;background:#b9c2cf}
+.source-state.an{color:var(--ink)}.source-state.an:before{background:var(--green)}
+.source-state.warn{color:var(--amber)}.source-state.warn:before{background:var(--amber)}
+#faelle-card{grid-column:auto}
+@media(max-width:900px){.quellen-card .source-form{grid-template-columns:1fr}.source-row{grid-template-columns:1fr 1fr}.source-head{display:none}}
+.relationship-state.outside{background:#f1f4f8;color:#5d6b80;border-color:#dde4ee}

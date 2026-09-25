@@ -34,7 +34,8 @@ NextLead ist ein LinkedIn-Vertriebsassistent. Er findet passende Leute (vor alle
 - Einzelprüfung eines Entwurfs: Genehmigen (der Bot sendet dann selbst, gedrosselt), Ablehnen (mit Grund, dann schreibt die KI neu), Löschen. Tastenkürzel: A genehmigen, R ablehnen, J/K weiterblättern.
 - Kontakte: eine Liste aller Kontakte wie in einem CRM, sortierbar (Kontakt, Status mit Stufe, Score, letzte Berührung, nächster Schritt). Je Kontakt über "Verlauf": Stufe von Hand setzen (nur qualifiziert, Termin, gewonnen, verloren, passt nicht), Aufgaben, Notizen, pausieren.
 - Auswertung in vier Reitern: Überblick (Kennzahlen, KI-Wochenanalyse, Funnel "Von der Quelle zum Ergebnis"), Was wirkt (Stil-Test, Lernen aus deinen Entscheidungen), Rechner (Zielweg vom Monatsziel zur nötigen Kontaktzahl), Berichte (Tages-/Wochenbericht, Aktivität).
-- Einstellungen: Engine starten/stoppen, Automatik-Stufe, globale Grenzen, "Dein Angebot", "Nachfass-Plan", "Automatische Freigabe", technische Fälle, Lead-Quellen.
+- Einstellungen hat vier Reiter: "Betrieb" (Engine starten/stoppen, Automatik-Stufe), "Zielgruppen & Quellen" (Zielgruppen, Erstnachricht je Zielgruppe, Lead-Quellen als Tabelle mit Zustand und Zielgruppen-Auswahl), "Nachrichten & Angebot" (Dein Angebot, Nachfass-Plan, Automatische Freigabe), "Sicherheit" (globale Grenzen, technische Fälle).
+- Kontakte: Filter "Außerhalb der Zielgruppen" zeigt, wen der Bot nicht automatisch anschreibt; noch nicht angeschriebene Kontakte außerhalb tragen den Hinweis direkt in der Zeile.
 
 ## Automatik-Stufen (Einstellungen → Wer entscheidet?)
 - Ich prüfe alles: Vernetzen läuft automatisch, jede Nachricht ist ein Entwurf zur Freigabe.

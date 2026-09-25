@@ -304,7 +304,7 @@ if (!(db.prepare("SELECT COUNT(*) n FROM zielgruppen").get() as { n: number }).n
   const azubi = Number(neu.run(
     "Azubis",
     fokus === "student" ? 0 : 1,
-    "Ausbildung, Auszubildend, Azubi, Dual, Trainee, Lehrjahr, Angehend",
+    "Ausbildung, Auszubild, Azubi, Dual, Trainee, Lehrjahr, Angehend",
     `Leiter, Leitung, Manager, Direktor, Vorstand, Head of, Senior, Prokurist, Geschäftsführ, Inhaber, Recruit, Coach, Berater für, ${AUSBILDER_WOERTER}`,
     8,
   ).lastInsertRowid);
@@ -336,6 +336,12 @@ if (!db.prepare("SELECT 1 FROM state WHERE key='zielgruppen_ausbilder_v1'").get(
       .run([...vorhanden, ...neu].join(", "), azubis.id);
   }
   db.prepare("INSERT OR REPLACE INTO state(key,value) VALUES('zielgruppen_ausbilder_v1', datetime('now'))").run();
+}
+
+// „Auszubildener“ (Tippfehler im Profil) traf „Auszubildend“ nicht – der Wortstamm genügt (2026-09-25).
+if (!db.prepare("SELECT 1 FROM state WHERE key='zielgruppen_wortstamm_v1'").get()) {
+  db.exec("UPDATE zielgruppen SET erkennung=REPLACE(erkennung,'Auszubildend','Auszubild'), updated_at=datetime('now') WHERE erkennung LIKE '%Auszubildend%'");
+  db.prepare("INSERT OR REPLACE INTO state(key,value) VALUES('zielgruppen_wortstamm_v1', datetime('now'))").run();
 }
 
 /** Key/Value-State */

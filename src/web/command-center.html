@@ -114,7 +114,7 @@
 
     <section class="view" id="view-contacts">
       <section class="page-intro compact"><div><span class="eyebrow">Eine Kontaktbasis</span><h2>Kontakte und Gespräche</h2><p>Jede Person erscheint nur einmal. Filter zeigen, wo der Kontakt gerade steht.</p></div></section>
-      <div class="contact-toolbar"><input id="contact-search" type="search" placeholder="Name oder Headline suchen"/><select id="contact-filter"><option value="all">Alle Kontakte</option><option value="attention">Braucht Entscheidung</option><option value="paused">Wiedervorlagen</option><option value="excluded">Nicht mehr anschreiben</option><option value="new">Noch nicht kontaktiert</option><option value="invited">Anfrage offen</option><option value="accepted">Angenommen</option><option value="messaged">Angeschrieben</option><option value="replied">Hat geantwortet</option><option value="closed">Abgeschlossen</option></select><span id="identity-quality" class="identity-quality"></span><span id="contact-count"></span></div>
+      <div class="contact-toolbar"><input id="contact-search" type="search" placeholder="Name oder Headline suchen"/><select id="contact-filter"><option value="all">Alle Kontakte</option><option value="attention">Braucht Entscheidung</option><option value="paused">Wiedervorlagen</option><option value="excluded">Nicht mehr anschreiben</option><option value="ausserhalb">Außerhalb der Zielgruppen</option><option value="new">Noch nicht kontaktiert</option><option value="invited">Anfrage offen</option><option value="accepted">Angenommen</option><option value="messaged">Angeschrieben</option><option value="replied">Hat geantwortet</option><option value="closed">Abgeschlossen</option></select><span id="identity-quality" class="identity-quality"></span><span id="contact-count"></span></div>
       <div class="contact-table"><div class="contact-scroll"><div class="contact-row contact-head"><button type="button" data-sort="name">Kontakt</button><button type="button" data-sort="status">Status</button><button type="button" data-sort="score">Score</button><button type="button" data-sort="beruehrung">Letzte Berührung</button><span>Nächster Schritt</span><span></span></div><div id="contact-rows"></div></div></div>
     </section>
 
@@ -214,16 +214,17 @@
 
     <section class="view" id="view-settings">
       <section class="page-intro compact"><div><span class="eyebrow">Arbeitsweise</span><h2>Automatik und Sicherheit</h2><p>Hier legst du fest, was NextLead selbst erledigt. Der tägliche Arbeitskorb bleibt davon frei.</p></div></section>
+      <nav class="subtabs" id="settings-tabs" role="tablist" aria-label="Einstellungen"><button role="tab" data-settings-tab="betrieb">Betrieb</button><button role="tab" data-settings-tab="zielgruppen">Zielgruppen &amp; Quellen</button><button role="tab" data-settings-tab="nachrichten">Nachrichten &amp; Angebot</button><button role="tab" data-settings-tab="sicherheit">Sicherheit</button></nav>
       <div class="settings-grid">
         <section id="acceptance-warning" class="setting-card wide-card acceptance-warning hidden" aria-live="polite">
           <div class="acceptance-warning-copy"><span class="eyebrow">Annahmequote niedrig</span><div><b id="acceptance-warning-rate">–</b><span id="acceptance-warning-threshold">Warnschwelle –</span></div><h3>Weniger Vernetzungsanfragen senden?</h3><p id="acceptance-warning-effect"></p></div>
           <button id="acceptance-protection-toggle" class="switch-control" type="button" role="switch" aria-checked="true"><span class="switch-track"><i></i></span><span><b>Weniger Anfragen senden</b><small id="acceptance-protection-state">Aktiv</small></span></button>
         </section>
-        <h2 class="settings-group"><span>Betrieb</span><small>Läuft der Bot, und wie viel entscheidet er selbst?</small></h2>
-        <section class="setting-card"><span class="eyebrow">Engine</span><h3 id="engine-title">Lokale Engine</h3><p id="engine-copy"></p><div class="button-row"><button id="engine-toggle" class="primary"></button><button id="backup-now">Jetzt sichern</button></div></section>
-        <section class="setting-card"><span class="eyebrow">Automatik</span><h3>Wer entscheidet?</h3><div id="automation-levels" class="segmented"><button data-level="vorschlaege">Ich prüfe alles</button><button data-level="halb">Erstkontakt automatisch</button><button data-level="agent_test">Gespräche testen</button><button data-level="agent_live">Gespräche automatisch</button></div><p id="automation-copy"></p></section>
-        <h2 class="settings-group"><span>Zielgruppen</span><small>Wen der Bot sucht und automatisch anschreibt.</small></h2>
-        <section id="zg-card" class="setting-card wide-card zg-card">
+        <h2 data-stab="betrieb" class="settings-group"><span>Betrieb</span><small>Läuft der Bot, und wie viel entscheidet er selbst?</small></h2>
+        <section data-stab="betrieb" class="setting-card"><span class="eyebrow">Engine</span><h3 id="engine-title">Lokale Engine</h3><p id="engine-copy"></p><div class="button-row"><button id="engine-toggle" class="primary"></button><button id="backup-now">Jetzt sichern</button></div></section>
+        <section data-stab="betrieb" class="setting-card"><span class="eyebrow">Automatik</span><h3>Wer entscheidet?</h3><div id="automation-levels" class="segmented"><button data-level="vorschlaege">Ich prüfe alles</button><button data-level="halb">Erstkontakt automatisch</button><button data-level="agent_test">Gespräche testen</button><button data-level="agent_live">Gespräche automatisch</button></div><p id="automation-copy"></p></section>
+        <h2 data-stab="zielgruppen" class="settings-group"><span>Zielgruppen</span><small>Wen der Bot sucht und automatisch anschreibt.</small></h2>
+        <section id="zg-card" data-stab="zielgruppen" class="setting-card wide-card zg-card">
           <div class="section-head"><div><span class="eyebrow">Zielgruppen</span><h3>Nur wer hier aktiv ist, wird angeschrieben</h3></div><button id="zg-neu">+ Neue Zielgruppe</button></div>
           <p>Aus den Quellen einer aktiven Zielgruppe sammelt der Bot Leads. Vernetzen, Erstnachricht und Nachfassen gehen nur an Kontakte, deren Profil zur Zielgruppe passt. Pausierst oder änderst du eine Zielgruppe, stoppt die automatische Ansprache sofort. Wer schon mit dir schreibt, bekommt weiter Antworten.</p>
           <div id="zg-liste" class="zg-liste"></div>
@@ -247,8 +248,14 @@
             <p id="zg-note" class="form-note" role="status"></p>
           </div>
         </section>
-        <h2 class="settings-group"><span>Nachrichten & Angebot</span><small>Was der Bot anbietet, wie er nachfasst und was er selbst freigeben darf.</small></h2>
-        <section class="setting-card wide-card offer-card" id="offer-card">
+        <section id="quellen-card" data-stab="zielgruppen" class="setting-card wide-card quellen-card">
+          <div class="section-head"><div><span class="eyebrow">Lead-Quellen</span><h3>Wo der Bot nach neuen Kontakten sucht</h3></div></div>
+          <p>Eine Quelle ist eine gespeicherte LinkedIn-Suche. Durchsucht werden nur Quellen, die zu einer aktiven Zielgruppe gehören.</p>
+          <div class="source-form"><input id="source-label" placeholder="Name, z. B. „Azubis Sparkasse Köln“"/><input id="source-url" placeholder="LinkedIn-Such-Adresse einfügen"/><select id="source-zg" aria-label="Zielgruppe der Quelle"></select><button id="source-add" class="primary">Quelle hinzufügen</button></div>
+          <div id="source-list" class="source-table"></div>
+        </section>
+        <h2 data-stab="nachrichten" class="settings-group"><span>Nachrichten & Angebot</span><small>Was der Bot anbietet, wie er nachfasst und was er selbst freigeben darf.</small></h2>
+        <section data-stab="nachrichten" class="setting-card wide-card offer-card" id="offer-card">
           <div class="section-head"><div><span class="eyebrow">Dein Angebot</span><h3>Wozu die Leute leicht Ja sagen</h3></div><div class="head-side"><button id="offer-ki" title="Die KI schlägt aus deinem Profil drei neue kostenlose Angebote vor (ein Claude-Aufruf)">✨ KI-Vorschläge holen</button><button id="offer-save" class="primary">Angebot speichern</button></div></div>
           <p>Kostenlose Angebote, die der Bot im Gespräch passend zum Signal anbietet: Karriere-Fragen bekommen das Karriere-Angebot, Geldfragen das Gespräch dazu. Angeboten wird nur, was hier aktiv ist.</p>
           <div id="offer-list" class="offer-list"></div>
@@ -260,22 +267,21 @@
           </div>
           <p id="offer-note" class="form-note" role="status"></p>
         </section>
-        <section class="setting-card wide-card followup-card">
+        <section data-stab="nachrichten" class="setting-card wide-card followup-card">
           <div class="section-head"><div><span class="eyebrow">Nachfass-Plan</span><h3>Wie oft und womit nachgefasst wird</h3></div><button id="fu-save" class="primary">Plan speichern</button></div>
           <p>Jede Nachfassung hat einen eigenen Anlass statt „wollte nochmal nachfragen“. Die letzte ist immer ein ehrlicher Schlussstrich, danach meldet sich der Bot nie wieder. Höchstens 3 Stufen, gezählt in Tagen seit der letzten Nachricht.</p>
           <div class="button-row"><button data-fu-preset="2">Standard: 2 Stufen (4 / 7 Tage)</button><button data-fu-preset="3">Intensiver: 3 Stufen (3 / 5 / 7 Tage)</button></div>
           <div id="fu-steps" class="fu-steps"></div>
           <p id="fu-note" class="form-note" role="status"></p>
         </section>
-        <section class="setting-card wide-card auto-card">
+        <section data-stab="nachrichten" class="setting-card wide-card auto-card">
           <div class="section-head"><div><span class="eyebrow">Automatische Freigabe</span><h3>Sichere Entwürfe selbst genehmigen lassen</h3></div><button id="auto-save" class="primary">Speichern</button></div>
           <p>Standardmäßig aus. Eingeschaltet genehmigt NextLead nur Entwürfe, die die Prüfung bestehen, frühestens nach der Wartezeit (du kannst vorher noch eingreifen) und nur, wenn du diese Art zuletzt meist unverändert genehmigt hast. Gesendet wird weiterhin gedrosselt über den Sicherheits-Regler.</p>
           <div id="auto-card-body" class="auto-body"></div>
         </section>
-        <h2 class="settings-group"><span>Sicherheit & Daten</span><small>Grenzen, die das Konto schützen, und woher neue Kontakte kommen.</small></h2>
-        <section class="setting-card"><span class="eyebrow">Schutz</span><h3>Globale Grenzen</h3><div id="safety-summary"></div></section>
-        <section class="setting-card"><span class="eyebrow">Lead-Quellen</span><h3>Automatischer Nachschub</h3><div class="source-form"><input id="source-label" placeholder="Name der Quelle"/><input id="source-url" placeholder="LinkedIn-Such-URL"/><select id="source-zg" aria-label="Zielgruppe der Quelle"></select><button id="source-add">Quelle hinzufügen</button></div><div id="source-list"></div></section>
-        <section id="faelle-card" class="setting-card wide-card"><div class="section-head"><div><span class="eyebrow">Technische Fälle</span><h3 id="faelle-title">Nicht zugestellt</h3></div><button id="faelle-retry" class="primary">Alle erneut prüfen</button></div><p>Hier hat eine Sicherung eingegriffen und NICHT gesendet. „Alle erneut prüfen" schickt behebbare Fälle zurück in die Freigabe und verwirft, was hinfällig ist (schon angeschrieben, schon beantwortet).</p><div id="faelle-liste"></div></section>
+        <h2 data-stab="sicherheit" class="settings-group"><span>Sicherheit</span><small>Grenzen, die dein Konto schützen, und Nachrichten, bei denen eine Sicherung eingegriffen hat.</small></h2>
+        <section data-stab="sicherheit" class="setting-card"><span class="eyebrow">Schutz</span><h3>Globale Grenzen</h3><div id="safety-summary"></div></section>
+        <section id="faelle-card" data-stab="sicherheit" class="setting-card"><div class="section-head"><div><span class="eyebrow">Technische Fälle</span><h3 id="faelle-title">Nicht zugestellt</h3></div><button id="faelle-retry" class="primary">Alle erneut prüfen</button></div><p>Hier hat eine Sicherung eingegriffen und NICHT gesendet. „Alle erneut prüfen" schickt behebbare Fälle zurück in die Freigabe und verwirft, was hinfällig ist (schon angeschrieben, schon beantwortet).</p><div id="faelle-liste"></div></section>
       </div>
     </section>
 

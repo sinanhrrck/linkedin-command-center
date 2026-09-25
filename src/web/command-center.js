@@ -198,6 +198,7 @@ function renderStatus() {
 function springeZu(ziel, anker) {
   showView(ziel);
   const el = anker && $(anker);
+  if (el?.dataset.stab) zeigeSettingsTab(el.dataset.stab);
   if (!el || el.classList.contains("hidden")) return;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
   el.classList.add("anker-ziel");
@@ -1010,7 +1011,7 @@ async function openContactWorkspace(contact) {
 /** Vertriebsstufen in Klartext. Reihenfolge = Fortschritt; `lost`/`not_fit` sind Endpunkte. */
 const STUFE = {
   found: "Gefunden", suitable: "Geeignet", invited: "Eingeladen", accepted: "Angenommen",
-  messaged: "Angeschrieben", replied: "Geantwortet", qualified: "Passt", meeting: "Termin",
+  messaged: "Angeschrieben", replied: "Geantwortet", qualified: "Qualifiziert", meeting: "Termin",
   won: "Gewonnen", lost: "Verloren", not_fit: "Passt nicht",
 };
 const STUFE_RANG = { found: 1, suitable: 2, invited: 3, accepted: 4, messaged: 5, replied: 6, qualified: 7, meeting: 8, won: 9, lost: 0, not_fit: 0 };
@@ -1035,6 +1036,7 @@ function renderContacts() {
   if (query) rows = rows.filter((contact) => `${contact.full_name || ""} ${contact.headline || ""} ${contact.quelle || ""}`.toLowerCase().includes(query));
   if (filter === "attention") rows = rows.filter((contact) => contact.open_draft_id || contact.status === "replied" || contact.automation_status === "paused");
   else if (filter === "paused" || filter === "excluded") rows = rows.filter((contact) => contact.automation_status === filter);
+  else if (filter === "ausserhalb") rows = rows.filter((contact) => !contact.in_zielgruppe);
   else if (filter !== "all") rows = rows.filter((contact) => contact.status === filter);
   if (contactSort.key) {
     const richtung = contactSort.dir === "desc" ? -1 : 1;
@@ -1066,7 +1068,7 @@ function renderContacts() {
     ].join("");
     // Designrunde 2: sechs Spalten statt neun – Stufe steht unter dem Status, Aufgaben/Notizen
     // als Symbole am Namen, die Quelle im Tooltip.
-    return `<div class="contact-row"><div class="contact-person" title="${esc(contact.quelle ? `Quelle: ${contact.quelle}` : "")}"><b>${esc(contact.full_name || "Unbekannt")}${offen ? `<span class="contact-open">${offen}</span>` : ""}</b><span>${esc(contact.headline || "Keine Headline")}</span>${protectedState ? `<i class="relationship-state ${contact.automation_status === "excluded" ? "excluded" : ""}">${esc(protectedState)}</i>` : ""}</div><div class="contact-status"><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span>${contact.outcome_stage ? stufe : ""}</div><span class="contact-score" title="${esc(contact.ki_grund ? `KI: ${contact.ki_score} · ${({ beratung: "Beratung", partner: "Partner", beide: "Beratung + Partner", keiner: "passt nicht" })[contact.ki_fit] || ""} · ${contact.ki_grund}` : "Regel-Note (noch nicht von der KI bewertet)")}">${contact.ki_score ?? contact.lead_score ?? "–"}${contact.ki_score != null ? `<i class="ki-mark">KI</i>` : ""}</span><span class="contact-meta">${contact.letzte_beruehrung ? esc(relativeTime(contact.letzte_beruehrung)) : "–"}</span><span class="next-step">${esc(nextStep(contact))}</span><span class="contact-actions"><button class="contact-history" data-contact-history="${contact.id}">Verlauf</button><button class="contact-policy icon-only ${protectedState ? "resume" : ""}" data-contact-policy="${contact.id}" title="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}" aria-label="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}">${protectedState ? "▶" : "⏸"}</button><a class="icon-link" href="${esc(contact.profile_url)}" target="_blank" rel="noopener" title="LinkedIn-Profil öffnen" aria-label="LinkedIn-Profil öffnen">↗</a></span></div>`;
+    return `<div class="contact-row"><div class="contact-person" title="${esc([contact.quelle ? `Quelle: ${contact.quelle}` : "", contact.zielgruppe_name ? `Zielgruppe: ${contact.zielgruppe_name}` : "keiner Zielgruppe zugeordnet"].filter(Boolean).join(" · "))}"><b>${esc(contact.full_name || "Unbekannt")}${offen ? `<span class="contact-open">${offen}</span>` : ""}</b><span>${esc(contact.headline || "Keine Headline")}</span>${protectedState ? `<i class="relationship-state ${contact.automation_status === "excluded" ? "excluded" : ""}">${esc(protectedState)}</i>` : !contact.in_zielgruppe && ["new", "invited", "accepted"].includes(contact.status) ? `<i class="relationship-state outside">Außerhalb der Zielgruppe · keine automatische Ansprache</i>` : ""}</div><div class="contact-status"><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span>${contact.outcome_stage ? stufe : ""}</div><span class="contact-score" title="${esc(contact.ki_grund ? `KI: ${contact.ki_score} · ${({ beratung: "Beratung", partner: "Partner", beide: "Beratung + Partner", keiner: "passt nicht" })[contact.ki_fit] || ""} · ${contact.ki_grund}` : "Regel-Note (noch nicht von der KI bewertet)")}">${contact.ki_score ?? contact.lead_score ?? "–"}${contact.ki_score != null ? `<i class="ki-mark">KI</i>` : ""}</span><span class="contact-meta">${contact.letzte_beruehrung ? esc(relativeTime(contact.letzte_beruehrung)) : "–"}</span><span class="next-step">${esc(nextStep(contact))}</span><span class="contact-actions"><button class="contact-history" data-contact-history="${contact.id}">Verlauf</button><button class="contact-policy icon-only ${protectedState ? "resume" : ""}" data-contact-policy="${contact.id}" title="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}" aria-label="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}">${protectedState ? "▶" : "⏸"}</button><a class="icon-link" href="${esc(contact.profile_url)}" target="_blank" rel="noopener" title="LinkedIn-Profil öffnen" aria-label="LinkedIn-Profil öffnen">↗</a></span></div>`;
   }).join("") || `<div class="empty-work">Keine Kontakte in diesem Filter.</div>`;
   $("contact-rows").querySelectorAll("[data-contact-history]").forEach((button) => button.addEventListener("click", () => {
     const contact = (state.contacts || []).find((item) => item.id === Number(button.dataset.contactHistory));
@@ -1727,7 +1729,17 @@ function renderSettings() {
     + `<div class="safety-line"><span>Geschäftszeiten</span><b>${g.zeitfenster === false ? "Aus" : "Aktiv"}</b></div>`
     + `<div class="safety-line"><span>Sendeweg</span><b>${esc(({ ok: "Geprüft", broken: "Defekt", stale: "Prüfung fällig", unknown: "Noch nicht geprüft" })[state.systemHealth?.sendeWeg] || "Unbekannt")}</b></div>`;
   const zgOptionen = (gewaehlt) => (state.zielgruppen || []).map((z) => `<option value="${z.id}" ${Number(gewaehlt) === z.id ? "selected" : ""}>${esc(z.name)}${z.aktiv ? "" : " (pausiert)"}</option>`).join("");
-  $("source-list").innerHTML = (state.leadSources || []).map((source) => `<div class="source-item"><b>${esc(source.label || "Quelle")}</b><span>${source.active ? "aktiv" : "pausiert"} · zuletzt ${source.last_added || 0} Leads · <select data-source-zg="${source.id}"><option value="">– keine Zielgruppe (wird nicht durchsucht) –</option>${zgOptionen(source.zielgruppe_id)}</select></span></div>`).join("") || `<p>Noch keine Quellen hinterlegt.</p>`;
+  // Quellen als Tabelle: Name · Zustand · letzter Lauf · Zielgruppe (2026-09-25, Designrunde 3).
+  const zgAktiv = new Map((state.zielgruppen || []).map((z) => [z.id, !!z.aktiv]));
+  const quellen = state.leadSources || [];
+  $("source-list").innerHTML = quellen.length
+    ? `<div class="source-row source-head"><span>Quelle</span><span>Zustand</span><span>Letzter Lauf</span><span>Zielgruppe</span></div>`
+      + quellen.map((source) => {
+        const laeuft = source.active && source.zielgruppe_id && zgAktiv.get(Number(source.zielgruppe_id));
+        const zustand = !source.active ? ["aus", "Quelle aus"] : !source.zielgruppe_id ? ["warn", "ohne Zielgruppe"] : laeuft ? ["an", "wird durchsucht"] : ["aus", "Zielgruppe pausiert"];
+        return `<div class="source-row"><b title="${esc(source.search_url || "")}">${esc(source.label || "Quelle")}</b><span class="source-state ${zustand[0]}">${zustand[1]}</span><span class="muted">${source.last_run ? `${source.last_added || 0} neu · ${esc(kurzDatum(source.last_run))}` : "noch nie"}</span><select data-source-zg="${source.id}" aria-label="Zielgruppe für ${esc(source.label || "Quelle")}"><option value="">keine – wird nicht durchsucht</option>${zgOptionen(source.zielgruppe_id)}</select></div>`;
+      }).join("")
+    : `<p class="muted">Noch keine Quellen. Füge oben eine LinkedIn-Suche hinzu.</p>`;
   $("source-list").querySelectorAll("[data-source-zg]").forEach((sel) => sel.addEventListener("change", async () => {
     try { await post("/api/source", { action: "zielgruppe", id: Number(sel.dataset.sourceZg), zielgruppeId: sel.value ? Number(sel.value) : null }); toast("Quelle zugeordnet."); await load(true); }
     catch (error) { toast(`Nicht möglich: ${error.message}`); }
@@ -1999,6 +2011,24 @@ $("zg-loeschen").onclick = () => zgKnopf($("zg-loeschen"), "löscht…", async (
 // Alle 20s aktualisieren. Ist ein Prüfbereich offen, bleibt NUR dieser stehen – der Rest der
 // Seite (Arbeitskorb, Kampagnen, Status) zieht trotzdem nach.
 load(); setInterval(() => load(!!(reviewKinds || reviewCampaign)), 20000);
+
+/**
+ * EINSTELLUNGEN IN REITERN (Designrunde 3, 2026-09-25): vorher eine lange Seite mit acht Blöcken
+ * untereinander. Gleiches Muster wie die Auswertung; gemerkt pro Browser. Karten tragen `data-stab`.
+ */
+function zeigeSettingsTab(tab) {
+  const erlaubt = ["betrieb", "zielgruppen", "nachrichten", "sicherheit"];
+  if (!erlaubt.includes(tab)) tab = "betrieb";
+  document.querySelectorAll("#view-settings [data-stab]").forEach((el) => el.classList.toggle("tab-aus", el.dataset.stab !== tab));
+  document.querySelectorAll("[data-settings-tab]").forEach((b) => { b.classList.toggle("active", b.dataset.settingsTab === tab); b.setAttribute("aria-selected", String(b.dataset.settingsTab === tab)); });
+  try { localStorage.setItem("settings-tab", tab); } catch { /* egal */ }
+}
+document.querySelectorAll("[data-settings-tab]").forEach((b) => b.addEventListener("click", () => zeigeSettingsTab(b.dataset.settingsTab)));
+{
+  let tab = "betrieb";
+  try { tab = localStorage.getItem("settings-tab") || "betrieb"; } catch { /* egal */ }
+  zeigeSettingsTab(tab);
+}
 
 /**
  * AUSWERTUNG IN REITERN (Designrunde 2, 2026-09-23): statt acht Blöcken untereinander vier Reiter.
