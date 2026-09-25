@@ -83,6 +83,13 @@ export async function feedTick(maxPerSource = 25): Promise<number> {
   console.info(`[feed] ${sources.length} Quelle(n) aktiver Zielgruppen`);
   let totalNew = 0;
   for (const s of sources) {
+    // Wurde das Limit gerade eben bei einer Quelle erkannt, sind die restlichen Quellen
+    // garantiert genauso leer (das Kontingent hängt am Konto, nicht an der Suchanfrage).
+    // Ohne diesen Abbruch würde EIN Durchlauf noch zehn weitere Seiten umsonst laden.
+    if (suchlimitBis()) {
+      console.info("[feed] Suchlimit während des Durchlaufs erreicht – restliche Quellen übersprungen.");
+      break;
+    }
     const before = countContacts();
     // Rückgabe = Anzahl gefundener Profile auf der Seite (vor Filter, inkl. Duplikate).
     const found = await scrapeSearch(pagedUrl(s.search_url, s.cursor_page), maxPerSource, s.keep_filter ?? undefined, s.id);
