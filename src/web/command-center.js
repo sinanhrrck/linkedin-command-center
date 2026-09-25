@@ -146,7 +146,7 @@ function renderStatus() {
     box.querySelectorAll("[data-blockade]").forEach((button) => button.addEventListener("click", async () => {
       const a = (blockaden[Number(button.dataset.blockade)] || {}).aktion;
       if (!a) return;
-      if (a.art === "gehe") return showView(a.ziel);
+      if (a.art === "gehe") return springeZu(a.ziel, a.anker);
       if (a.art === "review") {
         showView("today"); reviewCampaign = null; reviewKinds = a.kinds; reviewIndex = 0; renderReviewer();
         return;
@@ -178,7 +178,10 @@ function renderStatus() {
         if (a.befehl === "engine_start") await post("/api/engine", { action: "start" });
         if (a.befehl === "notaus_loesen") await post("/api/notaus", { an: false });
         if (a.befehl === "pause_loesen") await post("/api/pause", { an: false });
-        toast("Erledigt. Der Bot arbeitet weiter.");
+        if (a.befehl === "sendeweg_pruefen" || a.befehl === "beleg_quittieren") await post("/api/beheben", { befehl: a.befehl });
+        toast(a.befehl === "sendeweg_pruefen" ? "Prüfung angestoßen – das Ergebnis steht in ein bis zwei Minuten hier."
+          : a.befehl === "beleg_quittieren" ? "Warnung geschlossen. Sie kommt nur wieder, wenn erneut Belege fehlen."
+          : "Erledigt. Der Bot arbeitet weiter.");
         // Engine-Start braucht einen Moment, bis der Heartbeat steht.
         setTimeout(() => load(true), a.befehl === "engine_start" ? 3000 : 600);
       } catch (error) {
@@ -189,6 +192,16 @@ function renderStatus() {
     }));
   }
   const emergency = $("emergency"); emergency.classList.toggle("active", stopped); emergency.textContent = stopped ? "Not-Aus lösen" : "Not-Aus";
+}
+
+/** Bereich öffnen und die gemeinte Karte sichtbar machen, statt oben auf einer langen Seite zu landen. */
+function springeZu(ziel, anker) {
+  showView(ziel);
+  const el = anker && $(anker);
+  if (!el || el.classList.contains("hidden")) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.classList.add("anker-ziel");
+  setTimeout(() => el.classList.remove("anker-ziel"), 2400);
 }
 
 const GROUPS = [
@@ -321,7 +334,7 @@ function renderDecisions() {
   const drafts = (state.drafts || []).filter((d) => d.kind !== "event");
   $("decisions-count").textContent = att.total || "";
   const zeilen = [];
-  if (att.systemIssues) zeilen.push({ dringend: true, art: "Technik", name: `${att.systemIssues} technische${att.systemIssues === 1 ? "s Problem" : " Probleme"}`, text: "Sendeweg oder unklare Zustellung prüfen", ziel: () => showView("settings") });
+  if (att.systemIssues) zeilen.push({ dringend: true, art: "Technik", name: `${att.systemIssues} technische${att.systemIssues === 1 ? "s Problem" : " Probleme"}`, text: "Sendeweg oder unklare Zustellung prüfen", ziel: () => springeZu("today", "blockaden") });
   // Übergaben einzeln – mit Name, Nummer, Chat-Link und Abhaken. Vorher eine Sammelzeile, die
   // nur auf die Kontaktliste sprang und nie verschwand.
   for (const u of state.bookedLeads || []) zeilen.push({ uebergabe: u, dringend: true, art: "Termin", name: u.participant || "Unbekannt", text: u.contact ? `Kontakt: ${u.contact}` : "Gespräch übernehmen", zeit: u.updated_at });

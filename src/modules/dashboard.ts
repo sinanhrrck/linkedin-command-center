@@ -500,8 +500,10 @@ export function getDashboardData() {
        * `art: "warten"` = nichts zu tun, läuft von allein weiter (kein Knopf).
        */
       type Aktion =
-        | { art: "sofort"; befehl: "engine_start" | "notaus_loesen" | "pause_loesen"; text: string }
-        | { art: "gehe"; ziel: "today" | "settings" | "contacts" | "campaigns"; text: string }
+        | { art: "sofort"; befehl: "engine_start" | "notaus_loesen" | "pause_loesen" | "sendeweg_pruefen" | "beleg_quittieren"; text: string }
+        // `anker` = id der Karte, zu der gesprungen wird. Nur „Einstellungen“ ohne Anker ließ Sinan
+        // vor einer langen Seite stehen, ohne zu wissen, wo er etwas beheben kann (2026-09-25).
+        | { art: "gehe"; ziel: "today" | "settings" | "contacts" | "campaigns"; anker?: string; text: string }
         | { art: "kampagne"; id: number; text: string }
         | { art: "job"; name: string; text: string }
         | { art: "review"; kinds: string[]; text: string }
@@ -521,12 +523,12 @@ export function getDashboardData() {
             ? `Annahmequote ${(acc.rate * 100).toFixed(0)}% – maximal ${acc.reducedCap} statt ${acc.normalCap} Anfragen pro Tag`
             : `Annahmequote ${(acc.rate * 100).toFixed(0)}% – derzeit gilt das normale Limit von ${acc.normalCap} Anfragen pro Tag`,
           tun: "Anfragen einstellen",
-          aktion: { art: "gehe", ziel: "settings", text: "Anfragen einstellen" },
+          aktion: { art: "gehe", ziel: "settings", anker: "acceptance-warning", text: "Anfragen einstellen" },
         });
       } else if (acc.armed && acc.rate < acc.minRate) {
-        liste.push({ was: acc.protectionActive ? "Vernetzungen (Schutzmodus)" : "Annahmequote niedrig – Schutz ist aus", grund: acc.protectionActive ? `Annahmequote ${(acc.rate * 100).toFixed(0)}% – maximal ${acc.reducedCap} statt ${acc.normalCap} Anfragen pro Tag` : `Annahmequote ${(acc.rate * 100).toFixed(0)}% – normales Limit ${acc.normalCap} pro Tag`, tun: "Anfragen einstellen", aktion: { art: "gehe", ziel: "settings", text: "Anfragen einstellen" } });
+        liste.push({ was: acc.protectionActive ? "Vernetzungen (Schutzmodus)" : "Annahmequote niedrig – Schutz ist aus", grund: acc.protectionActive ? `Annahmequote ${(acc.rate * 100).toFixed(0)}% – maximal ${acc.reducedCap} statt ${acc.normalCap} Anfragen pro Tag` : `Annahmequote ${(acc.rate * 100).toFixed(0)}% – normales Limit ${acc.normalCap} pro Tag`, tun: "Anfragen einstellen", aktion: { art: "gehe", ziel: "settings", anker: "acceptance-warning", text: "Anfragen einstellen" } });
       }
-      if (sendHealth.status !== "ok") liste.push({ was: "Nachrichtenversand", grund: sendHealth.reason || "Sendeweg noch nicht geprüft", tun: "Sendeweg prüfen", aktion: { art: "gehe", ziel: "settings", text: "Sendeweg prüfen" } });
+      if (sendHealth.status !== "ok") liste.push({ was: "Nachrichtenversand", grund: sendHealth.reason || "Sendeweg noch nicht geprüft", tun: "Sendeweg prüfen", aktion: { art: "sofort", befehl: "sendeweg_pruefen", text: "Jetzt prüfen" } });
       for (const failure of jobFailures) {
         liste.push({
           was: `Hintergrundaufgabe „${failure.job}"`,
@@ -543,9 +545,9 @@ export function getDashboardData() {
       if (beleg.verdaechtig) {
         liste.push({
           was: "Versandbestätigung",
-          grund: `Nur ${beleg.bestaetigt} von ${beleg.geprueft} Versänden im Verlauf wiedergefunden – der Beleg-Selektor stimmt vermutlich nicht mehr`,
-          tun: "Verlauf stichprobenartig prüfen",
-          aktion: { art: "gehe", ziel: "settings", text: "Verlauf prüfen" },
+          grund: `Nur ${beleg.bestaetigt} von ${beleg.geprueft} Versänden im Verlauf wiedergefunden. Schau in LinkedIn, ob die letzten Nachrichten angekommen sind. Wenn ja, Warnung schließen – wenn nein, Not-Aus drücken.`,
+          tun: "In LinkedIn prüfen, dann bestätigen",
+          aktion: { art: "sofort", befehl: "beleg_quittieren", text: "Kommen an – schließen" },
         });
       }
       if (!approved && openDrafts.length) {
@@ -568,7 +570,7 @@ export function getDashboardData() {
         liste.push({ was: `Kampagne „${k.name}"`, grund: "Kein Kontakt mehr in der Warteschlange", tun: "Zielgruppe bearbeiten", aktion: { art: "kampagne", id: k.id, text: "Zielgruppe bearbeiten" } });
       }
       const faelle = (db.prepare("SELECT COUNT(*) n FROM drafts WHERE status IN ('blockiert','unknown')").get() as { n: number }).n;
-      if (faelle) liste.push({ was: "Vom Schutz gestoppte Entwürfe", grund: `${faelle} Nachrichten wurden bewusst nicht versendet`, tun: "Prüfen oder verwerfen", aktion: { art: "gehe", ziel: "settings", text: "Schutzfälle ansehen" } });
+      if (faelle) liste.push({ was: "Vom Schutz gestoppte Entwürfe", grund: `${faelle} Nachrichten wurden bewusst nicht versendet`, tun: "Prüfen oder verwerfen", aktion: { art: "gehe", ziel: "settings", anker: "faelle-card", text: "Schutzfälle ansehen" } });
       return liste;
     })(),
     operations: {

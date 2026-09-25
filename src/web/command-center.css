@@ -335,3 +335,6 @@ main{padding:0 34px 24px;max-width:1500px;width:100%;margin:auto}.topbar{height:
 .ki-empf li{display:grid;gap:2px;font-size:13px}
 .ki-empf small{color:var(--blue);font-weight:600}
 .ki-mark{font-style:normal;font-size:9px;font-weight:800;color:var(--blue);background:var(--blue-soft);border-radius:4px;padding:1px 3px;margin-left:4px;vertical-align:middle}
+
+/* Sprungziel aus „Warum steht etwas still“: kurz hervorheben, damit klar ist, wo es weitergeht. */
+.anker-ziel{outline:3px solid var(--blue);outline-offset:3px;transition:outline-color .4s}

@@ -757,6 +757,28 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // BEHEBEN aus „Warum steht etwas still“ (2026-09-25): Meldungen, die vorher nur in die
+  // Einstellungen sprangen, ohne dass es dort etwas zu tun gab. Nur Flags setzen – den Browser
+  // besitzt die Engine; sie holt `healthcheck_now` beim nächsten 2-Minuten-Tick ab.
+  if (url.pathname === "/api/beheben" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { befehl } = JSON.parse(body || "{}");
+        if (befehl === "sendeweg_pruefen") setState("healthcheck_now", "1");
+        // Nur nach Sichtprüfung in LinkedIn: die Kette zählt ab jetzt neu, die Warnung kommt
+        // wieder, sobald erneut fünf Versände ohne Verlaufsbeleg zusammenkommen.
+        else if (befehl === "beleg_quittieren") setState("verlauf_belege", "");
+        else throw new Error("Unbekannter Befehl.");
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, befehl }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String((e as Error)?.message || e) }));
+      }
+    });
+    return;
+  }
+
   // Lead-Quellen: hinzufügen / löschen / sofort Nachschub anfordern. Ersetzt `npm run source`.
   // Das eigentliche Scrapen macht die ENGINE (sie besitzt den Browser) – hier wird nur die
   // Quelle gespeichert und ein "feed_now"-Flag gesetzt, das der Loop beim nächsten Tick abholt.

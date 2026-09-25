@@ -41,7 +41,7 @@ import { backfillContactIdentities } from "./modules/contactIdentity.js";
 import { backfillContactTimeline } from "./modules/contactTimeline.js";
 import { backfillCampaignWorkflows, syncCampaignTargetForDraft } from "./modules/campaignWorkflow.js";
 import { backfillConversationMemories, backfillDraftContexts } from "./modules/conversationMemory.js";
-import { LeseBudgetErschoepft } from "./core/leseBudget.js";
+import { LeseBudgetErschoepft, leseStand } from "./core/leseBudget.js";
 import { jobRunPermission, recordJobFailure, recordJobSuccess } from "./core/jobReliability.js";
 import { JobTimeoutError, JOB_TIMEOUT_MS, DEFAULT_JOB_TIMEOUT_MS, runWithJobTimeout } from "./core/jobTimeout.js";
 import { istServerModus, logZeitzone, serverErststart } from "./core/serverMode.js";
@@ -417,6 +417,17 @@ cron.schedule("*/2 * * * *", () =>
   }, 45),
 );
 cron.schedule("30 9 * * 2", () => einzeln("netzwerk", () => netzwerkLauf(3), 35));
+
+// SENDEWEG JETZT PRÜFEN auf Knopfdruck (Cockpit setzt "healthcheck_now"=1). Umgeht nur den
+// 6-Stunden-Takt, nicht das Lese-Budget: ist es erschöpft, wartet der Auftrag bis morgen.
+cron.schedule("*/2 * * * *", () =>
+  einzeln("healthcheck", async () => {
+    if (getState("healthcheck_now") !== "1" || leseStand().erschoepft) return;
+    setState("healthcheck_now", "");
+    await selbstCheck();
+    setState("low_read_last_healthcheck", new Date().toISOString());
+  }, 75),
+);
 
 /**
  * OFFENE-ANTWORTEN-SCAN (Sinans Vorgabe 2026-07-27): geht ALLE Chats durch – auch alte, längst

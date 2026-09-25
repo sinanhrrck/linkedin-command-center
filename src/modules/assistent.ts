@@ -69,7 +69,11 @@ Standard aus. Eingeschaltet genehmigt NextLead nur Entwürfe, die die Prüfung b
 Je Nachrichtenart testet der Bot 2 bis 3 Stile und bevorzugt den, der mehr positive Antworten bringt. Gibt es einen klaren Gewinner, erfindet die KI montags einen neuen Herausforderer (mit "KI" markiert); verliert er klar, wird er beendet. Ein Versand zählt erst nach 10 Tagen ohne Antwort als Misserfolg. Stile, die du oft ablehnst, pausieren.
 
 ## Telegram
-/status, /warum (warum steht der Bot), /entwuerfe (freigeben per Knopf), /leads, /pause, /resume, /tag, /woche, /vorwoche, /bilanz.`;
+/status, /warum (warum steht der Bot), /entwuerfe (freigeben per Knopf), /leads, /pause, /resume, /tag, /woche, /vorwoche, /bilanz.
+Hat der Bot mehrere Ansätze statt einer fertigen Nachricht (z. B. wenn jemand Interesse zeigt), kommen sie nummeriert mit je einem Knopf "Ansatz 1/2/3". Ein Tipp darauf lässt den Bot daraus die Nachricht schreiben; die kommt danach als eigener Entwurf mit "Senden"/"Verwerfen".
+
+## Störungen beheben
+Jede Zeile unter "Warum steht etwas still" hat einen Knopf: "Jetzt prüfen" beim Sendeweg startet sofort eine Prüfung (Ergebnis nach ein bis zwei Minuten), "Kommen an – schließen" bei der Versandbestätigung schließt die Warnung, nachdem man in LinkedIn gesehen hat, dass die Nachrichten angekommen sind (kamen sie NICHT an: Not-Aus drücken). "Erneut versuchen" startet eine angehaltene Hintergrundaufgabe neu. Andere Knöpfe springen direkt zur passenden Karte.`;
 
 const zahl = (sql: string, ...p: unknown[]) => (db.prepare(sql).get(...p) as { n: number }).n;
 

@@ -4,7 +4,7 @@ import { db, setAutonomy, type IntentKat } from "../db/index.js";
 import { events } from "../core/events.js";
 import { governor } from "../core/safetyGovernor.js";
 import { countByStatus, hotLeads } from "./crm.js";
-import { pendingDrafts, sendDraft, setDraftStatus, type Draft } from "./drafts.js";
+import { pendingDrafts, sendDraft, setDraftStatus, pitchZuNachricht, chooseDraftApproach, type Draft } from "./drafts.js";
 import { computeBilanz } from "./bilanz.js";
 import { tagesbericht, letzteWoche, wochenbericht } from "./berichte.js";
 import { pendingPosts, approvePost, discardPost } from "./content.js";
@@ -24,6 +24,41 @@ function kindLabel(d: Draft): string {
 
 function draftKeyboard(id: number): InlineKeyboard {
   return new InlineKeyboard().text("✅ Passt, senden", `send:${id}`).text("🗑 Verwerfen", `discard:${id}`);
+}
+
+/**
+ * AUSWAHL STATT ROHTEXT (Sinans Meldung 2026-09-25): Pitch-Ideen (`kind='pitchidee'`) und
+ * Richtungswahlen (`phase='approach'`) sind keine sendbaren Nachrichten, sondern mehrere Optionen
+ * als JSON-Liste. Telegram zeigte sie als rohen Text mit „Senden/Verwerfen“ – Senden lief dann
+ * zwangsläufig ins Leere. Jetzt: nummerierte Liste + ein Knopf je Option. Die Wahl ruft dieselbe
+ * Funktion wie das Cockpit auf, der fertige Text kommt über `draft:new` mit Senden-Knopf zurück.
+ */
+type Auswahl = { art: "pitch" | "richtung"; optionen: string[] };
+function auswahlVon(d: Draft): Auswahl | null {
+  try {
+    if (d.kind === "pitchidee") {
+      const ideen = JSON.parse(d.draft || "[]");
+      return Array.isArray(ideen) && ideen.length ? { art: "pitch", optionen: ideen.map((x) => String(x)) } : null;
+    }
+    if (d.phase === "approach") {
+      const r = JSON.parse(d.draft || "[]") as Array<{ title?: string; description?: string }>;
+      return Array.isArray(r) && r.length ? { art: "richtung", optionen: r.map((x) => `${x.title ?? ""}: ${x.description ?? ""}`) } : null;
+    }
+  } catch { /* kaputtes JSON → wie ein normaler Entwurf behandeln */ }
+  return null;
+}
+const ZIFFERN = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
+function auswahlListe(a: Auswahl): string {
+  return a.optionen.slice(0, ZIFFERN.length).map((o, i) => `${ZIFFERN[i]} ${o}`).join("\n\n");
+}
+function auswahlKeyboard(id: number, a: Auswahl): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  a.optionen.slice(0, ZIFFERN.length).forEach((_, i) => kb.text(`${ZIFFERN[i]} Ansatz ${i + 1}`, `wahl:${id}:${i}`));
+  return kb.row().text("🗑 Verwerfen", `discard:${id}`);
+}
+/** Markdown-Sonderzeichen in KI-Text entschärfen, sonst lehnt Telegram die ganze Nachricht ab. */
+function md(t: string): string {
+  return t.replace(/([_*`\[])/g, "\\$1");
 }
 
 /**
@@ -66,11 +101,20 @@ function draftText(d: Draft): string {
   );
 }
 
+function auswahlText(d: Draft, a: Auswahl): string {
+  return (
+    `🧭 ${a.art === "pitch" ? "Wie willst du bei" : "Welche Richtung für"} ${d.participant || "—"}${a.art === "pitch" ? " weitermachen?" : "?"}` +
+    (d.incoming ? `\nWorauf: „${d.incoming.slice(0, 160)}"` : "") +
+    `\n\n${auswahlListe(a)}\n\n👉 Wähle einen Ansatz – daraus schreibt der Bot die Nachricht, die du dann noch freigibst.`
+  );
+}
+
 /** Push: neuer Entwurf → sofort in den Chat mit Freigabe-Buttons. */
 async function notifyDraft(d: Draft) {
   if (!bot || !config.telegram.chatId || !d) return;
+  const a = auswahlVon(d);
   await bot.api
-    .sendMessage(config.telegram.chatId, draftText(d), { reply_markup: draftKeyboard(d.id) })
+    .sendMessage(config.telegram.chatId, a ? auswahlText(d, a) : draftText(d), { reply_markup: a ? auswahlKeyboard(d.id, a) : draftKeyboard(d.id) })
     .catch(() => {});
 }
 
@@ -154,7 +198,8 @@ export function startTelegram() {
     if (!ds.length) return ctx.reply("Keine offenen Entwürfe. 🎉");
     await ctx.reply(`${ds.length} offene(r) Entwurf/Entwürfe:`);
     for (const d of ds) {
-      await ctx.reply(draftText(d), { reply_markup: draftKeyboard(d.id) });
+      const a = auswahlVon(d);
+      await ctx.reply(a ? auswahlText(d, a) : draftText(d), { reply_markup: a ? auswahlKeyboard(d.id, a) : draftKeyboard(d.id) });
     }
   });
 
@@ -187,6 +232,32 @@ export function startTelegram() {
     await ctx.editMessageText(
       res.ok ? "✅ Gesendet." : `⏭ Nicht gesendet: ${res.reason ?? "unbekannt"}`,
     ).catch(() => {});
+  });
+
+  bot.callbackQuery(/^wahl:(\d+):(\d)$/, async (ctx) => {
+    if (!allowed(ctx.chat?.id)) return ctx.answerCallbackQuery("Nicht erlaubt.");
+    const id = Number(ctx.match[1]), nr = Number(ctx.match[2]);
+    const d = db.prepare("SELECT * FROM drafts WHERE id=?").get(id) as Draft | undefined;
+    if (!d || d.status !== "pending") {
+      await ctx.answerCallbackQuery("Schon erledigt.");
+      return ctx.editMessageReplyMarkup().catch(() => {});
+    }
+    const a = auswahlVon(d);
+    if (!a || !a.optionen[nr]) return ctx.answerCallbackQuery("Diese Option gibt es nicht mehr.");
+    await ctx.answerCallbackQuery("Nachricht wird geschrieben…");
+    // Knöpfe sofort weg, damit ein zweiter Tipp keinen zweiten Entwurf erzeugt.
+    await ctx.editMessageReplyMarkup().catch(() => {});
+    let ok = false;
+    if (a.art === "pitch") ok = await pitchZuNachricht(id, a.optionen[nr]).catch(() => false);
+    else {
+      const key = (JSON.parse(d.draft) as Array<{ key: string }>)[nr]?.key;
+      ok = key ? await chooseDraftApproach(id, key).catch(() => false) : false;
+    }
+    await ctx.reply(ok
+      ? `✍️ Ansatz ${nr + 1} gewählt – der Entwurf ist unten, du gibst ihn noch frei.`
+      : `⚠️ Aus Ansatz ${nr + 1} ließ sich gerade keine Nachricht schreiben. Versuch es gleich noch einmal oder wähle im Cockpit.`,
+    ).catch(() => {});
+    if (!ok) await ctx.editMessageReplyMarkup({ reply_markup: auswahlKeyboard(id, a) }).catch(() => {});
   });
 
   bot.callbackQuery(/^discard:(\d+)$/, async (ctx) => {
@@ -346,12 +417,15 @@ export function startTelegram() {
           : e.intent === "einwand"
           ? `⚠️ *${e.participant} hat einen Einwand*`
           : `🎯 *${e.participant} will reden!*`;
+      const auswahl = auswahlVon(e.draft);
       const text =
         `${kopf}\n\n` +
         `*Worum ging es*\n${e.zusammenfassung || "—"}\n\n` +
         `*Wie wir damit umgehen*\n${e.strategie || "—"}\n\n` +
         (e.contact ? `📞 *Kontakt:* ${e.contact}\n\n` : "") +
-        `*Vorschlag der KI*\n_${e.draft.draft}_\n\n` +
+        (auswahl
+          ? `*Mögliche Ansätze*\n${md(auswahlListe(auswahl))}\n\n👉 Wähle einen, daraus schreibt der Bot die Nachricht.\n\n`
+          : `*Vorschlag der KI*\n_${e.draft.draft}_\n\n`) +
         `💬 [Chat öffnen](${e.threadUrl})\n\n` +
         (e.intent === "absage"
           ? `Ein Nein verdient einen würdigen Abschluss. Senden, anpassen oder einfach ruhen lassen?`
@@ -359,7 +433,7 @@ export function startTelegram() {
       bot.api
         .sendMessage(config.telegram.chatId, text, {
           parse_mode: "Markdown",
-          reply_markup: draftKeyboard(e.draft.id),
+          reply_markup: auswahl ? auswahlKeyboard(e.draft.id, auswahl) : draftKeyboard(e.draft.id),
           link_preview_options: { is_disabled: true },
         })
         .catch(() => {});
@@ -411,7 +485,7 @@ export function startTelegram() {
           {
             parse_mode: "Markdown",
             link_preview_options: { is_disabled: true },
-            ...(d ? { reply_markup: draftKeyboard(d.id) } : {}),
+            ...(d ? { reply_markup: auswahlVon(d) ? auswahlKeyboard(d.id, auswahlVon(d)!) : draftKeyboard(d.id) } : {}),
           },
         )
         .catch(() => {});
