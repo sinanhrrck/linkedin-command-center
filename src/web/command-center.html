@@ -234,7 +234,9 @@
           <h4 class="zg-sub">Termin-Arten</h4>
           <p class="muted">Der Name steht vorne im Kalendertitel, die Dauer blockt den Kalender.</p>
           <div id="kal-arten" class="kal-arten"></div>
-          <div class="button-row"><button id="kal-art-neu">+ Art hinzufügen</button><button id="kal-arten-speichern" class="primary">Arten speichern</button></div>
+          <label class="report-field"><span>Titel im Kalender <i>(Platzhalter: {art} {name} {vorname} {nachname} {ich})</i></span><input id="kal-titel" maxlength="160" placeholder="{art} {name}/{ich}" /></label>
+          <p class="muted" id="kal-titel-beispiel"></p>
+          <div class="button-row"><button id="kal-art-neu">+ Art hinzufügen</button><button id="kal-arten-speichern" class="primary">Speichern</button></div>
           <h4 class="zg-sub">Kommende Termine</h4>
           <div id="kal-termine" class="kal-termine"></div>
           <p id="kal-note" class="form-note" role="status"></p>

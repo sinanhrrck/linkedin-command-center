@@ -1965,7 +1965,7 @@ function renderKalender() {
     try { await post("/api/kalender", { action: "trennen" }); toast("Kalender getrennt."); await load(true); }
     catch (error) { $("kal-note").textContent = error.message; }
   });
-  if (!kalArten) { kalArten = (k.arten || []).map((a) => ({ ...a })); kalArtZeilen(); }
+  if (!kalArten) { kalArten = (k.arten || []).map((a) => ({ ...a })); kalArtZeilen(); $("kal-titel").value = k.titel || ""; kalTitelBeispiel(); }
   const termine = k.termine || [];
   $("kal-termine").innerHTML = termine.length
     ? termine.map((t) => `<div class="kal-termin ${t.status === "fehler" ? "fehler" : ""}"><span>${esc(new Date(`${t.start_lokal}:00`).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }))} Uhr</span><span><b>${esc(t.titel)}</b>${t.status === "fehler" ? ` · <span class="muted">nicht im Kalender</span>` : ""}</span><button class="danger-ghost" data-kal-loeschen="${t.id}">Löschen</button></div>`).join("")
@@ -1983,11 +1983,18 @@ $("kal-uebernehmen").onclick = async () => {
     toast(`Kalender verbunden${r.email ? ` (${r.email})` : ""}.`); await load(true);
   } catch (error) { $("kal-note").textContent = error.message; }
 };
+/** Vorschau mit Beispielnamen – gleiche Ersetzung wie termine.baueTitel auf dem Server. */
+function kalTitelBeispiel() {
+  const vorlage = $("kal-titel").value.trim() || "{art} {name}/{ich}";
+  const werte = { art: (kalArten && kalArten[0]?.name) || "Termin", name: "Max Mustermann", vorname: "Max", nachname: "Mustermann", ich: state.kalender?.ich || "" };
+  $("kal-titel-beispiel").textContent = `Beispiel: ${vorlage.replace(/\{(art|name|vorname|nachname|ich)\}/g, (_, k) => werte[k]).replace(/\s+/g, " ").trim()}`;
+}
+$("kal-titel").oninput = kalTitelBeispiel;
 $("kal-art-neu").onclick = () => { kalArten.push({ name: "", dauer: 30 }); kalArtZeilen(); };
 $("kal-arten-speichern").onclick = async () => {
   try {
-    const r = await post("/api/kalender", { action: "arten", arten: kalArten });
-    kalArten = r.arten.map((a) => ({ ...a })); kalArtZeilen(); toast("Termin-Arten gespeichert.");
+    const r = await post("/api/kalender", { action: "arten", arten: kalArten, titel: $("kal-titel").value });
+    kalArten = r.arten.map((a) => ({ ...a })); kalArtZeilen(); $("kal-titel").value = r.titel; kalTitelBeispiel(); toast("Kalender-Einstellungen gespeichert.");
   } catch (error) { $("kal-note").textContent = error.message; }
 };
 if (new URLSearchParams(location.search).get("kalender") === "verbunden") {

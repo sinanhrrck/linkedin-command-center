@@ -51,6 +51,32 @@ export function speichereTerminArten(eingabe: unknown): TerminArt[] {
   return arten;
 }
 
+// ---------------------------------------------------------------- Titel-Vorlage
+
+/**
+ * Titel im Kalender, frei einstellbar (Sinan 2026-10-01: „AEC Auswertung Vorname Nachname/Sinan
+ * Harrack“, im Profil steht aber nur „Sinan“). Platzhalter: {art} {name} {vorname} {nachname} {ich}.
+ * Der Profilname bleibt unangetastet – er steckt auch in allen Nachrichtentexten.
+ */
+export const STANDARD_TITEL = "{art} {name}/{ich}";
+export function titelVorlage(): string {
+  return (getState("termin_titel") || "").trim() || STANDARD_TITEL;
+}
+export function speichereTitelVorlage(v: unknown): string {
+  const t = String(v ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+  if (t && !/\{(name|vorname|nachname)\}/.test(t)) throw new Error("Der Titel braucht den Namen des Kontakts: {name}, {vorname} oder {nachname}.");
+  setState("termin_titel", t === STANDARD_TITEL ? "" : t);
+  return titelVorlage();
+}
+export function baueTitel(vorlage: string, werte: { art: string; name: string; ich: string }): string {
+  const teile = werte.name.trim().split(/\s+/);
+  const ersetzt: Record<string, string> = {
+    art: werte.art, name: werte.name.trim(), ich: werte.ich.trim(),
+    vorname: teile[0] ?? "", nachname: teile.length > 1 ? teile.slice(1).join(" ") : "",
+  };
+  return vorlage.replace(/\{(art|name|vorname|nachname|ich)\}/g, (_, k: string) => ersetzt[k] ?? "").replace(/\s+/g, " ").trim();
+}
+
 // ---------------------------------------------------------------- Google-Anbindung
 
 type GoogleZugang = { refresh_token: string; email: string | null; verbunden_at: string };
@@ -244,7 +270,7 @@ export async function verarbeiteBefund(ctx: { threadUrl: string; participant: st
   const art = arten.find((a) => a.name.toLowerCase() === String(b.art ?? "").toLowerCase()) ?? arten[0];
   const kontakt = contactForConversation(ctx.threadUrl, ctx.participant);
   const name = ((kontakt && (db.prepare("SELECT full_name FROM contacts WHERE id=?").get(kontakt.id) as { full_name: string | null } | undefined)?.full_name) || ctx.participant).trim();
-  const titel = `${art.name} ${name}/${getProfil().name}`.trim();
+  const titel = baueTitel(titelVorlage(), { art: art.name, name, ich: getProfil().name });
   const bisher = db.prepare(
     "SELECT * FROM termine WHERE thread_url=? AND art=? AND status='eingetragen' AND start_lokal>=? ORDER BY id DESC LIMIT 1",
   ).get(ctx.threadUrl, art.name, `${heute}T00:00`) as { id: number; start_lokal: string; kalender_id: string | null; dauer_min: number } | undefined;

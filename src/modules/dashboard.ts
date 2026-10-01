@@ -8,7 +8,8 @@ import { suchlimitBis } from "../core/suchlimit.js";
 import { verlaufsBelegStand } from "./outreach.js";
 import { zielgruppenUebersicht, ohneZielgruppe, STANDARD_ERSTNACHRICHT } from "./zielgruppen.js";
 import { zgBedingung } from "../core/zielgruppenRegel.js";
-import { googleStatus, terminArten, kommendeTermine } from "./termine.js";
+import { googleStatus, terminArten, kommendeTermine, titelVorlage } from "./termine.js";
+import { getProfil } from "../profil.js";
 import { config } from "../config.js";
 import { pendingDrafts, approvedCount } from "./drafts.js";
 import { pendingPosts } from "./content.js";
@@ -440,7 +441,7 @@ export function getDashboardData() {
     ohneZielgruppe: ohneZielgruppe(),
     standardErstnachricht: STANDARD_ERSTNACHRICHT,
     // KALENDER (2026-10-01): Verbindung, Termin-Arten, kommende Termine.
-    kalender: { ...googleStatus(), arten: terminArten(), termine: kommendeTermine(8) },
+    kalender: { ...googleStatus(), arten: terminArten(), titel: titelVorlage(), ich: getProfil().name, termine: kommendeTermine(8) },
     // Kampagnen sind stillgelegt (config.campaigns.enabled). Die Liste bleibt im State, damit
     // ein Zurückstellen des Schalters genügt; das Cockpit blendet den Bereich anhand des
     // Flags aus, statt die Daten wegzuwerfen.

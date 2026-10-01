@@ -120,3 +120,12 @@ test("Ohne Kalender kein KI-Aufruf; Löschen entfernt den Kalendereintrag; Arten
   assert.equal(JSON.parse(getState("termin_arten")!)[0].dauer, 45);
   setState("termin_arten", "");
 });
+
+test("Titel-Vorlage: Platzhalter, Pflicht auf den Kontaktnamen, Standard bleibt Profilname", () => {
+  assert.equal(t.baueTitel("{art} {name}/Sinan Harrack", { art: "AEC Auswertung", name: "Dardan Recica", ich: "Sinan" }), "AEC Auswertung Dardan Recica/Sinan Harrack");
+  assert.equal(t.baueTitel("{vorname} · {nachname} – {art}", { art: "Erstgespräch", name: "Anna Maria Beispiel", ich: "X" }), "Anna · Maria Beispiel – Erstgespräch");
+  assert.equal(t.titelVorlage(), "{art} {name}/{ich}");
+  assert.throws(() => t.speichereTitelVorlage("{art} mit mir"), /Namen des Kontakts/);
+  assert.equal(t.speichereTitelVorlage("{art} {name}/Sinan Harrack"), "{art} {name}/Sinan Harrack");
+  assert.equal(t.speichereTitelVorlage(""), "{art} {name}/{ich}", "leer = zurück zum Standard");
+});

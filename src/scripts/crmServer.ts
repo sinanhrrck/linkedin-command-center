@@ -9,7 +9,7 @@ import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, chooseD
 import type { RejectionReason } from "../modules/draftDirections.js";
 import { getPost, approvePost, discardPost, generatePostDraft } from "../modules/content.js";
 import { addSource, deleteSource, setSourceActive } from "../modules/leadFeed.js";
-import { googleAnmeldeLink, googleVerbinden, googleTrennen, speichereTerminArten, terminLoeschen } from "../modules/termine.js";
+import { googleAnmeldeLink, googleVerbinden, googleTrennen, speichereTerminArten, speichereTitelVorlage, terminLoeschen } from "../modules/termine.js";
 import {
   alleZielgruppen, speichereZielgruppe, setzeZielgruppeAktiv, loescheZielgruppe, setzeQuellenZielgruppe,
   vorschau as zielgruppenVorschau, kiErstnachrichtVerbessern, probeErstnachrichten, zielgruppe as holeZielgruppe,
@@ -1199,7 +1199,7 @@ const server = createServer((req, res) => {
         if (e.action === "link") ergebnis = { link: googleAnmeldeLink() };
         else if (e.action === "verbinden") ergebnis = await googleVerbinden(String(e.adresse || ""));
         else if (e.action === "trennen") googleTrennen();
-        else if (e.action === "arten") ergebnis = { arten: speichereTerminArten(e.arten) };
+        else if (e.action === "arten") ergebnis = { arten: speichereTerminArten(e.arten), ...(e.titel !== undefined ? { titel: speichereTitelVorlage(e.titel) } : {}) };
         else if (e.action === "loeschen") ergebnis = { geloescht: await terminLoeschen(Number(e.id)) };
         else throw new Error("Unbekannte Aktion.");
         res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...ergebnis }));
