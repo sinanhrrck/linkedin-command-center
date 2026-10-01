@@ -202,6 +202,32 @@ Cockpit-Panel „Bericht“ in der Auswertung (eigener Ladepfad `ladeBericht` mi
 Befehle /tag /woche /vorwoche; die KI-Trefferquoten-Bilanz heißt jetzt /bilanz bzw. /kibilanz.
 Geschäftszeit seit 2026-09-22: 7–22 Uhr; alle Morgen-Crons hängen an `START_STUNDE` in index.ts.
 
+## UPDATE 2026-10-01 — Bestätigte Termine automatisch in den Google Kalender (`modules/termine.ts`)
+Sinans Vorgabe: Termin im Chat vereinbart → Kalendereintrag „<Art> <Vorname Nachname>/<Profilname>“
+(z. B. „AEC Auswertung Dardan Recica/Sinan Harrack“), erst eintragen, dann melden; Dauer je Art;
+MUSS FÜR JEDEN NUTZER funktionieren, nicht nur für Sinan.
+- **Google je Installation:** OAuth „Desktop-App“ mit PKCE, Scope `calendar.events openid email`,
+  Refresh-Token im state `google_kalender` (nur in der eigenen DB). Client-ID/Secret stellt der
+  HERAUSGEBER bereit (`GOOGLE_CLIENT_ID/SECRET` in `.env`); ohne sie zeigt das Cockpit „nicht
+  eingerichtet“. Redirect `http://localhost:<port>/api/google/callback`: läuft NextLead auf demselben
+  Rechner, fängt die Route den Code; sonst kopiert der Nutzer die Adresse ins Cockpit („verbinden“).
+  `invalid_grant` beim Erneuern = Verbindung wird getrennt statt bei jedem Termin zu scheitern.
+  Kein googleapis-Paket – reines fetch.
+- **Erkennung:** fester Vorfilter `moeglicherTermin` (Uhrzeit UND Tag/Datum in den letzten 4
+  Nachrichten), erst dann EIN KI-Aufruf mit hartem JSON {bestaetigt, sicher, datum, uhrzeit, art}.
+  Eingetragen nur bei bestätigt+sicher und Datum heute bis +120 Tage; sonst Event `termin:unsicher`.
+  Aufgerufen aus `inbox.fetchThreads` (jeder geöffnete Chat) und `sendThreadReply` (nach belegtem
+  Versand). Zusätzlich öffnet fetchThreads bis zu 3 Chats, in denen DU zuletzt geschrieben hast und
+  die Vorschau einen Termin zeigt (Merker `termin_vorschauen`, nur mit verbundenem Kalender) – daraus
+  entsteht nie ein Antwort-Entwurf.
+- **Tabelle `termine`:** eine offene Zeile je Chat + Art; gleiche Zeit = nichts, andere Zeit = PATCH
+  des bestehenden Events („verschoben“). CRM-Stufe `meeting` über `recordCrmStage`. Telegram: Meldung
+  mit „Aus dem Kalender löschen“ (`termin_del:<id>`) und Chat-Link.
+- **Cockpit:** Einstellungen → Betrieb → Karte „Kalender“ (verbinden/trennen, Termin-Arten mit Dauer,
+  kommende Termine mit Löschen). API `POST /api/kalender` (link|verbinden|trennen|arten|loeschen).
+- Tests: `src/core/termine.test.ts` (5 Fälle, Google per fetch-Stub). NICHT live gegen Google
+  getestet – dafür braucht es die OAuth-App des Herausgebers.
+
 ## UPDATE 2026-09-25 (4) — Datenverlust beim Neuaufbau, Postfach-Abgleich + Verlaufs-Schutz
 Der Heimserver-Container wurde neu aufgesetzt, der alte samt DB und Backups ist WEG. Der neue wurde per
 `umzug` aus der Mac-App befüllt (DB-Stand 26.08./07.09.) → der Bot hielt einen Monat Versände für

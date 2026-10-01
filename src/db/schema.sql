@@ -553,3 +553,24 @@ CREATE TABLE IF NOT EXISTS zielgruppen (
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- TERMINE (2026-10-01, modules/termine.ts): im Chat bestätigte Termine, die der Bot in den Kalender
+-- des Nutzers einträgt. Eine Zeile je Kontakt + Termin-Art; eine Verschiebung ändert DIESE Zeile
+-- (und den Kalendereintrag), statt einen zweiten anzulegen. `status`: eingetragen | geloescht | fehler.
+CREATE TABLE IF NOT EXISTS termine (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id      INTEGER,
+  thread_url      TEXT NOT NULL,
+  teilnehmer      TEXT,
+  art             TEXT NOT NULL,
+  start_lokal     TEXT NOT NULL,           -- "2026-10-06T17:00" Europe/Berlin
+  dauer_min       INTEGER NOT NULL,
+  titel           TEXT NOT NULL,
+  kalender_id     TEXT,                    -- Google-Event-ID
+  status          TEXT NOT NULL DEFAULT 'eingetragen',
+  fehler          TEXT,
+  quelle          TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_termine_thread ON termine(thread_url, art, status);

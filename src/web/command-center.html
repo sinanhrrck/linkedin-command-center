@@ -223,6 +223,22 @@
         <h2 data-stab="betrieb" class="settings-group"><span>Betrieb</span><small>Läuft der Bot, und wie viel entscheidet er selbst?</small></h2>
         <section data-stab="betrieb" class="setting-card"><span class="eyebrow">Engine</span><h3 id="engine-title">Lokale Engine</h3><p id="engine-copy"></p><div class="button-row"><button id="engine-toggle" class="primary"></button><button id="backup-now">Jetzt sichern</button></div></section>
         <section data-stab="betrieb" class="setting-card"><span class="eyebrow">Automatik</span><h3>Wer entscheidet?</h3><div id="automation-levels" class="segmented"><button data-level="vorschlaege">Ich prüfe alles</button><button data-level="halb">Erstkontakt automatisch</button><button data-level="agent_test">Gespräche testen</button><button data-level="agent_live">Gespräche automatisch</button></div><p id="automation-copy"></p></section>
+        <section id="kalender-card" data-stab="betrieb" class="setting-card wide-card kalender-card">
+          <div class="section-head"><div><span class="eyebrow">Kalender</span><h3>Vereinbarte Termine automatisch eintragen</h3></div><div class="head-side" id="kal-knoepfe"></div></div>
+          <p>Ist im Chat ein Termin mit Tag und Uhrzeit von beiden Seiten bestätigt, trägt NextLead ihn in deinen Google Kalender ein, zum Beispiel „AEC Auswertung Max Muster/Dein Name“, und meldet es dir per Telegram. Verschiebungen ändern den Eintrag. Ist das Datum nicht eindeutig, trägt er nichts ein und fragt dich.</p>
+          <div id="kal-status" class="kal-status"></div>
+          <div id="kal-einfuegen" class="kal-einfuegen hidden">
+            <label class="report-field"><span>Landest du nach der Google-Anmeldung auf einer Fehlerseite, kopiere die komplette Adresse aus der Browserzeile hier hinein</span><input id="kal-adresse" placeholder="http://localhost:4321/api/google/callback?code=…" /></label>
+            <div class="button-row"><button id="kal-uebernehmen" class="primary">Verbindung übernehmen</button></div>
+          </div>
+          <h4 class="zg-sub">Termin-Arten</h4>
+          <p class="muted">Der Name steht vorne im Kalendertitel, die Dauer blockt den Kalender.</p>
+          <div id="kal-arten" class="kal-arten"></div>
+          <div class="button-row"><button id="kal-art-neu">+ Art hinzufügen</button><button id="kal-arten-speichern" class="primary">Arten speichern</button></div>
+          <h4 class="zg-sub">Kommende Termine</h4>
+          <div id="kal-termine" class="kal-termine"></div>
+          <p id="kal-note" class="form-note" role="status"></p>
+        </section>
         <h2 data-stab="zielgruppen" class="settings-group"><span>Zielgruppen</span><small>Wen der Bot sucht und automatisch anschreibt.</small></h2>
         <section id="zg-card" data-stab="zielgruppen" class="setting-card wide-card zg-card">
           <div class="section-head"><div><span class="eyebrow">Zielgruppen</span><h3>Nur wer hier aktiv ist, wird angeschrieben</h3></div><button id="zg-neu">+ Neue Zielgruppe</button></div>

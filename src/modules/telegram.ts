@@ -10,6 +10,7 @@ import { tagesbericht, letzteWoche, wochenbericht } from "./berichte.js";
 import { pendingPosts, approvePost, discardPost } from "./content.js";
 import { stillstandGrund, type Stillstand } from "./engineWatch.js";
 import { analyseAlsText, letzteAnalyse, type WochenAnalyse } from "./kiAnalyse.js";
+import { terminLoeschen } from "./termine.js";
 
 /**
  * Telegram-Steuerung: Entwürfe freigeben/senden, offene Nachrichten sehen, Tages-Status.
@@ -265,6 +266,32 @@ export function startTelegram() {
     setDraftStatus(Number(ctx.match[1]), "discarded");
     await ctx.answerCallbackQuery("Verworfen.");
     await ctx.editMessageText("🗑 Verworfen.").catch(() => {});
+  });
+
+  // TERMINE (2026-10-01): eingetragen → Meldung mit Löschen-Knopf; unsicher/Fehler → Hinweis.
+  events.on("termin:eingetragen", (t: { id: number; titel: string; start: string; verschoben: boolean; vorher?: string; threadUrl: string }) => {
+    if (!bot || !config.telegram.chatId) return;
+    const wann = new Date(`${t.start}:00`).toLocaleString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    bot.api.sendMessage(
+      config.telegram.chatId,
+      `📅 ${t.verschoben ? "Termin verschoben" : "Termin eingetragen"}: ${t.titel}\n${wann} Uhr${t.verschoben && t.vorher ? ` (vorher ${t.vorher.replace("T", " ")})` : ""}\n\nFalsch erkannt? Dann löschen.`,
+      { reply_markup: new InlineKeyboard().text("🗑 Aus dem Kalender löschen", `termin_del:${t.id}`).url("💬 Chat öffnen", t.threadUrl) },
+    ).catch(() => {});
+  });
+  events.on("termin:unsicher", (t: { participant: string; threadUrl: string; grund: string }) => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api.sendMessage(config.telegram.chatId, `📅❓ Bei ${t.participant} sieht es nach einem Termin aus, aber ich bin mir nicht sicher genug für den Kalender: ${t.grund}\nBitte selbst eintragen.`,
+      { reply_markup: new InlineKeyboard().url("💬 Chat öffnen", t.threadUrl) }).catch(() => {});
+  });
+  events.on("termin:fehler", (t: { titel: string; start: string; grund: string }) => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api.sendMessage(config.telegram.chatId, `📅⚠️ Termin konnte nicht in den Kalender: ${t.titel} (${t.start.replace("T", " ")})\n${t.grund}`).catch(() => {});
+  });
+  bot.callbackQuery(/^termin_del:(\d+)$/, async (ctx) => {
+    if (!allowed(ctx.chat?.id)) return ctx.answerCallbackQuery("Nicht erlaubt.");
+    const ok = await terminLoeschen(Number(ctx.match[1])).catch(() => false);
+    await ctx.answerCallbackQuery(ok ? "Gelöscht." : "Schon gelöscht oder nicht möglich.");
+    if (ok) await ctx.editMessageText("🗑 Termin aus dem Kalender gelöscht.").catch(() => {});
   });
 
   // Neue Entwürfe automatisch pushen.

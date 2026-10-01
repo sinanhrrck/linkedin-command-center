@@ -2,6 +2,9 @@ import { newPage, guardAgainstCheckpoint } from "../core/session.js";
 import { humanScroll, humanDelay } from "../core/humanize.js";
 import { rememberConversationPreview, shouldOpenConversation } from "./lowRead.js";
 import { heileAusChatliste } from "./postfachAbgleich.js";
+import { googleStatus, moeglicherTermin, pruefeTermin } from "./termine.js";
+import { getState, setState } from "../db/index.js";
+import { createHash } from "node:crypto";
 
 /**
  * Liest die LinkedIn-Inbox – REIN LESEND, kein Governor, kein Senden.
@@ -148,8 +151,24 @@ export async function fetchThreads(max = 8, onlyUnread = false): Promise<ThreadC
     .filter((m) => m.cache.open)
     .slice(0, max);
 
+  /**
+   * TERMIN-CHATS, in denen DU zuletzt geschrieben hast (2026-10-01): Bestätigt Sinan einen Termin
+   * selbst in LinkedIn, ist die Person nicht „am Zug“ und der Chat würde nie geöffnet. Verrät die
+   * Vorschau einen Termin („Sie: Super, Dienstag 17 Uhr …“), wird er gezielt geöffnet – höchstens
+   * drei je Lauf, jede Vorschau nur einmal, nur mit verbundenem Kalender. Nur zur Termin-Prüfung,
+   * daraus entsteht nie ein Antwort-Entwurf.
+   */
+  const terminGeprueft: string[] = (() => { try { return JSON.parse(getState("termin_vorschauen") || "[]"); } catch { return []; } })();
+  const vorschauHash = (m: { participant: string; snippet: string }) => createHash("sha1").update(`${m.participant}|${m.snippet}`).digest("hex").slice(0, 16);
+  const terminZiele = googleStatus().verbunden
+    ? meta
+        .map((m, index) => ({ ...m, index, amZug: personAmZug(m.snippet) }))
+        .filter((m) => m.amZug === false && moeglicherTermin([{ sender: "", text: m.snippet }]) && !terminGeprueft.includes(vorschauHash(m)))
+        .slice(0, 3)
+    : [];
+
   const out: ThreadContext[] = [];
-  for (const t of targets) {
+  for (const t of [...targets.map((x) => ({ ...x, nurTermin: false })), ...terminZiele.map((x) => ({ ...x, nurTermin: true, cache: { participantKey: "", snippetHash: "", open: true } }))]) {
     await page.locator(SEL.listItem).nth(t.index).click();
     await humanDelay(1800, 3200);
     if (await guardAgainstCheckpoint(page)) break;
@@ -201,6 +220,14 @@ export async function fetchThreads(max = 8, onlyUnread = false): Promise<ThreadC
       t.amZug !== null ? t.amZug               // Vorschau vorhanden → sie ist maßgeblich
       : letzte?.other === true ? true          // letzte Nachricht klar vom Gegenüber
       : !!(letzte?.sender && letzte.sender === participant); // Absender klar = Person; sonst false
+
+    // Termin bestätigt? Läuft nebenher und wirft nie (modules/termine.ts).
+    void pruefeTermin({ threadUrl, participant, messages: clean.map((m) => ({ sender: m.sender, text: m.text, vonMir: !m.other })) });
+    if (t.nurTermin) {
+      terminGeprueft.push(vorschauHash(t));
+      setState("termin_vorschauen", JSON.stringify(terminGeprueft.slice(-200)));
+      continue;
+    }
 
     rememberConversationPreview(t.cache.participantKey, t.cache.snippetHash, threadUrl, theirTurn);
 

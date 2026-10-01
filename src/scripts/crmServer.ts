@@ -9,6 +9,7 @@ import { getDraft, setDraftStatus, sendDraft, approveDraft, rejectDraft, chooseD
 import type { RejectionReason } from "../modules/draftDirections.js";
 import { getPost, approvePost, discardPost, generatePostDraft } from "../modules/content.js";
 import { addSource, deleteSource, setSourceActive } from "../modules/leadFeed.js";
+import { googleAnmeldeLink, googleVerbinden, googleTrennen, speichereTerminArten, terminLoeschen } from "../modules/termine.js";
 import {
   alleZielgruppen, speichereZielgruppe, setzeZielgruppeAktiv, loescheZielgruppe, setzeQuellenZielgruppe,
   vorschau as zielgruppenVorschau, kiErstnachrichtVerbessern, probeErstnachrichten, zielgruppe as holeZielgruppe,
@@ -1178,6 +1179,37 @@ const server = createServer((req, res) => {
     });
     return;
   }
+  // KALENDER (2026-10-01): Google verbinden/trennen, Termin-Arten, Termin löschen. Der Rücksprung von
+  // Google landet auf /api/google/callback, sofern NextLead auf DIESEM Rechner läuft; sonst wird die
+  // Adresse aus der Browserzeile ins Cockpit kopiert (action "verbinden").
+  if (url.pathname === "/api/google/callback" && req.method === "GET") {
+    googleVerbinden(url.toString())
+      .then(() => res.writeHead(302, { Location: "/?kalender=verbunden" }).end())
+      .catch((e) => res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
+        .end(`<p style="font:16px system-ui;padding:24px">Google-Kalender nicht verbunden: ${String((e as Error).message).replace(/</g, "&lt;")}</p><p style="font:16px system-ui;padding:0 24px"><a href="/">Zurück zu NextLead</a></p>`));
+    return;
+  }
+  if (url.pathname === "/api/kalender" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      try {
+        const e = JSON.parse(body || "{}");
+        let ergebnis: Record<string, unknown> = {};
+        if (e.action === "link") ergebnis = { link: googleAnmeldeLink() };
+        else if (e.action === "verbinden") ergebnis = await googleVerbinden(String(e.adresse || ""));
+        else if (e.action === "trennen") googleTrennen();
+        else if (e.action === "arten") ergebnis = { arten: speichereTerminArten(e.arten) };
+        else if (e.action === "loeschen") ergebnis = { geloescht: await terminLoeschen(Number(e.id)) };
+        else throw new Error("Unbekannte Aktion.");
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...ergebnis }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((err as Error)?.message || err) }));
+      }
+    });
+    return;
+  }
+
   // ZIELGRUPPEN (2026-09-25): anlegen/ändern/pausieren/löschen, Vorschau, KI-Hilfe für die
   // Erstnachricht. Fehler gehen als 400 mit `reason` zurück (liest der Cockpit-`post()`).
   if (url.pathname === "/api/zielgruppe" && req.method === "POST") {

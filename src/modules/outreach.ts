@@ -9,6 +9,7 @@ import { deferProfile, recordReadSaving } from "./lowRead.js";
 import { recordCrmStage } from "./crmStages.js";
 import { extrahiereProfilFakten, speichereProfilFakten } from "./profilFakten.js";
 import { zielgruppenPruefung } from "./zielgruppen.js";
+import { pruefeTermin, type Nachricht } from "./termine.js";
 
 /** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
 function normText(s: string): string {
@@ -735,7 +736,8 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
   // Tages-Topf (config.safety.dailyCaps.reply) – so blockieren kalte Erstnachrichten nie eine Antwort
   // an einen heißen Lead. Alle übrigen Schutzmechanismen (Delay, Arbeitszeit, Not-Aus, send_health)
   // gelten unverändert.
-  return governor.execute("reply", threadUrl, async () => {
+  let verlaufNachVersand: Nachricht[] = [];
+  const ergebnis = await governor.execute("reply", threadUrl, async () => {
     let versandVersucht = false;
     try {
       const page = await newPage();
@@ -769,6 +771,12 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
     // urlVerbuergt=true: die geprüfte Thread-URL (oben) bürgt bereits für den Empfänger – falls der
     // h2-Kopf mal nicht lesbar ist, NICHT fälschlich abbrechen (das hatte hier alles blockiert).
       await tippenUndSenden(page, text, empfaenger, true, true, () => { versandVersucht = true; });
+      // Für die Termin-Erkennung: der Chat ist offen, die eigene Antwort steht schon drin.
+      verlaufNachVersand = await page.locator(SEL.threadItem).evaluateAll((els) => els.map((el) => ({
+        sender: "",
+        text: (el.querySelector(".msg-s-event-listitem__body")?.textContent || "").trim().replace(/\s+/g, " "),
+        vonMir: !(/--other\b/.test(el.className) || !!el.closest(".msg-s-event-listitem--other")),
+      })).filter((m) => m.text)).catch(() => [] as Nachricht[]);
     } catch (e) {
       if (
         !versandVersucht &&
@@ -782,6 +790,9 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
       throw e;
     }
   });
+  // Erst NACH dem belegten Versand und außerhalb des Governors: Termin bestätigt? Wirft nie.
+  if (verlaufNachVersand.length) void pruefeTermin({ threadUrl, participant: empfaenger, messages: verlaufNachVersand });
+  return ergebnis;
 }
 
 /**

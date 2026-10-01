@@ -1747,6 +1747,7 @@ function renderSettings() {
   const zgSel = $("source-zg"); const zgWert = zgSel.value;
   zgSel.innerHTML = `<option value="">Zielgruppe wählen…</option>${zgOptionen(zgWert)}`;
   renderZielgruppen();
+  renderKalender();
   renderTechnischeFaelle();
 }
 
@@ -1927,6 +1928,72 @@ $("source-add").onclick = async () => {
     $("source-label").value = ""; $("source-url").value = ""; await load(); toast("Quelle gespeichert. Nachschub wird geholt.");
   } catch (error) { toast(error.message); }
 };
+
+/**
+ * KALENDER (2026-10-01). Termin-Arten werden NUR beim ersten Zeichnen bzw. nach dem Speichern aus
+ * dem State übernommen – sonst überschriebe das 20-Sekunden-Nachladen, was gerade getippt wird.
+ */
+let kalArten = null;
+function kalArtZeilen() {
+  $("kal-arten").innerHTML = kalArten.map((a, i) => `<div class="kal-art"><input data-kal-name="${i}" value="${esc(a.name)}" placeholder="z. B. AEC Auswertung" /><input data-kal-dauer="${i}" type="number" min="10" max="480" value="${esc(a.dauer)}" aria-label="Dauer in Minuten" /><button class="danger-ghost" data-kal-weg="${i}">Entfernen</button></div>`).join("");
+  $("kal-arten").querySelectorAll("[data-kal-name]").forEach((el) => el.oninput = () => { kalArten[el.dataset.kalName].name = el.value; });
+  $("kal-arten").querySelectorAll("[data-kal-dauer]").forEach((el) => el.oninput = () => { kalArten[el.dataset.kalDauer].dauer = Number(el.value); });
+  $("kal-arten").querySelectorAll("[data-kal-weg]").forEach((el) => el.onclick = () => { kalArten.splice(Number(el.dataset.kalWeg), 1); kalArtZeilen(); });
+}
+function renderKalender() {
+  const k = state.kalender || {};
+  const status = $("kal-status");
+  status.className = `kal-status ${k.verbunden ? "an" : k.eingerichtet ? "warn" : ""}`;
+  status.innerHTML = k.verbunden
+    ? `<i></i><span>Verbunden mit <b>${esc(k.email || "Google Kalender")}</b>. Bestätigte Termine landen automatisch im Kalender.</span>`
+    : k.eingerichtet
+      ? `<i></i><span>Noch nicht verbunden. Ohne Verbindung wird nichts eingetragen.</span>`
+      : `<i></i><span>Die Google-Anbindung ist für diese Installation noch nicht eingerichtet. Wende dich an den Herausgeber von NextLead.</span>`;
+  $("kal-knoepfe").innerHTML = k.verbunden
+    ? `<button id="kal-trennen" class="danger-ghost">Trennen</button>`
+    : k.eingerichtet ? `<button id="kal-verbinden" class="primary">Mit Google verbinden</button>` : "";
+  $("kal-verbinden")?.addEventListener("click", async () => {
+    try {
+      const { link } = await post("/api/kalender", { action: "link" });
+      window.open(link, "_blank", "noopener");
+      $("kal-einfuegen").classList.remove("hidden");
+      $("kal-note").textContent = "Melde dich im neuen Fenster bei Google an und stimme zu.";
+    } catch (error) { $("kal-note").textContent = error.message; }
+  });
+  $("kal-trennen")?.addEventListener("click", async () => {
+    if (!confirm("Google Kalender trennen? Bereits eingetragene Termine bleiben im Kalender.")) return;
+    try { await post("/api/kalender", { action: "trennen" }); toast("Kalender getrennt."); await load(true); }
+    catch (error) { $("kal-note").textContent = error.message; }
+  });
+  if (!kalArten) { kalArten = (k.arten || []).map((a) => ({ ...a })); kalArtZeilen(); }
+  const termine = k.termine || [];
+  $("kal-termine").innerHTML = termine.length
+    ? termine.map((t) => `<div class="kal-termin ${t.status === "fehler" ? "fehler" : ""}"><span>${esc(new Date(`${t.start_lokal}:00`).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }))} Uhr</span><span><b>${esc(t.titel)}</b>${t.status === "fehler" ? ` · <span class="muted">nicht im Kalender</span>` : ""}</span><button class="danger-ghost" data-kal-loeschen="${t.id}">Löschen</button></div>`).join("")
+    : `<p class="muted" style="padding:10px 14px;margin:0">Noch keine Termine eingetragen.</p>`;
+  $("kal-termine").querySelectorAll("[data-kal-loeschen]").forEach((b) => b.onclick = async () => {
+    if (!confirm("Diesen Termin aus dem Kalender löschen?")) return;
+    try { await post("/api/kalender", { action: "loeschen", id: Number(b.dataset.kalLoeschen) }); toast("Termin gelöscht."); await load(true); }
+    catch (error) { $("kal-note").textContent = error.message; }
+  });
+}
+$("kal-uebernehmen").onclick = async () => {
+  try {
+    const r = await post("/api/kalender", { action: "verbinden", adresse: $("kal-adresse").value });
+    $("kal-adresse").value = ""; $("kal-einfuegen").classList.add("hidden");
+    toast(`Kalender verbunden${r.email ? ` (${r.email})` : ""}.`); await load(true);
+  } catch (error) { $("kal-note").textContent = error.message; }
+};
+$("kal-art-neu").onclick = () => { kalArten.push({ name: "", dauer: 30 }); kalArtZeilen(); };
+$("kal-arten-speichern").onclick = async () => {
+  try {
+    const r = await post("/api/kalender", { action: "arten", arten: kalArten });
+    kalArten = r.arten.map((a) => ({ ...a })); kalArtZeilen(); toast("Termin-Arten gespeichert.");
+  } catch (error) { $("kal-note").textContent = error.message; }
+};
+if (new URLSearchParams(location.search).get("kalender") === "verbunden") {
+  history.replaceState(null, "", "/");
+  setTimeout(() => { springeZu("settings", "kalender-card"); toast("Google Kalender verbunden."); }, 600);
+}
 
 /**
  * ZIELGRUPPEN (2026-09-25). Die Liste wird bei jedem Abruf neu gezeichnet; der Editor NICHT – sonst
