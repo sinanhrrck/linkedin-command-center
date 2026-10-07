@@ -367,11 +367,13 @@ export const setMode = (m: Mode) => setState("mode", m);
  *  - off    : Agent aus, alles läuft wie bisher (Default).
  *  - shadow : Agent denkt mit, legt nur Entwürfe an, SENDET NICHT (Beobachtung).
  *  - live   : Agent antwortet selbst (governor-gedrosselt + validiert).
+ *  - vorsichtig (2026-10-07): Agent sendet nur, was sein verdientes Vertrauen hergibt
+ *    (modules/agentVertrauen.ts), der Rest wird Entwurf. Mit jeder unveränderten Freigabe wächst es.
  */
-export type AgentMode = "off" | "shadow" | "live";
+export type AgentMode = "off" | "shadow" | "vorsichtig" | "live";
 export const getAgentMode = (): AgentMode => {
   const m = getState("agent_mode");
-  return m === "shadow" || m === "live" ? m : "off";
+  return m === "shadow" || m === "live" || m === "vorsichtig" ? m : "off";
 };
 export const setAgentMode = (m: AgentMode) => setState("agent_mode", m);
 

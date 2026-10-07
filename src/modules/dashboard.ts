@@ -1,3 +1,4 @@
+import { agentVertrauen } from "./agentVertrauen.js";
 import { statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -667,6 +668,8 @@ export function getDashboardData() {
     })(),
     mode: getMode(),
     agentMode: getAgentMode(),
+    agentVertrauen: agentVertrauen(), // Stufe „Gespräche vorsichtig“: was geht von selbst, was fehlt zur nächsten Stufe
+
     focus: getFocus(),
     // Wie viele Leads warten je Zielgruppe? Zeigt, ob der gewaehlte Fokus noch Sprit hat.
     fokusVorrat: Object.fromEntries(

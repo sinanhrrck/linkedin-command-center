@@ -191,6 +191,21 @@ Entwürfe blieben bewusst zu).
   DAUERHAFTES Schweigen des Agenten (🔇 + Grund + Chat-Link); einmaliges Übergehen wäre Rauschen.
 - Tests: `schweigen.test.ts` (9), `stumm.test.ts` (4). NICHT live gegen LinkedIn/Claude getestet –
   nach dem Deploy `engine.log` auf „schweigt“ prüfen.
+- **STUFE „GESPRÄCHE VORSICHTIG“ (gleicher Tag, Sinan: „erst zurückhaltend, mit jeder Freigabe
+  weniger bei mir“):** neuer `AgentMode` `vorsichtig` (Automatik-Level `agent_vorsichtig`, zwischen
+  testen und automatisch). `agent/domain/policy/risiko.ts` stuft jede Antwort nach Phase+Intents in
+  niedrig (Eröffnung/Smalltalk/Discovery), mittel (bedarf/vertrauen/validierung oder Interesse-Intent),
+  hoch (einwand/call_angebot/nummer/termin/verloren oder Skepsis/Preisfrage/Abwehr) ein.
+  `modules/agentVertrauen.ts` misst Sinans Entscheidungen über Agent-Entwürfe (`intent` in
+  `agent-vorsichtig`/`agent-schatten`, `freigabe_quelle='mensch'`, 60 Tage; `stumm`/`expired`/
+  `relationship_*` zählen nicht): Stufe 1 ≥10 & ≥80 % unverändert → niedrig autonom, Stufe 2 ≥25 →
+  +mittel, Stufe 3 ≥50 & ≥85 % → alles. VETO: ≥3 Ablehnungen unter den letzten 10 → eine Stufe
+  zurück. Vom Agenten selbst Gesendetes erzeugt KEIN Vertrauen (sonst stuft er sich selbst hoch).
+  `agentTick` misst einmal je Tick; eine nicht erlaubte `senden`-Entscheidung wird als Entwurf
+  `agent-vorsichtig` abgelegt und in `agent_processed` als `entwurf` vermerkt (NICHT `senden/unsent`,
+  sonst würde der nächste Tick nachsenden). Cockpit: Karte `#agent-vertrauen` unter der Automatik-
+  Stufe (Stufe, Balken, Zahlen, was zur nächsten Stufe fehlt), `dashboard.agentVertrauen`.
+  Tests: `agentVertrauen.test.ts` (6).
 - ARBEITSWEISE: iCloud hat die Dateien während der Arbeit laufend ausgelagert (3,6 GB frei, 10 000
   dataless-Dateien in node_modules, `tsc` hing bei 0 % CPU). Typprüfung und Tests liefen in einer
   rsync-Kopie im Scratchpad mit frischem `npm ci`.

@@ -26,6 +26,8 @@ import { handleIncomingMessage } from "../application/handleIncomingMessage.js";
 import { neueConversation } from "../domain/conversation.js";
 import { angebotsWahl } from "../../modules/angebot.js";
 import { istStumm, stummschalten } from "../../modules/stumm.js";
+import { agentVertrauen, darfAutonom } from "../../modules/agentVertrauen.js";
+import { antwortRisiko } from "../domain/policy/risiko.js";
 
 /**
  * KI-Kanäle für den Agent. WICHTIG (Fix 2026-07-24): BEIDE Schritte (Analyse UND Antwort) laufen
@@ -54,6 +56,9 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
   const mode = getAgentMode();
   if (mode === "off") return res;
   const schatten = mode === "shadow";
+  // VORSICHTIG (2026-10-07): einmal je Tick messen, was Sinans bisherige Freigaben hergeben.
+  const vorsichtig = mode === "vorsichtig";
+  const vertrauen = vorsichtig ? agentVertrauen() : null;
 
   const repo = new SqliteConversationRepository(db);
   const persona = promptKontext();
@@ -137,6 +142,17 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
         res.entwuerfe++;
       }
       console.info(`[agent-schatten] ${t.participant}: ${e.typ} → "${(e.typ === "senden" ? e.text : e.grund).slice(0, 70)}"`);
+      continue;
+    }
+
+    // ---- VORSICHTIG: nur risikoarme Antworten selbst senden, der Rest wird Entwurf ----
+    if (e.typ === "senden" && vorsichtig && vertrauen && !darfAutonom(antwortRisiko(e.conversation.stage, e.intents), vertrauen)) {
+      // Entscheidung umschreiben: NICHT „senden/unsent“, sonst würde der nächste Tick den Text
+      // automatisch nachsenden. Der Entwurf geht den normalen Freigabeweg (sendApprovedDrafts).
+      repo.merkeVerarbeitung(t.threadUrl, hash, "entwurf", e.text);
+      queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, e.text, "agent-vorsichtig");
+      console.info(`[agent-vorsichtig] ${t.participant}: Entwurf statt Versand (Risiko ${antwortRisiko(e.conversation.stage, e.intents)}, Stufe ${vertrauen.stufe})`);
+      res.entwuerfe++;
       continue;
     }
 

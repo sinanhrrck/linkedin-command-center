@@ -626,6 +626,7 @@ const server = createServer((req, res) => {
           vorschlaege: { mode: "manual", agent: "off" },
           halb: { mode: "semi", agent: "off" },
           agent_test: { mode: "semi", agent: "shadow" },
+          agent_vorsichtig: { mode: "semi", agent: "vorsichtig" },
           agent_live: { mode: "semi", agent: "live" },
         };
         const s = STUFEN[level as string];

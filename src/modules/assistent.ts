@@ -43,6 +43,7 @@ NextLead ist ein LinkedIn-Vertriebsassistent. Er findet passende Leute (vor alle
 - Ich prüfe alles: Vernetzen läuft automatisch, jede Nachricht ist ein Entwurf zur Freigabe.
 - Erstkontakt automatisch: Erstnachrichten nach angenommener Vernetzung gehen automatisch raus, Antworten bleiben zur Prüfung.
 - Gespräche testen: der Gesprächs-Agent denkt mit, sendet aber nicht.
+- Gespräche vorsichtig: der Agent sendet nur Antworten, deren Risiko sein Vertrauen hergibt, alles andere kommt als Entwurf zur Freigabe. Vertrauen entsteht nur aus deinen Entscheidungen über Agent-Entwürfe der letzten 60 Tage: Stufe 1 (Eröffnung und Smalltalk von selbst) ab 10 Entscheidungen mit 80 % unverändert freigegeben, Stufe 2 (plus Bedarf und Vertrauensaufbau) ab 25, Stufe 3 (alles, auch Einwände, Angebot, Termin) ab 50 mit 85 %. Sind von den letzten 10 Entscheidungen mindestens 3 Ablehnungen, geht es eine Stufe zurück. Die Karte unter der Automatik-Stufe zeigt Stufe, Zahlen und was zur nächsten Stufe fehlt.
 - Gespräche automatisch: der Agent führt Routinegespräche selbst und übergibt wichtige Fälle (Termin, Einwand) an dich.
 
 ## Sicherheit (warum der Bot manchmal "nichts tut")

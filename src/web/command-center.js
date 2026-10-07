@@ -1244,7 +1244,18 @@ function renderInsights() {
   renderPlanner();
 }
 
-function automationLevel() { if (state.agentMode === "live") return "agent_live"; if (state.agentMode === "shadow") return "agent_test"; return state.mode === "semi" ? "halb" : "vorschlaege"; }
+function automationLevel() { if (state.agentMode === "live") return "agent_live"; if (state.agentMode === "vorsichtig") return "agent_vorsichtig"; if (state.agentMode === "shadow") return "agent_test"; return state.mode === "semi" ? "halb" : "vorschlaege"; }
+/** Stufe „Gespräche vorsichtig“ (2026-10-07): zeigt, was der Agent gerade selbst sendet und was zur nächsten Stufe fehlt. */
+function renderAgentVertrauen(level) {
+  const box = $("agent-vertrauen"); const v = state.agentVertrauen;
+  if (!box) return;
+  if (!v || (level !== "agent_vorsichtig" && level !== "agent_live")) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  const autonomText = !v.autonom.length ? "Noch nichts – jede Antwort kommt zu dir." : v.autonom.includes("hoch") ? "Alles – auch Einwände, Angebot und Termin." : v.autonom.includes("mittel") ? "Eröffnung, Smalltalk, Bedarf und Vertrauensaufbau. Einwände, Angebot und Termin kommen zu dir." : "Eröffnung und Smalltalk. Alles Vertriebliche kommt zu dir.";
+  const prozent = Math.round((v.quote || 0) * 100);
+  const naechste = v.naechste ? `Nächste Stufe ${v.naechste.stufe}: ${v.naechste.fehlen > 0 ? `noch ${v.naechste.fehlen} Entscheidung${v.naechste.fehlen === 1 ? "" : "en"}` : "genug Entscheidungen"}, mindestens ${Math.round(v.naechste.quote * 100)} % unverändert freigegeben.` : "Höchste Stufe erreicht.";
+  box.innerHTML = `<b>Vertrauen Stufe ${v.stufe} von 3${v.veto ? " · gebremst" : ""}</b><div class="stufen">${[1, 2, 3].map((n) => `<span class="${n <= v.stufe ? "voll" : v.veto && n === v.stufe + 1 ? "veto" : ""}"></span>`).join("")}</div>${level === "agent_live" ? "In „Gespräche automatisch“ sendet der Agent alles selbst. Zum Vergleich: vorsichtig würde er gerade von selbst senden: " : "Sendet von selbst: "}${esc(autonomText)}<small>${v.entscheidungen} Entscheidung${v.entscheidungen === 1 ? "" : "en"} in 60 Tagen · ${v.unveraendert} unverändert (${prozent} %) · ${v.geaendert} geändert · ${v.abgelehnt} abgelehnt. ${esc(naechste)}${v.veto ? " Von deinen letzten 10 Entscheidungen waren mindestens 3 Ablehnungen, deshalb eine Stufe zurück." : ""}</small>`;
+}
 /* ===== WIRKUNG: Funnel, Antwortqualität und Vergleich (Phase 5.2/5.3) =====
    Eigener Ladepfad neben /api/state: die Filter sollen sofort reagieren, ohne den kompletten
    Dashboard-Zustand neu zu ziehen. Alle Werte stammen aus `crm_stage_events` — dieselbe Quelle,
@@ -1730,7 +1741,8 @@ function renderSettings() {
   renderAutoFreigabe();
   const alive = !!state.engine?.alive; $("engine-title").textContent = alive ? "Engine arbeitet" : "Engine ist aus"; $("engine-copy").textContent = alive ? "Vernetzung, Kampagnen und freigegebene Nachrichten laufen in einer gemeinsamen Prioritätsqueue." : "Ohne Engine werden keine Hintergrundaufgaben ausgeführt."; $("engine-toggle").textContent = alive ? "Engine stoppen" : "Engine starten";
   const level = automationLevel(); document.querySelectorAll("[data-level]").forEach((button) => button.classList.toggle("active", button.dataset.level === level));
-  $("automation-copy").textContent = { vorschlaege: "NextLead vernetzt automatisch. Jede Nachricht bleibt ein Entwurf.", halb: "Azubi-Erstnachrichten werden automatisch gesendet, Antworten bleiben zur Prüfung.", agent_test: "Der Gesprächsagent denkt mit, sendet aber nicht selbst.", agent_live: "Der Gesprächsagent führt Routinegespräche selbst und übergibt wichtige Fälle." }[level] + " Bestehende Netzwerk-Kontakte brauchen in jeder Stufe deine Freigabe.";
+  renderAgentVertrauen(level);
+  $("automation-copy").textContent = { vorschlaege: "NextLead vernetzt automatisch. Jede Nachricht bleibt ein Entwurf.", halb: "Azubi-Erstnachrichten werden automatisch gesendet, Antworten bleiben zur Prüfung.", agent_test: "Der Gesprächsagent denkt mit, sendet aber nicht selbst.", agent_vorsichtig: "Der Agent sendet nur, was sein Vertrauen hergibt, der Rest kommt als Entwurf zu dir. Jede unveränderte Freigabe erweitert, was er selbst darf; häufen sich Ablehnungen, legt er wieder mehr vor.", agent_live: "Der Gesprächsagent führt Routinegespräche selbst und übergibt wichtige Fälle." }[level] + " Bestehende Netzwerk-Kontakte brauchen in jeder Stufe deine Freigabe.";
   const g = state.governor || {}, connect = g.connect || {};
   const acceptance = g.acceptance || {};
   const warning = $("acceptance-warning");
