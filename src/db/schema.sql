@@ -185,6 +185,25 @@ CREATE TABLE IF NOT EXISTS relationship_events (
 );
 CREATE INDEX IF NOT EXISTS idx_relationship_events_contact ON relationship_events(contact_id,created_at);
 
+-- STUMM (2026-10-07): komplette Funkstille je Chat und/oder Kontakt. Stärker als `automation_status=
+-- 'excluded'` (das stoppt nur proaktive Ansprache): hier erzeugt der Bot auch KEINE Antwort-Entwürfe
+-- mehr und der Sales-Agent fasst den Thread nicht an. Gesetzt vom Menschen (Cockpit-Knopf) oder vom
+-- Agenten (fremdes Angebot, automatische Nachricht, ausdrücklicher Kontakt-Stopp). Aufheben nur von
+-- Hand über „Wieder freigeben“. Eine Zeile je Thread; zusätzlich eine Zeile ohne Thread je Kontakt,
+-- damit auch künftige, noch unbekannte Chats dieses Kontakts ruhen.
+CREATE TABLE IF NOT EXISTS stumm (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id  INTEGER,
+  thread_url  TEXT,
+  participant TEXT,
+  grund       TEXT NOT NULL,
+  quelle      TEXT NOT NULL DEFAULT 'mensch', -- mensch | agent | regel
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stumm_thread ON stumm(thread_url) WHERE thread_url IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stumm_contact ON stumm(contact_id) WHERE contact_id IS NOT NULL AND thread_url IS NULL;
+CREATE INDEX IF NOT EXISTS idx_stumm_contact_all ON stumm(contact_id);
+
 -- Eine Person kann ueber mehrere technische Schluessel auftauchen: Profil-URL, LinkedIn-Thread
 -- oder spaeter externe CRM-IDs. Alle Komponenten loesen diese Schluessel ueber dieselbe Tabelle
 -- auf, statt Namen oder URL-Arten jeweils anders zu interpretieren.

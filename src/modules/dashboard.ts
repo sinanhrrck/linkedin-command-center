@@ -100,6 +100,7 @@ type ContactRow = {
   snooze_label: string | null;
   snooze_reason: string | null;
   do_not_contact: number | null;
+  stumm_grund: string | null; // gesetzt = komplette Funkstille (modules/stumm.ts)
 };
 
 export function getDashboardData() {
@@ -110,6 +111,7 @@ export function getDashboardData() {
       `SELECT c.id, c.full_name, c.headline, c.profile_url, c.status, c.invited_at, c.accepted_at,
               c.messaged_at,c.replied_at,c.aus_netzwerk,c.created_at,c.lead_score,c.ki_score,c.ki_fit,c.ki_grund,c.campaign_id,ca.name AS campaign_name,
               c.automation_status,c.snoozed_until,c.snooze_label,c.snooze_reason,c.do_not_contact,
+              (SELECT s.grund FROM stumm s WHERE s.contact_id=c.id ORDER BY s.thread_url IS NOT NULL LIMIT 1) AS stumm_grund,
               o.stage AS outcome_stage,o.note AS outcome_note,o.value_cents AS outcome_value_cents,
               ls.label AS quelle,
               zgn.name AS zielgruppe_name,

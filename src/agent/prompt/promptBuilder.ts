@@ -42,7 +42,18 @@ Regeln:
   wofür sie brennt. Das sind die Momente, in denen ein Mehrwert-Angebot (z. B. Potenzialanalyse) passt.
 - Setze "investment_interesse" und moneyInterest HOCH, wenn die Person konkrete Geld-/Finanzfragen
   stellt (Konto, Sparen, Aktien, Absicherung, Finanzierung). Das ist ein starkes Signal für ein Gespräch.
-- "positives_signal" bei erkennbarer Öffnung/Zustimmung/Wärme (auch ohne konkrete Zusage).`;
+- "positives_signal" bei erkennbarer Öffnung/Zustimmung/Wärme (auch ohne konkrete Zusage).
+- WANN KEINE ANTWORT NÖTIG IST (wichtig, ehrlich einschätzen):
+  * "fremdes_angebot": die Person will dem Kontoinhaber SELBST etwas verkaufen oder anbieten –
+    Recruiting/Jobangebot an ihn, Dienstleistung, Software, Coaching, Agentur, Kooperation, Lead-Listen,
+    Werbung für ein Event oder Webinar. Dann KEIN "karriere_interesse" und KEIN "offene_frage" setzen,
+    auch wenn die Nachricht mit einer Frage endet ("Hättest du Interesse?").
+  * "automatische_nachricht": Vorlagen-/Massen-/Automatiktext (Abwesenheitsnotiz, Newsletter,
+    Gruppen-Einladung, Sponsored/InMail, sichtbar an viele kopiert).
+  * "gespraechsende": freundlicher Schlusspunkt OHNE Frage und ohne Wunsch ("Danke dir, alles Gute",
+    "Dir auch ein schönes Wochenende", "Passt, melde mich dann"). NICHT setzen, wenn eine Frage, ein
+    Einwand, ein Terminwunsch oder echtes Interesse drinsteckt.
+  "karriere_interesse" meint IMMER die eigene Laufbahn der Person, nie ein Angebot an Sinan.`;
 }
 
 // ---------- Antwort-Prompt (modular) ----------

@@ -222,6 +222,13 @@ export function setRelationshipPolicy(input: {
                                      updated_at=datetime('now')
           WHERE contact_id=? AND status='snoozed'`,
       ).run(contactId);
+      // „Wieder freigeben“ hebt auch die komplette Funkstille auf (modules/stumm.ts). Direkt per SQL,
+      // weil stumm.ts dieses Modul importiert – kein Import-Zyklus.
+      const stummThreads = (db.prepare("SELECT thread_url FROM stumm WHERE contact_id=? AND thread_url IS NOT NULL").all(contactId) as { thread_url: string }[]).map((r) => r.thread_url);
+      if (stummThreads.length && db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_conversations'").get()) {
+        db.prepare(`UPDATE agent_conversations SET status='aktiv',updated_at=datetime('now') WHERE status='stumm' AND thread_url IN (${stummThreads.map(() => "?").join(",")})`).run(...stummThreads);
+      }
+      db.prepare("DELETE FROM stumm WHERE contact_id=?").run(contactId);
     }
     const signalText = `${contactId}|${input.action}|${Date.now()}`;
     const key = createHash("sha256").update(signalText).digest("hex");

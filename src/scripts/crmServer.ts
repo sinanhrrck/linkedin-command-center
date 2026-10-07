@@ -35,6 +35,7 @@ import { FUNNEL_STAGES, setStageManually } from "../modules/crmStages.js";
 import { flushPendingReports, queueUserReport } from "../modules/reporting.js";
 import { retryJob } from "../core/jobReliability.js";
 import { backfillRelationshipSignals, setRelationshipPolicy } from "../modules/relationshipPolicy.js";
+import { stummschalten, stummAufheben } from "../modules/stumm.js";
 import { backfillContactIdentities, resolveIdentityConflict } from "../modules/contactIdentity.js";
 import { backfillContactTimeline } from "../modules/contactTimeline.js";
 import { backfillCampaignWorkflows, retryCampaignTarget, retryFailedCampaignTargets } from "../modules/campaignWorkflow.js";
@@ -926,6 +927,39 @@ const server = createServer((req, res) => {
           contactId: Number(input.contactId), action: input.action, until: input.until, reason: input.reason,
         });
         res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // STUMM (2026-10-07): komplette Funkstille – auch keine Antwort-Entwürfe mehr, der Agent fasst den
+  // Chat nicht an. Aus dem Prüfer (draftId), aus dem Kontakt (contactId) oder je Chat (threadUrl).
+  if (url.pathname === "/api/stumm" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const input = JSON.parse(body || "{}");
+        const grund = String(input.grund || "Vom Nutzer stummgeschaltet").slice(0, 240);
+        let threadUrl: string | null = input.threadUrl ? String(input.threadUrl) : null;
+        let contactId: number | null = Number.isInteger(input.contactId) ? Number(input.contactId) : null;
+        let participant: string | null = input.participant ? String(input.participant) : null;
+        if (input.draftId) {
+          const d = getDraft(Number(input.draftId));
+          if (!d) throw new Error("Entwurf nicht gefunden.");
+          threadUrl = threadUrl ?? d.thread_url ?? null;
+          contactId = contactId ?? d.contact_id ?? null;
+          participant = participant ?? d.participant ?? null;
+        }
+        if (input.action === "aus") {
+          const n = stummAufheben({ threadUrl, contactId });
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, aufgehoben: n }));
+          return;
+        }
+        const r = stummschalten({ threadUrl, contactId, participant, grund, quelle: "mensch" });
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...r }));
       } catch (e) {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
       }

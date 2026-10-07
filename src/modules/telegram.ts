@@ -550,6 +550,17 @@ export function startTelegram() {
     },
   );
 
+  // SCHWEIGEN (2026-10-07): der Agent hat bewusst NICHT geantwortet und den Chat stummgeschaltet.
+  // Eine Zeile zur Kontrolle – rückgängig im Cockpit über „Wieder freigeben“. Einmaliges Übergehen
+  // (Gesprächsende) wird nicht gemeldet, das wäre Rauschen.
+  events.on("agent:schweigen", (e: { participant: string; grund: string; art: string; threadUrl: string; schatten?: boolean }) => {
+    if (!bot || !config.telegram.chatId || e.art !== "dauerhaft") return;
+    bot.api.sendMessage(
+      config.telegram.chatId,
+      `🔇 ${e.schatten ? "Würde nicht mehr antworten" : "Antworte nicht mehr"}: ${e.participant}\n${e.grund}.\n💬 ${e.threadUrl}\n${e.schatten ? "" : "Rückgängig: Cockpit → Kontakte → ▶ Wieder freigeben."}`,
+    ).catch(() => {});
+  });
+
   // Autopilot-Handoff: KI hat einen Termin klargemacht → Kontakt sofort pushen.
   events.on("lead:booked", (l: { participant: string; contact: string | null; threadUrl: string }) => {
     if (!bot || !config.telegram.chatId) return;

@@ -23,6 +23,10 @@ export const INTENTS = [
   "negatives_signal",     // Abwehr, Desinteresse, Reibung
   "termin_zusage",        // sagt Ja zu Telefonat/Termin
   "kontakt_geteilt",      // nennt Telefonnummer/E-Mail von sich aus
+  // SCHWEIGE-INTENTS (2026-10-07): Fälle, in denen die beste Antwort KEINE Antwort ist.
+  "fremdes_angebot",      // die Person will SINAN etwas verkaufen/anbieten (Recruiting, Dienstleistung, Software, Kooperation)
+  "automatische_nachricht", // Massen-/Vorlagen-/Auto-Nachricht (Abwesenheit, Newsletter, Sponsored, Gruppen-Einladung)
+  "gespraechsende",       // freundlicher Schlusspunkt ohne Frage ("Danke dir, alles Gute") – nichts mehr nötig
 ] as const;
 
 export type Intent = (typeof INTENTS)[number];
@@ -42,6 +46,9 @@ export function saeubereIntents(roh: unknown): IntentSet {
 
 /** Harte Stopp-Intents: sobald einer davon da ist, wird NICHT weiterverkauft. */
 export const STOPP_INTENTS: ReadonlySet<Intent> = new Set(["ablehnung", "bereits_kunde"]);
+
+/** Intents, bei denen der Bot DAUERHAFT schweigt: hier ist niemand, mit dem ein Gespräch Sinn ergibt. */
+export const SCHWEIGE_INTENTS: ReadonlySet<Intent> = new Set(["fremdes_angebot", "automatische_nachricht"]);
 
 /** Intents, die „die Tür geht auf" bedeuten (Bedarf/Chance-Signal). */
 export const CHANCEN_INTENTS: ReadonlySet<Intent> = new Set([

@@ -12,7 +12,9 @@ import type { ConversationMemory } from "./memory.js";
 import { leeresMemory } from "./memory.js";
 import type { Scores } from "./scores.js";
 
-export type ConvStatus = "aktiv" | "eskaliert" | "gebucht" | "verloren";
+/** `stumm` (2026-10-07): der Bot fasst diesen Thread nie wieder an – fremdes Angebot, Automat oder
+ *  ausdrücklicher Wunsch der Person. Aufheben nur von Hand (Cockpit „Wieder freigeben“). */
+export type ConvStatus = "aktiv" | "eskaliert" | "gebucht" | "verloren" | "stumm";
 
 export interface Conversation {
   threadUrl: string;

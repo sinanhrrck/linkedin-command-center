@@ -319,11 +319,11 @@
   <button id="relationship-backdrop" class="report-backdrop" aria-label="Dialog schließen"></button>
   <section class="report-card relationship-card">
     <div class="report-head"><div><span class="eyebrow">Beziehung schützen</span><h2 id="relationship-title">Kontakt zurückstellen</h2></div><button id="relationship-close" class="icon-btn" aria-label="Schließen">×</button></div>
-    <p class="report-copy"><b id="relationship-name"></b> erhält bis zur Freigabe keine Kampagnen-, Event- oder Follow-up-Nachrichten. Direkte Antworten auf neue Nachrichten bleiben möglich.</p>
+    <p class="report-copy"><b id="relationship-name"></b> erhält bis zur Freigabe keine Kampagnen-, Event- oder Follow-up-Nachrichten. Direkte Antworten auf neue Nachrichten bleiben möglich. „Komplett stumm“ nimmt die Person ganz aus dem Nachrichten-Prozess: keine Entwürfe, keine Antworten des Agenten, bis du sie wieder freigibst.</p>
     <label class="report-field"><span>Wiedervorlage am</span><input id="relationship-until" type="date" /></label>
     <label class="report-field"><span>Warum wartet der Kontakt?</span><input id="relationship-reason" maxlength="240" placeholder="z. B. Prüfungsvorbereitung – im Winter wieder melden" /></label>
     <p id="relationship-note" class="form-note" role="status"></p>
-    <div class="relationship-actions"><button id="relationship-exclude" class="danger-ghost">Nicht mehr anschreiben</button><span></span><button id="relationship-cancel">Abbrechen</button><button id="relationship-save" class="primary">Kontakt pausieren</button></div>
+    <div class="relationship-actions"><button id="relationship-exclude" class="danger-ghost">Nicht mehr anschreiben</button><button id="relationship-mute" class="danger-ghost" title="Keine Entwürfe und keine Antworten mehr für diese Person – der Bot schweigt, bis du sie wieder freigibst.">🔇 Komplett stumm</button><span></span><button id="relationship-cancel">Abbrechen</button><button id="relationship-save" class="primary">Kontakt pausieren</button></div>
   </section>
 </div>
 <div id="report-modal" class="report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="report-title">

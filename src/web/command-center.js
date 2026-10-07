@@ -565,6 +565,22 @@ function bindDraftDelete(draft, reviewer) {
     } catch (error) { toast(`Löschen fehlgeschlagen: ${error.message}`); renderReviewer(); }
   };
 }
+/** 🔇 im Prüfer (2026-10-07): die Person komplett aus dem Nachrichten-Prozess nehmen. Wirkt auf
+ *  Chat UND (wenn zugeordnet) Kontakt: alle offenen Entwürfe weg, keine neuen, Agent schweigt. */
+function bindDraftStumm(draft, reviewer) {
+  const button = reviewer.querySelector('[data-review-action="stumm"]');
+  if (!button) return;
+  let armed = false;
+  button.onclick = async () => {
+    if (!armed) { armed = true; button.classList.add("armed"); button.textContent = "Wirklich nie mehr antworten?"; return; }
+    button.disabled = true; button.textContent = "Wird stummgeschaltet…";
+    try {
+      const r = await post("/api/stumm", { draftId: draft.id, grund: "Im Prüfer stummgeschaltet" }, 10000);
+      toast(`${draft.participant || "Kontakt"} ist stumm. ${r.verworfen || 0} Entwurf/Entwürfe verworfen.`);
+      await load(); renderReviewer();
+    } catch (error) { toast(`Nicht möglich: ${error.message}`); renderReviewer(); }
+  };
+}
 function renderReviewer() {
   const reviewer = reviewerHost(), list = reviewList();
   $(reviewCampaign ? "reviewer" : "campaign-reviewer").classList.add("hidden");
@@ -573,20 +589,20 @@ function renderReviewer() {
   const draft = list[reviewIndex]; reviewer.classList.remove("hidden");
   if (draft.phase === "approach") {
     let options = []; try { options = JSON.parse(draft.draft || "[]"); } catch {}
-    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Neue Gesprächsrichtung</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>Wähle zuerst die Idee. Danach schreibt NextLead einen komplett neuen Text.</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}<div class="approach-grid">${options.map((option, index) => `<button class="approach-card" data-approach="${esc(option.key)}"><span>0${index + 1}</span><b>${esc(option.title)}</b><small>${esc(option.description)}</small></button>`).join("")}</div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button></div></div></div>`;
+    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Neue Gesprächsrichtung</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>Wähle zuerst die Idee. Danach schreibt NextLead einen komplett neuen Text.</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}<div class="approach-grid">${options.map((option, index) => `<button class="approach-card" data-approach="${esc(option.key)}"><span>0${index + 1}</span><b>${esc(option.title)}</b><small>${esc(option.description)}</small></button>`).join("")}</div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button><button data-review-action="stumm" class="mute-draft" title="Diese Person komplett aus dem Nachrichten-Prozess nehmen: Entwurf weg, keine neuen Entwürfe, der Agent antwortet nicht mehr.">🔇 Nicht mehr antworten</button></div></div></div>`;
     reviewer.querySelectorAll("[data-approach]").forEach((button) => button.addEventListener("click", async () => { button.disabled = true; await post("/api/draft", { id: draft.id, action: "choose_approach", text: { approachKey: button.dataset.approach } }); toast("Neue Richtung gewählt. Nachricht wurde neu geschrieben."); await load(); renderReviewer(); }));
-    bindDraftDelete(draft, reviewer);
+    bindDraftDelete(draft, reviewer); bindDraftStumm(draft, reviewer);
   } else if (draft.kind === "pitchidee") {
     let ideas = []; try { ideas = JSON.parse(draft.draft || "[]"); } catch {}
-    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Pitch-Richtung wählen</span><h3>${esc(draft.participant || "Kontakt")}</h3></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose"><div class="incoming">${esc(draft.incoming || "Kein Eingangstext gespeichert.")}</div><div class="work-groups">${ideas.map((idea, index) => `<button class="work-item${index === 0 ? " recommended" : ""}" data-pitch="${index}"><span class="work-icon">${index + 1}</span><span class="work-copy"><b>Ansatz ${index + 1}${index === 0 ? ' <em class="recommended-label">(Empfohlen)</em>' : ""}</b><span>${esc(idea)}</span></span></button>`).join("")}</div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button></div></div></div>`;
+    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">Pitch-Richtung wählen</span><h3>${esc(draft.participant || "Kontakt")}</h3></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose"><div class="incoming">${esc(draft.incoming || "Kein Eingangstext gespeichert.")}</div><div class="work-groups">${ideas.map((idea, index) => `<button class="work-item${index === 0 ? " recommended" : ""}" data-pitch="${index}"><span class="work-icon">${index + 1}</span><span class="work-copy"><b>Ansatz ${index + 1}${index === 0 ? ' <em class="recommended-label">(Empfohlen)</em>' : ""}</b><span>${esc(idea)}</span></span></button>`).join("")}</div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button><button data-review-action="stumm" class="mute-draft" title="Diese Person komplett aus dem Nachrichten-Prozess nehmen: Entwurf weg, keine neuen Entwürfe, der Agent antwortet nicht mehr.">🔇 Nicht mehr antworten</button></div></div></div>`;
     reviewer.querySelectorAll("[data-pitch]").forEach((button) => button.addEventListener("click", async () => { button.disabled = true; await post("/api/pitch", { id: draft.id, idee: ideas[Number(button.dataset.pitch)] }); toast("Nachricht wird vorbereitet."); await load(); renderReviewer(); }));
-    bindDraftDelete(draft, reviewer);
+    bindDraftDelete(draft, reviewer); bindDraftStumm(draft, reviewer);
   } else {
     const label = { message: "Antwort", first: "Erstnachricht", followup: "Follow-up", reaktivierung: "Netzwerk-Zusatz · Freigabe erforderlich", event: "Event-Einladung" }[draft.kind] || "Entwurf";
     const reviewHint = draft.kind === "reaktivierung"
       ? "Zusätzlicher Kontakt – wird nur nach deiner Genehmigung gesendet."
       : draft.approach_key ? `Ansatz: ${draft.approach_key.replaceAll("_", " ")}` : draft.intent || "bereit zur Prüfung";
-    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">${label}</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>${esc(reviewHint)}</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}${contextEvidenceCard(draft)}<textarea data-review-field="text">${esc(draft.draft)}</textarea><div data-review-panel="reject" class="reject-feedback hidden"><span class="eyebrow">Was soll sich ändern?</span><div class="feedback-options"><button data-feedback="different_approach">Komplett anderer Ansatz</button><button data-feedback="artificial">Klingt künstlich</button><button data-feedback="too_personal">Zu persönlich</button><button data-feedback="too_salesy">Zu verkäuferisch</button></div><div class="custom-feedback"><input data-review-field="feedback" placeholder="Oder beschreibe kurz deine gewünschte Richtung…"/><button data-review-action="rewrite">Neu schreiben</button></div></div><div data-review-panel="coach" class="coach-panel hidden"></div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button><button data-review-action="coach" title="Ein Vertriebscoach bewertet den Entwurf und schlägt eine bessere Fassung vor (ein Claude-Aufruf)">✨ KI-Coach</button><button data-review-action="reject">Ablehnen</button><button data-review-action="approve" class="primary">Genehmigen</button></div></div></div>`;
+    reviewer.innerHTML = `<div class="review-head"><div class="review-person"><span class="eyebrow">${label}</span><h3>${esc(draft.participant || "Kontakt")}</h3><p>${esc(reviewHint)}</p></div><span class="review-progress">${reviewIndex + 1} / ${list.length}</span></div><div class="review-context">${profileCard(draft)}<div class="review-compose">${draft.incoming && !String(draft.incoming).startsWith("campaign:") ? `<div class="incoming">${esc(draft.incoming)}</div>` : ""}${contextEvidenceCard(draft)}<textarea data-review-field="text">${esc(draft.draft)}</textarea><div data-review-panel="reject" class="reject-feedback hidden"><span class="eyebrow">Was soll sich ändern?</span><div class="feedback-options"><button data-feedback="different_approach">Komplett anderer Ansatz</button><button data-feedback="artificial">Klingt künstlich</button><button data-feedback="too_personal">Zu persönlich</button><button data-feedback="too_salesy">Zu verkäuferisch</button></div><div class="custom-feedback"><input data-review-field="feedback" placeholder="Oder beschreibe kurz deine gewünschte Richtung…"/><button data-review-action="rewrite">Neu schreiben</button></div></div><div data-review-panel="coach" class="coach-panel hidden"></div><div class="review-actions"><button data-review-action="delete" class="delete-draft">Entwurf löschen</button><button data-review-action="stumm" class="mute-draft" title="Diese Person komplett aus dem Nachrichten-Prozess nehmen: Entwurf weg, keine neuen Entwürfe, der Agent antwortet nicht mehr.">🔇 Nicht mehr antworten</button><button data-review-action="coach" title="Ein Vertriebscoach bewertet den Entwurf und schlägt eine bessere Fassung vor (ein Claude-Aufruf)">✨ KI-Coach</button><button data-review-action="reject">Ablehnen</button><button data-review-action="approve" class="primary">Genehmigen</button></div></div></div>`;
     const approve = reviewer.querySelector('[data-review-action="approve"]');
     const reject = reviewer.querySelector('[data-review-action="reject"]');
     const textField = reviewer.querySelector('[data-review-field="text"]');
@@ -628,7 +644,7 @@ function renderReviewer() {
     };
     reviewer.querySelectorAll("[data-feedback]").forEach((button) => button.addEventListener("click", () => rejectWith(button.dataset.feedback)));
     rewrite.onclick = () => { const instruction = feedbackField.value.trim(); if (!instruction) return feedbackField.focus(); rejectWith("custom", instruction); };
-    bindDraftDelete(draft, reviewer);
+    bindDraftDelete(draft, reviewer); bindDraftStumm(draft, reviewer);
   }
   if (reviewCampaign) {
     // In der Kampagne ist die Prüfung ein aufklappbarer Bereich – deshalb ein eigenes Schließen.
@@ -871,15 +887,17 @@ function renderCampaigns() {
 
 const STATUS = { new: "Neu", inviting: "Wird angefragt", invited: "Anfrage offen", accepted: "Angenommen", messaged: "Angeschrieben", replied: "Antwort erhalten", closed: "Abgeschlossen", skipped: "Ausgeschlossen" };
 function relationshipLabel(contact) {
+  if (contact.stumm_grund) return "Komplett stumm – keine Entwürfe, keine Antworten";
   if (contact.do_not_contact || contact.automation_status === "excluded") return "Nicht mehr anschreiben";
   if (contact.automation_status === "manual") return "Nur manuell";
   if (contact.automation_status === "paused") return contact.snooze_label ? `Pausiert bis ${contact.snooze_label}` : "Pausiert";
   return "";
 }
 function nextStep(contact) { const relationship = relationshipLabel(contact); if (relationship) return `${relationship}${contact.snooze_reason ? ` · ${contact.snooze_reason}` : ""}`; if (contact.open_draft_kind === "message") return "Antwort prüfen"; if (contact.open_draft_kind === "event") return "Event-Einladung prüfen"; if (contact.open_draft_kind === "reaktivierung") return "Netzwerk-Zusatz freigeben"; if (contact.open_draft_id) return "Entwurf prüfen"; if (contact.status === "replied") return "Ergebnis festhalten"; if (contact.status === "accepted" && contact.aus_netzwerk) return "Nur manuell im Netzwerk-Zusatz"; if (contact.status === "accepted") return "Erstkontakt vorbereiten"; if (contact.status === "invited") return "Wartet auf Annahme"; if (contact.status === "new") return "Wird automatisch priorisiert"; return "Kein Schritt offen"; }
-function closeRelationshipModal() { relationshipContact = null; relationshipExcludeArmed = false; $("relationship-modal").classList.add("hidden"); $("relationship-note").textContent = ""; $("relationship-exclude").textContent = "Nicht mehr anschreiben"; }
+let relationshipMuteArmed = false;
+function closeRelationshipModal() { relationshipContact = null; relationshipExcludeArmed = false; relationshipMuteArmed = false; $("relationship-modal").classList.add("hidden"); $("relationship-note").textContent = ""; $("relationship-exclude").textContent = "Nicht mehr anschreiben"; $("relationship-mute").textContent = "🔇 Komplett stumm"; }
 function openRelationshipModal(contact) {
-  relationshipContact = contact; relationshipExcludeArmed = false;
+  relationshipContact = contact; relationshipExcludeArmed = false; relationshipMuteArmed = false; $("relationship-mute").textContent = "🔇 Komplett stumm";
   const date = new Date(); date.setDate(date.getDate() + 30);
   $("relationship-name").textContent = contact.full_name || "Dieser Kontakt";
   $("relationship-until").value = date.toISOString().slice(0, 10);
@@ -916,6 +934,12 @@ function zeichneKontaktArbeitsbereich(contact, workspace) {
       <p class="desk-note" id="stage-note" role="status"></p>
     </section>
     <section class="desk-block">
+      <div class="desk-head"><b>Ansprache</b><span>${esc(relationshipLabel(contact) || "Der Bot darf schreiben und antworten")}</span></div>
+      <div class="desk-stumm">${contact.stumm_grund
+        ? `<p>Komplett stumm: ${esc(contact.stumm_grund)}. Es entstehen keine Entwürfe, der Agent antwortet nicht.</p><button type="button" id="desk-stumm-aus">▶ Wieder freigeben</button>`
+        : `<p>Soll diese Person ganz aus dem Nachrichten-Prozess? Dann verschwinden alle offenen Entwürfe, es entstehen keine neuen und der Agent antwortet nicht mehr.</p><button type="button" id="desk-stumm-an" class="danger-ghost">🔇 Nicht mehr anschreiben, nicht mehr antworten</button>`}</div>
+    </section>
+    <section class="desk-block">
       <div class="desk-head"><b>Aufgaben</b><span>${offeneAufgaben.length} offen</span></div>
       <form class="desk-form" id="task-form"><input id="task-title" maxlength="220" placeholder="Nächster Schritt, z. B. Montag anrufen" required /><input id="task-due" type="date" /><button type="submit" class="primary">Merken</button></form>
       <ul class="desk-list">${offeneAufgaben.map((task) => `<li class="${task.due_at && task.due_at <= heute ? "faellig" : ""}"><span>${esc(task.title)}${task.due_at ? ` <time>fällig ${esc(kurzDatum(task.due_at))}</time>` : ""}</span><span class="desk-row-actions"><button type="button" data-task-done="${task.id}">Erledigt</button><button type="button" data-task-del="${task.id}" aria-label="Aufgabe löschen">×</button></span></li>`).join("") || `<li class="desk-empty">Nichts offen.</li>`}
@@ -939,6 +963,20 @@ function zeichneKontaktArbeitsbereich(contact, workspace) {
       await neuLaden();
     } catch (error) { $("stage-note").textContent = error.message; button.disabled = false; }
   }));
+
+  const stummAn = document.getElementById("desk-stumm-an");
+  if (stummAn) { let armed = false; stummAn.addEventListener("click", async () => {
+    if (!armed) { armed = true; stummAn.textContent = "Wirklich komplett stumm?"; return; }
+    stummAn.disabled = true;
+    try { await post("/api/stumm", { contactId: contact.id, grund: "Im Kontaktverlauf stummgeschaltet" }); toast(`${contact.full_name || "Kontakt"} ist stumm.`); await load(true); const frisch = (state.contacts || []).find((c) => c.id === contact.id) || contact; await openContactWorkspace(frisch); }
+    catch (error) { toast(`Nicht möglich: ${error.message}`); stummAn.disabled = false; }
+  }); }
+  const stummAus = document.getElementById("desk-stumm-aus");
+  if (stummAus) stummAus.addEventListener("click", async () => {
+    stummAus.disabled = true;
+    try { await post("/api/contact-policy", { contactId: contact.id, action: "resume" }); toast(`${contact.full_name || "Kontakt"} ist wieder freigegeben.`); await load(true); const frisch = (state.contacts || []).find((c) => c.id === contact.id) || contact; await openContactWorkspace(frisch); }
+    catch (error) { toast(`Nicht möglich: ${error.message}`); stummAus.disabled = false; }
+  });
 
   $("task-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1068,7 +1106,7 @@ function renderContacts() {
     ].join("");
     // Designrunde 2: sechs Spalten statt neun – Stufe steht unter dem Status, Aufgaben/Notizen
     // als Symbole am Namen, die Quelle im Tooltip.
-    return `<div class="contact-row"><div class="contact-person" title="${esc([contact.quelle ? `Quelle: ${contact.quelle}` : "", contact.zielgruppe_name ? `Zielgruppe: ${contact.zielgruppe_name}` : "keiner Zielgruppe zugeordnet"].filter(Boolean).join(" · "))}"><b>${esc(contact.full_name || "Unbekannt")}${offen ? `<span class="contact-open">${offen}</span>` : ""}</b><span>${esc(contact.headline || "Keine Headline")}</span>${protectedState ? `<i class="relationship-state ${contact.automation_status === "excluded" ? "excluded" : ""}">${esc(protectedState)}</i>` : !contact.in_zielgruppe && ["new", "invited", "accepted"].includes(contact.status) ? `<i class="relationship-state outside">Außerhalb der Zielgruppe · keine automatische Ansprache</i>` : ""}</div><div class="contact-status"><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span>${contact.outcome_stage ? stufe : ""}</div><span class="contact-score" title="${esc(contact.ki_grund ? `KI: ${contact.ki_score} · ${({ beratung: "Beratung", partner: "Partner", beide: "Beratung + Partner", keiner: "passt nicht" })[contact.ki_fit] || ""} · ${contact.ki_grund}` : "Regel-Note (noch nicht von der KI bewertet)")}">${contact.ki_score ?? contact.lead_score ?? "–"}${contact.ki_score != null ? `<i class="ki-mark">KI</i>` : ""}</span><span class="contact-meta">${contact.letzte_beruehrung ? esc(relativeTime(contact.letzte_beruehrung)) : "–"}</span><span class="next-step">${esc(nextStep(contact))}</span><span class="contact-actions"><button class="contact-history" data-contact-history="${contact.id}">Verlauf</button><button class="contact-policy icon-only ${protectedState ? "resume" : ""}" data-contact-policy="${contact.id}" title="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}" aria-label="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}">${protectedState ? "▶" : "⏸"}</button><a class="icon-link" href="${esc(contact.profile_url)}" target="_blank" rel="noopener" title="LinkedIn-Profil öffnen" aria-label="LinkedIn-Profil öffnen">↗</a></span></div>`;
+    return `<div class="contact-row"><div class="contact-person" title="${esc([contact.quelle ? `Quelle: ${contact.quelle}` : "", contact.zielgruppe_name ? `Zielgruppe: ${contact.zielgruppe_name}` : "keiner Zielgruppe zugeordnet"].filter(Boolean).join(" · "))}"><b>${esc(contact.full_name || "Unbekannt")}${offen ? `<span class="contact-open">${offen}</span>` : ""}</b><span>${esc(contact.headline || "Keine Headline")}</span>${protectedState ? `<i class="relationship-state ${contact.stumm_grund ? "stumm" : contact.automation_status === "excluded" ? "excluded" : ""}" title="${esc(contact.stumm_grund || contact.snooze_reason || "")}">${esc(protectedState)}</i>` : !contact.in_zielgruppe && ["new", "invited", "accepted"].includes(contact.status) ? `<i class="relationship-state outside">Außerhalb der Zielgruppe · keine automatische Ansprache</i>` : ""}</div><div class="contact-status"><span class="status-pill ${esc(contact.status)}">${STATUS[contact.status] || esc(contact.status)}</span>${contact.outcome_stage ? stufe : ""}</div><span class="contact-score" title="${esc(contact.ki_grund ? `KI: ${contact.ki_score} · ${({ beratung: "Beratung", partner: "Partner", beide: "Beratung + Partner", keiner: "passt nicht" })[contact.ki_fit] || ""} · ${contact.ki_grund}` : "Regel-Note (noch nicht von der KI bewertet)")}">${contact.ki_score ?? contact.lead_score ?? "–"}${contact.ki_score != null ? `<i class="ki-mark">KI</i>` : ""}</span><span class="contact-meta">${contact.letzte_beruehrung ? esc(relativeTime(contact.letzte_beruehrung)) : "–"}</span><span class="next-step">${esc(nextStep(contact))}</span><span class="contact-actions"><button class="contact-history" data-contact-history="${contact.id}">Verlauf</button><button class="contact-policy icon-only ${protectedState ? "resume" : ""}" data-contact-policy="${contact.id}" title="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}" aria-label="${protectedState ? "Wieder freigeben" : "Kontakt pausieren"}">${protectedState ? "▶" : "⏸"}</button><a class="icon-link" href="${esc(contact.profile_url)}" target="_blank" rel="noopener" title="LinkedIn-Profil öffnen" aria-label="LinkedIn-Profil öffnen">↗</a></span></div>`;
   }).join("") || `<div class="empty-work">Keine Kontakte in diesem Filter.</div>`;
   $("contact-rows").querySelectorAll("[data-contact-history]").forEach((button) => button.addEventListener("click", () => {
     const contact = (state.contacts || []).find((item) => item.id === Number(button.dataset.contactHistory));
@@ -1905,6 +1943,19 @@ $("relationship-exclude").onclick = async () => {
   try {
     await post("/api/contact-policy", { contactId: relationshipContact.id, action: "exclude", reason: $("relationship-reason").value || "Manuell dauerhaft ausgeschlossen" });
     const name = relationshipContact.full_name || "Kontakt"; closeRelationshipModal(); await load(); toast(`${name} wird nicht mehr automatisch angeschrieben.`);
+  } catch (error) { $("relationship-note").textContent = error.message; }
+  finally { button.disabled = false; }
+};
+// KOMPLETT STUMM (2026-10-07): raus aus dem gesamten Nachrichten-Prozess – keine Entwürfe, keine
+// Agent-Antworten, keine proaktive Ansprache. Zwei Klicks (Rückfrage), rückgängig über ▶.
+$("relationship-mute").onclick = async () => {
+  if (!relationshipContact) return;
+  const button = $("relationship-mute");
+  if (!relationshipMuteArmed) { relationshipMuteArmed = true; button.textContent = "Wirklich komplett stumm?"; return; }
+  button.disabled = true; $("relationship-note").textContent = "";
+  try {
+    await post("/api/stumm", { contactId: relationshipContact.id, grund: $("relationship-reason").value || "Vom Nutzer stummgeschaltet" });
+    const name = relationshipContact.full_name || "Kontakt"; closeRelationshipModal(); await load(); toast(`${name} ist stumm: keine Entwürfe und keine Antworten mehr.`);
   } catch (error) { $("relationship-note").textContent = error.message; }
   finally { button.disabled = false; }
 };

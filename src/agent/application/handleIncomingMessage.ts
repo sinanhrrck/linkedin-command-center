@@ -16,6 +16,7 @@ import { validiereAntwort } from "../domain/validation/responseValidator.js";
 import { humanize } from "../domain/validation/humanizer.js";
 import type { Conversation, ConvStatus } from "../domain/conversation.js";
 import type { IntentSet } from "../domain/intent.js";
+import { dauerhaftSchweigen, einmaligSchweigen, istSpaetePhase, type Schweigen } from "../domain/policy/schweigen.js";
 
 export interface AgentDeps {
   analyzeLlm: LlmFn;               // günstiger Kanal (Gemini)
@@ -28,7 +29,9 @@ export interface AgentDeps {
 export type Entscheidung =
   | { typ: "senden"; text: string; intents: IntentSet; conversation: Conversation }
   | { typ: "eskalieren"; grund: string; entwurf: string | null; kontakt?: string | null; conversation: Conversation }
-  | { typ: "nichts"; grund: string; conversation: Conversation };
+  | { typ: "nichts"; grund: string; conversation: Conversation }
+  /** Bewusst KEINE Antwort (2026-10-07). `dauerhaft` = Thread stummschalten, `einmalig` = nur diese Nachricht übergehen. */
+  | { typ: "schweigen"; art: Schweigen["art"]; quelle: Schweigen["quelle"]; grund: string; conversation: Conversation };
 
 export async function handleIncomingMessage(conv: Conversation, verlauf: Nachricht[], deps: AgentDeps): Promise<Entscheidung> {
   if (conv.status !== "aktiv") return { typ: "nichts", grund: `Status ${conv.status}`, conversation: conv };
@@ -53,6 +56,18 @@ export async function handleIncomingMessage(conv: Conversation, verlauf: Nachric
   const stage = nextStage(conv.stage, analyse.intents, scores);
   const basis: Conversation = { ...conv, profile, memory, scores, stage };
 
+  // 3b) SCHWEIGEN, STUFE 1 – VOR der Übergabe-Prüfung: Recruiter, Verkäufer, Automaten und ein
+  // ausdrückliches „nicht mehr anschreiben“ bekommen keine Antwort. Die Telefonnummer eines
+  // Verkäufers ist kein gebuchter Lead. Läuft ein echtes Gespräch schon in einer späten Phase,
+  // ist ein „fremdes Angebot“ eher ein Themenwechsel des Leads → an den Menschen statt stumm.
+  const ruhe = dauerhaftSchweigen(analyse.intents, letzteNachricht);
+  if (ruhe) {
+    if (ruhe.quelle === "fremdes_angebot" && istSpaetePhase(conv.stage)) {
+      return { typ: "eskalieren", grund: "Person macht mitten im Gespräch ein eigenes Angebot – bitte selbst einschätzen", entwurf: null, conversation: basis };
+    }
+    return { typ: "schweigen", art: "dauerhaft", quelle: ruhe.quelle, grund: ruhe.grund, conversation: { ...basis, status: "stumm" } };
+  }
+
   // 4) ÜBERGABE-MOMENT: Kontakt genannt oder Termin-Zusage → an den Menschen (nie auto-abschließen).
   if (analyse.kontakt || analyse.intents.includes("termin_zusage")) {
     return { typ: "eskalieren", grund: "Termin/Kontakt – Übergabe an dich", entwurf: null, kontakt: analyse.kontakt, conversation: { ...basis, status: "gebucht" } };
@@ -67,6 +82,12 @@ export async function handleIncomingMessage(conv: Conversation, verlauf: Nachric
   ) {
     return { typ: "eskalieren", grund: "Zusage/Interesse am Angebot – Übergabe an dich (Code + Auswertung)", entwurf: null, conversation: { ...basis, stage: "nummer", status: "gebucht" } };
   }
+
+  // 4b) SCHWEIGEN, STUFE 2 – das Gespräch ist freundlich zu Ende oder die Person hat nur kurz
+  // reagiert. Noch eine Nachricht hinterherzuschieben wirkt bedürftig. Gespräch bleibt offen:
+  // schreibt die Person wieder, antwortet der Agent wie gewohnt.
+  const ende = einmaligSchweigen(analyse.intents, letzteNachricht, { eigeneNachrichten: eigene.length });
+  if (ende) return { typ: "schweigen", art: "einmalig", quelle: ende.quelle, grund: ende.grund, conversation: basis };
 
   // 5) Antwort erzeugen + Schutzschleife: Humanizer → Validator → bei Verstoß regenerieren.
   const triggers = deriveTriggers(profile, analyse.intents, scores);

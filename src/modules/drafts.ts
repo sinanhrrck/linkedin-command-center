@@ -27,6 +27,8 @@ import { blockDraftForRelationship, observeRelationshipMessage, proactiveDecisio
 import { syncCampaignTargetForDraft } from "./campaignWorkflow.js";
 import { leseStand } from "../core/leseBudget.js";
 import { attachDraftContext, getConversationMemory, validateProactiveContext } from "./conversationMemory.js";
+import { istStumm, stummschalten } from "./stumm.js";
+import { dauerhaftSchweigen } from "../agent/domain/policy/schweigen.js";
 
 /**
  * DM-Entwürfe: Inbox lesen → Gemini-Draft → als 'pending' speichern.
@@ -728,6 +730,12 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
   if (d.status === "sent") return { ok: false, reason: "Bereits gesendet" };
   if (d.status !== "pending" && d.status !== "approved") return { ok: false, reason: `Entwurf ist bereits ${d.status}` };
   if (!d.thread_url) return { ok: false, reason: "Kein Ziel (Thread/Profil)" };
+  // STUMM (2026-10-07): Funkstille gilt auch für bereits freigegebene Entwürfe – verwerfen, nicht senden.
+  const stumm = istStumm(d.thread_url, d.contact_id);
+  if (stumm) {
+    db.prepare("UPDATE drafts SET status='discarded',rejection_reason='stumm',blockiert_grund=? WHERE id=? AND status IN ('pending','approved')").run(stumm.grund, id);
+    return { ok: false, reason: `Kontakt ist stumm: ${stumm.grund}` };
+  }
 
   // ATOMARER CLAIM: Nur genau ein Prozess darf diesen Entwurf versenden. Das schützt gegen
   // Dashboard, Telegram und Engine-Cron, die vorher alle denselben 'approved'-Entwurf lesen
@@ -893,6 +901,16 @@ export async function generateInboxDrafts(max = 6, onlyUnread = false): Promise<
     const needsReply = last ? (last.sender ? last.sender === t.participant : t.unread) : false;
     if (!needsReply) continue;
     if (hasOpenDraft(t.threadUrl, t.lastIncoming)) continue;
+    // STUMM (2026-10-07): Chat/Kontakt auf Funkstille → kein Entwurf, kein KI-Aufruf.
+    if (istStumm(t.threadUrl)) continue;
+    // Deterministischer Vorfilter: ausdrücklicher Kontakt-Stopp oder Automaten-Nachricht → ohne KI
+    // stummschalten. Ein Mensch antwortet auf eine Abwesenheitsnotiz nicht.
+    const ruhe = dauerhaftSchweigen([], t.lastIncoming);
+    if (ruhe) {
+      stummschalten({ threadUrl: t.threadUrl, participant: t.participant, grund: ruhe.grund, quelle: "regel" });
+      console.info(`[drafts] kein Entwurf für ${t.participant}: ${ruhe.grund}`);
+      continue;
+    }
 
     /**
      * EIN KI-Aufruf liefert Einordnung + Antwort + Zusammenfassung + Strategie.

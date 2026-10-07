@@ -25,6 +25,7 @@ import { SqliteConversationRepository } from "../infra/sqliteConversationReposit
 import { handleIncomingMessage } from "../application/handleIncomingMessage.js";
 import { neueConversation } from "../domain/conversation.js";
 import { angebotsWahl } from "../../modules/angebot.js";
+import { istStumm, stummschalten } from "../../modules/stumm.js";
 
 /**
  * KI-Kanäle für den Agent. WICHTIG (Fix 2026-07-24): BEIDE Schritte (Analyse UND Antwort) laufen
@@ -48,8 +49,8 @@ function fingerprint(text: string): string {
   return `${h}:${s.length}`;
 }
 
-export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesendet: number; entwuerfe: number; eskaliert: number }> {
-  const res = { verarbeitet: 0, gesendet: 0, entwuerfe: 0, eskaliert: 0 };
+export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesendet: number; entwuerfe: number; eskaliert: number; geschwiegen: number }> {
+  const res = { verarbeitet: 0, gesendet: 0, entwuerfe: 0, eskaliert: 0, geschwiegen: 0 };
   const mode = getAgentMode();
   if (mode === "off") return res;
   const schatten = mode === "shadow";
@@ -66,6 +67,10 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
     // ist (der Grund, warum trotz Antwort Reminder rausgingen, wenn der Agent aktiv war).
     const crmContactId = t.participant ? markInboundReply(t.threadUrl, t.participant) : null;
     if (crmContactId) recordCrmStage(crmContactId, "replied", "agent");
+
+    // STUMM (2026-10-07): Chat oder Kontakt wurde vom Menschen oder vom Agenten selbst auf Funkstille
+    // gesetzt → kein KI-Aufruf, keine Antwort, keine Eskalation. Steht VOR dem Laden des Gesprächs.
+    if (istStumm(t.threadUrl, crmContactId)) continue;
 
     let conv = (await repo.load(t.threadUrl)) ?? neueConversation(t.threadUrl, t.participant);
     if (conv.status !== "aktiv") continue;
@@ -112,6 +117,17 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
     // SOFORT abhaken (mit erzeugtem Text) – ab jetzt wird diese Nachricht nie wieder neu generiert.
     repo.merkeVerarbeitung(t.threadUrl, hash, e.typ, e.typ === "senden" ? e.text : e.typ === "eskalieren" ? (e.entwurf ?? null) : null);
     res.verarbeitet++;
+
+    // ---- SCHWEIGEN: bewusst keine Antwort (fremdes Angebot, Automat, Kontakt-Stopp, Gesprächsende) ----
+    if (e.typ === "schweigen") {
+      if (e.art === "dauerhaft" && !schatten) {
+        stummschalten({ threadUrl: t.threadUrl, contactId: crmContactId, participant: t.participant, grund: e.grund, quelle: "agent" });
+      }
+      console.info(`[agent${schatten ? "-schatten" : ""}] schweigt ${e.art} (${t.participant}): ${e.grund}`);
+      events.emit("agent:schweigen", { participant: t.participant, grund: e.grund, art: e.art, quelle: e.quelle, threadUrl: t.threadUrl, schatten });
+      res.geschwiegen++;
+      continue;
+    }
 
     // ---- SCHATTEN-MODUS: nur zeigen, was der Agent tun würde ----
     if (schatten) {
@@ -166,6 +182,6 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
     }
   }
 
-  if (res.verarbeitet) console.info(`[agent] ${res.verarbeitet} Threads · ${res.gesendet} gesendet · ${res.entwuerfe} Entwürfe · ${res.eskaliert} eskaliert${schatten ? " (Schatten)" : ""}`);
+  if (res.verarbeitet) console.info(`[agent] ${res.verarbeitet} Threads · ${res.gesendet} gesendet · ${res.entwuerfe} Entwürfe · ${res.eskaliert} eskaliert · ${res.geschwiegen} bewusst unbeantwortet${schatten ? " (Schatten)" : ""}`);
   return res;
 }

@@ -158,6 +158,43 @@ braucht den Governor NICHT.
   ACHTUNG bei langen Seiten: der In-App-Browser-Pane paintet weit unten nach Scroll teils
   nicht (Artefakt) — DOM/oberer Bereich sind maßgeblich, nicht der Leerscreenshot.
 
+## UPDATE 2026-10-07 — Voll-Automatik: Schweigen können + „Komplett stumm“
+Sinans Vorgabe: Bot auf Auto, „ich will mich damit nicht mehr beschäftigen“. Dafür fehlten zwei
+Dinge: der Agent antwortete auf JEDE Nachricht (Recruiter, Software-Verkäufer, Abwesenheitsnotizen,
+ein „Danke, dir auch“), und es gab keinen Knopf, der eine Person aus dem GESAMTEN Nachrichten-
+Prozess nimmt („Nicht mehr anschreiben“ stoppte nur Erstnachricht/Nachfassen/Kampagnen, Antwort-
+Entwürfe blieben bewusst zu).
+- **Schweige-Logik** (`agent/domain/policy/schweigen.ts`, rein): drei neue Intents
+  `fremdes_angebot`, `automatische_nachricht`, `gespraechsende` (Analyse-Prompt erklärt sie;
+  `karriere_interesse` meint IMMER die eigene Laufbahn der Person, nie ein Angebot an Sinan).
+  `dauerhaftSchweigen` läuft im Orchestrator VOR der Termin-/Kontakt-Übergabe – die Telefonnummer
+  eines Verkäufers ist kein gebuchter Lead. Deterministische Muster (Kontakt-Stopp „nicht mehr
+  anschreiben“, Abwesenheit/Newsletter/Sponsored) greifen auch ohne KI; `fremdes_angebot` kommt nur
+  von der KI. In späten Phasen (bedarf…termin) ist ein fremdes Angebot ein Themenwechsel des Leads →
+  eskalieren statt stumm. `einmaligSchweigen` NACH der Übergabe-Prüfung: Schlusspunkt ohne Frage
+  oder reine Kurz-Reaktion („Ok 👍“) → diese Nachricht übergehen, Gespräch bleibt `aktiv`; eine Frage
+  („?“), Chance, Skepsis oder Preisfrage gewinnt immer. Neue Entscheidung `typ:"schweigen"`,
+  neuer `ConvStatus` `stumm`.
+- **`modules/stumm.ts` + Tabelle `stumm`** (je Thread eine Zeile, je Kontakt zusätzlich eine ohne
+  Thread, damit auch künftige Chats ruhen). `istStumm(thread, contactId)` wird geprüft in
+  `agentTick` (vor dem Laden des Gesprächs, kein KI-Aufruf), `generateInboxDrafts` und `sendDraft`
+  (verwirft auch bereits Freigegebenes). `stummschalten()` verwirft ALLE offenen Entwürfe des
+  Kontakts/Threads, setzt `agent_conversations.status='stumm'` und ruft `applyRelationshipSignal
+  (do_not_contact)` – ein Weg, keine zweite Sperrlogik. `actions` bleibt unberührt. Aufheben:
+  `setRelationshipPolicy('resume')` löscht die stumm-Zeilen per SQL (stumm.ts importiert
+  relationshipPolicy, nicht umgekehrt → kein Zyklus) und weckt das Agent-Gespräch.
+  `generateInboxDrafts` nutzt zusätzlich den deterministischen Vorfilter (Quelle `regel`).
+- **Cockpit:** 🔇 „Nicht mehr antworten“ in allen drei Prüfer-Karten (zwei Klicks, `POST /api/stumm`
+  mit `draftId` – funktioniert auch für Chats ohne CRM-Kontakt), „Komplett stumm“ im Pausieren-
+  Dialog, Block „Ansprache“ im Kontaktverlauf (an/aus), Kontaktliste zeigt `stumm_grund`
+  (dashboard.ts) als grauen Zustand, ▶ „Wieder freigeben“ hebt alles auf. Telegram meldet nur
+  DAUERHAFTES Schweigen des Agenten (🔇 + Grund + Chat-Link); einmaliges Übergehen wäre Rauschen.
+- Tests: `schweigen.test.ts` (9), `stumm.test.ts` (4). NICHT live gegen LinkedIn/Claude getestet –
+  nach dem Deploy `engine.log` auf „schweigt“ prüfen.
+- ARBEITSWEISE: iCloud hat die Dateien während der Arbeit laufend ausgelagert (3,6 GB frei, 10 000
+  dataless-Dateien in node_modules, `tsc` hing bei 0 % CPU). Typprüfung und Tests liefen in einer
+  rsync-Kopie im Scratchpad mit frischem `npm ci`.
+
 ## SERVER-MODUS / DOCKER (2026-09-21) — Heimserver ohne Bildschirm
 Anleitung für Laien: `MIGRATION.md`. Alles hängt an `NEXTLEAD_SERVER=1` (`npm run server`, Dockerfile);
 ohne das Flag sind Mac-App und Dev-Modus byte-identisch zu vorher (verifiziert: `config.paths` liefert
