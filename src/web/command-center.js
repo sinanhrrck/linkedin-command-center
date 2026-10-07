@@ -1251,10 +1251,30 @@ function renderAgentVertrauen(level) {
   if (!box) return;
   if (!v || (level !== "agent_vorsichtig" && level !== "agent_live")) { box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
-  const autonomText = !v.autonom.length ? "Noch nichts – jede Antwort kommt zu dir." : v.autonom.includes("hoch") ? "Alles – auch Einwände, Angebot und Termin." : v.autonom.includes("mittel") ? "Eröffnung, Smalltalk, Bedarf und Vertrauensaufbau. Einwände, Angebot und Termin kommen zu dir." : "Eröffnung und Smalltalk. Alles Vertriebliche kommt zu dir.";
+  const STUFEN_TEXT = ["Nichts von selbst – jede Antwort kommt zu dir.", "Eröffnung und Smalltalk von selbst. Alles Vertriebliche kommt zu dir.", "Eröffnung, Smalltalk, Bedarf und Vertrauensaufbau von selbst. Einwände, Angebot und Termin kommen zu dir.", "Alles von selbst – auch Einwände, Angebot und Termin."];
   const prozent = Math.round((v.quote || 0) * 100);
-  const naechste = v.naechste ? `Nächste Stufe ${v.naechste.stufe}: ${v.naechste.fehlen > 0 ? `noch ${v.naechste.fehlen} Entscheidung${v.naechste.fehlen === 1 ? "" : "en"}` : "genug Entscheidungen"}, mindestens ${Math.round(v.naechste.quote * 100)} % unverändert freigegeben.` : "Höchste Stufe erreicht.";
-  box.innerHTML = `<b>Vertrauen Stufe ${v.stufe} von 3${v.veto ? " · gebremst" : ""}</b><div class="stufen">${[1, 2, 3].map((n) => `<span class="${n <= v.stufe ? "voll" : v.veto && n === v.stufe + 1 ? "veto" : ""}"></span>`).join("")}</div>${level === "agent_live" ? "In „Gespräche automatisch“ sendet der Agent alles selbst. Zum Vergleich: vorsichtig würde er gerade von selbst senden: " : "Sendet von selbst: "}${esc(autonomText)}<small>${v.entscheidungen} Entscheidung${v.entscheidungen === 1 ? "" : "en"} in 60 Tagen · ${v.unveraendert} unverändert (${prozent} %) · ${v.geaendert} geändert · ${v.abgelehnt} abgelehnt. ${esc(naechste)}${v.veto ? " Von deinen letzten 10 Entscheidungen waren mindestens 3 Ablehnungen, deshalb eine Stufe zurück." : ""}</small>`;
+  const automatischStufe = v.veto ? Math.max(0, v.verdient - 1) : v.verdient;
+  const naechste = v.naechste ? `Nächste automatische Stufe ${v.naechste.stufe}: ${v.naechste.fehlen > 0 ? `noch ${v.naechste.fehlen} Entscheidung${v.naechste.fehlen === 1 ? "" : "en"}` : "genug Entscheidungen"}, mindestens ${Math.round(v.naechste.quote * 100)} % unverändert.` : "Höchste automatische Stufe erreicht.";
+  const manuell = v.manuell !== null && v.manuell !== undefined;
+  box.innerHTML = `<b>Vertrauen Stufe ${v.stufe} von 3 ${manuell ? "· von Hand" : "· automatisch" + (v.veto ? ", gebremst" : "")}</b>
+    <div class="regler-zeile"><span class="regler-label">0</span><input type="range" id="vertrauen-regler" min="0" max="3" step="1" value="${v.stufe}" aria-label="Vertrauensstufe des Agenten" ${level !== "agent_vorsichtig" ? "disabled" : ""}/><span class="regler-label">3</span></div>
+    <div class="regler-marken">${[0, 1, 2, 3].map((n) => `<span class="${n === v.stufe ? "aktiv" : ""} ${n === automatischStufe ? "auto-marke" : ""}" title="${n === automatischStufe ? "Hier stünde der Regler automatisch" : ""}">${n}</span>`).join("")}</div>
+    <p class="regler-text">${level === "agent_live" ? "In „Gespräche automatisch“ sendet der Agent alles selbst, der Regler gilt in „Gespräche vorsichtig“. " : ""}${esc(STUFEN_TEXT[v.stufe])}</p>
+    <div class="regler-aktionen"><button type="button" id="vertrauen-auto" class="${manuell ? "" : "aktiv"}" ${level !== "agent_vorsichtig" ? "disabled" : ""}>${manuell ? `Automatisch nach Freigaben (wäre Stufe ${automatischStufe})` : "Automatisch nach Freigaben – aktiv"}</button></div>
+    <small>${v.entscheidungen} Entscheidung${v.entscheidungen === 1 ? "" : "en"} in 60 Tagen · ${v.unveraendert} unverändert (${prozent} %) · ${v.geaendert} geändert · ${v.abgelehnt} abgelehnt. ${esc(naechste)}${v.veto && !manuell ? " Von deinen letzten 10 Entscheidungen waren mindestens 3 Ablehnungen, deshalb automatisch eine Stufe zurück." : ""}</small>`;
+  const regler = $("vertrauen-regler");
+  if (regler) {
+    regler.addEventListener("input", () => { box.querySelector(".regler-text").textContent = STUFEN_TEXT[Number(regler.value)]; });
+    regler.addEventListener("change", async () => {
+      try { await post("/api/agent-vertrauen", { stufe: Number(regler.value) }); await load(); toast(`Vertrauen fest auf Stufe ${regler.value}.`); }
+      catch (error) { toast(`Nicht möglich: ${error.message}`); await load(); }
+    });
+  }
+  const auto = $("vertrauen-auto");
+  if (auto && manuell) auto.addEventListener("click", async () => {
+    try { await post("/api/agent-vertrauen", { stufe: null }); await load(); toast("Vertrauen wächst wieder automatisch mit deinen Freigaben."); }
+    catch (error) { toast(`Nicht möglich: ${error.message}`); }
+  });
 }
 /* ===== WIRKUNG: Funnel, Antwortqualität und Vergleich (Phase 5.2/5.3) =====
    Eigener Ladepfad neben /api/state: die Filter sollen sofort reagieren, ohne den kompletten

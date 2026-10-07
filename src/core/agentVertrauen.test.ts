@@ -12,7 +12,7 @@ import { antwortRisiko } from "../agent/domain/policy/risiko.js";
 const dir = mkdtempSync(join(tmpdir(), "nextlead-agentvertrauen-"));
 process.env.DB_PATH = join(dir, "v.sqlite");
 const { db } = await import("../db/index.js");
-const { agentVertrauen, darfAutonom } = await import("../modules/agentVertrauen.js");
+const { agentVertrauen, darfAutonom, setzeManuelleStufe, manuelleStufe } = await import("../modules/agentVertrauen.js");
 
 function entwurf(o: { status: "sent" | "approved" | "discarded"; geaendert?: boolean; intent?: string; reason?: string; quelle?: string; alterTage?: number }) {
   const ts = new Date(Date.now() - (o.alterTage ?? 0) * 86_400_000).toISOString().slice(0, 19).replace("T", " ");
@@ -89,4 +89,18 @@ test("Zählt nur Sinans Entscheidungen über Agent-Entwürfe: Auto-Freigaben, St
   for (let i = 0; i < 12; i++) entwurf({ status: "sent", intent: "chance" });
   for (let i = 0; i < 12; i++) entwurf({ status: "sent", alterTage: 90 });
   assert.equal(agentVertrauen().entscheidungen, 0);
+});
+
+test("Regler: feste Stufe schlägt Zahlen und Veto, „automatisch“ gibt die Steuerung zurück", () => {
+  reset();
+  for (let i = 0; i < 3; i++) entwurf({ status: "discarded", reason: "artificial" });
+  assert.equal(agentVertrauen().stufe, 0);
+  setzeManuelleStufe(3);
+  let v = agentVertrauen();
+  assert.equal(v.stufe, 3); assert.equal(v.manuell, 3); assert.equal(v.verdient, 0);
+  assert.equal(darfAutonom("hoch", v), true);
+  setzeManuelleStufe(null);
+  assert.equal(manuelleStufe(), null);
+  assert.equal(agentVertrauen().stufe, 0);
+  assert.throws(() => setzeManuelleStufe(7));
 });

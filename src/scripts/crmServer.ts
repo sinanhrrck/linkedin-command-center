@@ -36,6 +36,7 @@ import { flushPendingReports, queueUserReport } from "../modules/reporting.js";
 import { retryJob } from "../core/jobReliability.js";
 import { backfillRelationshipSignals, setRelationshipPolicy } from "../modules/relationshipPolicy.js";
 import { stummschalten, stummAufheben } from "../modules/stumm.js";
+import { setzeManuelleStufe } from "../modules/agentVertrauen.js";
 import { backfillContactIdentities, resolveIdentityConflict } from "../modules/contactIdentity.js";
 import { backfillContactTimeline } from "../modules/contactTimeline.js";
 import { backfillCampaignWorkflows, retryCampaignTarget, retryFailedCampaignTargets } from "../modules/campaignWorkflow.js";
@@ -928,6 +929,22 @@ const server = createServer((req, res) => {
           contactId: Number(input.contactId), action: input.action, until: input.until, reason: input.reason,
         });
         res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" }).end(JSON.stringify({ ok }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
+  // VERTRAUENS-REGLER (2026-10-07): Stufe 0..3 von Hand, null = automatisch nach Freigaben.
+  if (url.pathname === "/api/agent-vertrauen" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { stufe } = JSON.parse(body || "{}");
+        setzeManuelleStufe(stufe === null || stufe === undefined || stufe === "auto" ? null : Number(stufe));
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
       } catch (e) {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: String((e as Error).message || e) }));
       }

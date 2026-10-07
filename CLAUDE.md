@@ -205,7 +205,11 @@ Entwürfe blieben bewusst zu).
   `agent-vorsichtig` abgelegt und in `agent_processed` als `entwurf` vermerkt (NICHT `senden/unsent`,
   sonst würde der nächste Tick nachsenden). Cockpit: Karte `#agent-vertrauen` unter der Automatik-
   Stufe (Stufe, Balken, Zahlen, was zur nächsten Stufe fehlt), `dashboard.agentVertrauen`.
-  Tests: `agentVertrauen.test.ts` (6).
+  REGLER (Sinan: „wie ein Lautstärkeregler“): State `agent_vertrauen_manuell` 0..3 setzt die Stufe
+  fest (Veto und Zahlen gelten dann nicht), leer = automatisch; `POST /api/agent-vertrauen {stufe|null}`,
+  `<input type=range>` in der Karte, automatische Stufe als unterstrichene Marke, Knopf „Automatisch
+  nach Freigaben“. Nur in „Gespräche vorsichtig“ bedienbar, in „automatisch“ nur Anzeige.
+  Tests: `agentVertrauen.test.ts` (7).
 - ARBEITSWEISE: iCloud hat die Dateien während der Arbeit laufend ausgelagert (3,6 GB frei, 10 000
   dataless-Dateien in node_modules, `tsc` hing bei 0 % CPU). Typprüfung und Tests liefen in einer
   rsync-Kopie im Scratchpad mit frischem `npm ci`.

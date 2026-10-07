@@ -15,8 +15,26 @@
  *  3  alles autonom (= „Gespräche automatisch“) – ≥50, ≥85 %
  * VETO: sind von den letzten 10 Entscheidungen mindestens 3 Ablehnungen, geht es eine Stufe
  * zurück – Sinan ist gerade unzufrieden, der Agent soll wieder mehr vorlegen.
+ * REGLER (Sinan: „wie ein Lautstärkeregler“): State `agent_vertrauen_manuell` = 0..3 setzt die
+ * Stufe fest, unabhängig von Zahlen und Veto. Leer = automatisch (verdient). Die Zahlen werden
+ * weiter gemessen und angezeigt, damit man sieht, was der Regler „automatisch“ ergeben würde.
  */
-import { db } from "../db/index.js";
+const REGLER_KEY = "agent_vertrauen_manuell";
+
+/** Manuell gesetzte Stufe (0..3) oder null = automatisch nach Freigaben. */
+export function manuelleStufe(): number | null {
+  const roh = getState(REGLER_KEY);
+  if (roh === null || roh === undefined || roh === "") return null;
+  const n = Number(roh);
+  return Number.isInteger(n) && n >= 0 && n < AGENT_STUFEN_ANZAHL ? n : null;
+}
+export function setzeManuelleStufe(stufe: number | null): void {
+  if (stufe === null) { setState(REGLER_KEY, ""); return; }
+  if (!Number.isInteger(stufe) || stufe < 0 || stufe >= AGENT_STUFEN_ANZAHL) throw new Error("Stufe muss zwischen 0 und 3 liegen.");
+  setState(REGLER_KEY, String(stufe));
+}
+const AGENT_STUFEN_ANZAHL = 4;
+import { db, getState, setState } from "../db/index.js";
 import type { Risiko } from "../agent/domain/policy/risiko.js";
 import { RISIKO_REIHENFOLGE } from "../agent/domain/policy/risiko.js";
 
@@ -38,9 +56,10 @@ export interface AgentVertrauen {
   geaendert: number;
   abgelehnt: number;
   quote: number;            // unverändert ÷ Entscheidungen
-  stufe: number;            // wirksame Stufe (nach Veto)
+  stufe: number;            // wirksame Stufe (Regler, sonst verdient nach Veto)
   verdient: number;         // Stufe nach Zahlen, vor Veto
   veto: boolean;
+  manuell: number | null;   // Reglerstellung, null = automatisch
   autonom: Risiko[];
   naechste: { stufe: number; fehlen: number; quote: number } | null;
 }
@@ -75,13 +94,14 @@ export function agentVertrauen(): AgentVertrauen {
   for (const s of AGENT_STUFEN) if (rows.length >= s.min && quote >= s.quote) verdient = s.stufe;
   const juengste = rows.slice(0, VETO.fenster);
   const veto = juengste.filter((r) => r.status === "discarded").length >= VETO.ablehnungen;
-  const stufe = veto ? Math.max(0, verdient - 1) : verdient;
+  const manuell = manuelleStufe();
+  const stufe = manuell !== null ? manuell : veto ? Math.max(0, verdient - 1) : verdient;
 
   const folge = AGENT_STUFEN.find((s) => s.stufe === verdient + 1) ?? null;
   const naechste = folge ? { stufe: folge.stufe, fehlen: Math.max(0, folge.min - rows.length), quote: folge.quote } : null;
   return {
     entscheidungen: rows.length, unveraendert, geaendert, abgelehnt, quote,
-    stufe, verdient, veto,
+    stufe, verdient, veto, manuell,
     autonom: AGENT_STUFEN[stufe].autonom,
     naechste,
   };
