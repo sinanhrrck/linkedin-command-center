@@ -61,6 +61,10 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
   const vertrauen = vorsichtig ? agentVertrauen() : null;
 
   const repo = new SqliteConversationRepository(db);
+  // ALTLASTEN AUS DEM SCHATTEN (2026-10-08): frühere Versionen merkten Schatten-Antworten als
+  // „senden/unsent“. Solange der Schatten läuft, werden sie zu „entwurf“ – damit beim Umschalten
+  // auf vorsichtig/automatisch nichts Ungeprüftes nachgesendet wird.
+  if (schatten) repo.schattenEntscheidungenEntschaerfen();
   const persona = promptKontext();
   const threads = await fetchThreads(max);
 
@@ -89,6 +93,17 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
       // Nur EIN Sonderfall darf noch etwas tun: Antwort war fertig, Versand aber (noch) nicht raus
       // (z.B. Governor-Fenster/Limit). Dann NUR erneut SENDEN – ohne neuen, teuren KI-Aufruf.
       if (!schatten && stand.decision === "senden" && !stand.sent && stand.replyText) {
+        // VORSICHTIG (2026-10-08): auch das NACHSENDEN unterliegt der Risiko-Stufe. Die gespeicherte
+        // Entscheidung kann aus „automatisch“ stammen, bevor auf „vorsichtig“ zurückgeschaltet wurde.
+        // Die Intents der alten Analyse liegen nicht mehr vor – die Phase allein reicht als
+        // Untergrenze (Intents heben das Risiko nur an). Zu riskant → Entwurf statt Versand.
+        if (vorsichtig && vertrauen && !darfAutonom(antwortRisiko(conv.stage, []), vertrauen)) {
+          repo.merkeVerarbeitung(t.threadUrl, hash, "entwurf", stand.replyText);
+          queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, stand.replyText, "agent-vorsichtig");
+          console.info(`[agent-vorsichtig] ${t.participant}: offene Antwort wird Entwurf statt nachgesendet (Phase ${conv.stage}, Stufe ${vertrauen.stufe})`);
+          res.entwuerfe++;
+          continue;
+        }
         try {
           await sendThreadReply(t.threadUrl, stand.replyText, t.participant);
           repo.markiereGesendet(t.threadUrl);
@@ -113,14 +128,25 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
     try {
       e = await handleIncomingMessage(conv, t.messages, { persona, angebot: angebotsWahl(), analyzeLlm, replyLlm, maxRegenerierungen: 1 });
     } catch (err) {
-      // Pipeline-Fehler nicht in einer Endlosschleife wiederholen: abhaken, weiter.
-      console.error("[agent] Pipeline-Fehler:", (err as Error)?.message?.slice(0, 90));
-      repo.merkeVerarbeitung(t.threadUrl, hash, "nichts", null);
+      // Pipeline-Fehler (KI weg, Guthaben leer, Netz) nicht in einer Endlosschleife wiederholen:
+      // abhaken, aber NICHT still (Fix 2026-10-08). Vorher wurde „nichts“ vermerkt – die Person
+      // bekam nie eine Antwort, niemand erfuhr davon. Jetzt: Eskalation an den Menschen mit Grund.
+      const grund = (err as Error)?.message?.slice(0, 120) ?? "unbekannt";
+      console.error("[agent] Pipeline-Fehler → Eskalation:", grund);
+      repo.merkeVerarbeitung(t.threadUrl, hash, "eskalieren", null);
+      if (!schatten) {
+        queueReplyDraft(t.threadUrl, t.participant, t.lastIncoming, "", "agent-eskalation");
+        events.emit("agent:eskaliert", { participant: t.participant, grund: `KI-Fehler: ${grund}`, threadUrl: t.threadUrl });
+        res.eskaliert++;
+      }
       continue;
     }
     await repo.save(e.conversation);
     // SOFORT abhaken (mit erzeugtem Text) – ab jetzt wird diese Nachricht nie wieder neu generiert.
-    repo.merkeVerarbeitung(t.threadUrl, hash, e.typ, e.typ === "senden" ? e.text : e.typ === "eskalieren" ? (e.entwurf ?? null) : null);
+    // SCHATTEN (Fix 2026-10-08): dort NIE als „senden“ merken. Sonst sendete der Nachsende-Pfad oben
+    // beim Umschalten auf vorsichtig/automatisch alle alten Schatten-Antworten ungeprüft los.
+    const entscheidung = schatten && e.typ === "senden" ? "entwurf" : e.typ;
+    repo.merkeVerarbeitung(t.threadUrl, hash, entscheidung, e.typ === "senden" ? e.text : e.typ === "eskalieren" ? (e.entwurf ?? null) : null);
     res.verarbeitet++;
 
     // ---- SCHWEIGEN: bewusst keine Antwort (fremdes Angebot, Automat, Kontakt-Stopp, Gesprächsende) ----

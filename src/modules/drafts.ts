@@ -303,15 +303,34 @@ export async function generateFollowups(limit = 5): Promise<number> {
 /**
  * Legt einen Thread-Antwort-Entwurf zur Freigabe an (z.B. Autopilot-Eskalation).
  * Idempotent: nur ein offener Draft pro Thread.
+ *
+ * ERSETZEN (2026-10-08): Vorher verschwand ein neuer Agent-Text still, sobald für den Thread
+ * irgendein Entwurf offen war – auch ein längst überholter aus dem Schatten-Modus. Der Agent
+ * hatte die Nachricht dann aber schon als erledigt abgehakt, Sinan sah nur den alten Text.
+ * Jetzt verdrängt ein neuer Agent-Entwurf ältere, noch NICHT freigegebene Agent-Entwürfe
+ * desselben Threads (nur `pending`, nur `intent LIKE 'agent-%'`). Ein bereits freigegebener
+ * Entwurf bleibt: das ist Sinans Entscheidung, die wird nicht überschrieben.
+ * Rückgabe: true = Entwurf liegt vor (neu oder vorhanden), false = NICHT angelegt.
  */
-export function queueReplyDraft(threadUrl: string, participant: string, incoming: string, text: string, intent?: string) {
-  if (hasOpenDraft(threadUrl)) return;
+export function queueReplyDraft(threadUrl: string, participant: string, incoming: string, text: string, intent?: string): boolean {
+  if (hasOpenDraft(threadUrl)) {
+    if (!intent?.startsWith("agent-")) return false;
+    const verdraengt = db.prepare(
+      "UPDATE drafts SET status='discarded', rejection_reason='superseded', blockiert_grund='Vom Agenten durch einen neueren Entwurf ersetzt' WHERE thread_url=? AND status='pending' AND intent LIKE 'agent-%'",
+    ).run(threadUrl).changes;
+    if (hasOpenDraft(threadUrl)) {
+      console.warn(`[drafts] Für ${participant} liegt schon ein freigegebener oder fremder Entwurf – neuer Agent-Text (${intent}) NICHT abgelegt.`);
+      return false;
+    }
+    if (verdraengt) console.info(`[drafts] ${verdraengt} älterer Agent-Entwurf für ${participant} ersetzt (${intent}).`);
+  }
   // ki_original bleibt fuer immer stehen: der Vergleich mit dem, was Sinan am Ende wirklich
   // sendet, ist der ehrlichste Qualitaetsmassstab fuer die KI.
   const info = db
     .prepare("INSERT INTO drafts(kind, thread_url, participant, incoming, draft, ki_original, intent) VALUES('message',?,?,?,?,?,?)")
     .run(threadUrl, participant, incoming, text, text, intent ?? null);
   events.emit("draft:new", getDraft(Number(info.lastInsertRowid)));
+  return true;
 }
 
 /**

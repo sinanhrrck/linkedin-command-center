@@ -43,9 +43,26 @@ export type HealthReport = {
 /** Führt den Selbst-Check aus, speichert das Ergebnis und meldet Defekte. Gibt den Report zurück. */
 export async function selbstCheck(): Promise<HealthReport> {
   const r: HealthReport = { ts: new Date().toISOString(), login: true, inbox: false, messageBox: false, sendButton: false, ok: false, grund: null };
+  /**
+   * TRANSPORT ≠ DEFEKT (Fix 2026-10-08). Kommt die Seite gar nicht erst an (Lese-Budget erschöpft,
+   * DNS/Netz, Browser gestorben, Timeout), sagt das NICHTS über den Sendeweg aus. Vorher landete
+   * das im catch unten und setzte `send_health=broken` – der Governor blockierte dann bis zu sechs
+   * Stunden JEDE Nachricht, und die Stillstands-Diagnose kannte den Grund nicht. Jetzt: Prüfung als
+   * „ausgefallen“ vermerken, den alten Befund stehen lassen. Wird er dadurch älter als 8 h, greift
+   * ohnehin `stale` – ehrlich unbekannt, nicht fälschlich kaputt.
+   */
+  let page: Awaited<ReturnType<typeof newPage>>;
   try {
-    const page = await newPage();
+    page = await newPage();
     await page.goto(MESSAGING_URL, { waitUntil: "domcontentloaded" });
+  } catch (e) {
+    const grund = `Prüfung nicht möglich: ${(e as Error)?.message?.split("\n")[0].slice(0, 100) ?? "unbekannt"}`;
+    setState("send_health_check_fehler", `${r.ts} ${grund}`);
+    console.warn(`[healthcheck] ${grund} – letzter Befund bleibt bestehen.`);
+    r.grund = grund;
+    return r;
+  }
+  try {
     await humanDelay(2500, 4000);
 
     if (await guardAgainstCheckpoint(page)) {
@@ -113,7 +130,16 @@ export async function selbstCheck(): Promise<HealthReport> {
     finalisieren(r);
     return r;
   } catch (e) {
-    r.grund = `Selbst-Check-Fehler: ${(e as Error)?.message?.slice(0, 80)}`;
+    const msg = (e as Error)?.message?.split("\n")[0] ?? "unbekannt";
+    // Browser mitten in der Prüfung weg (Zeitlimit des Jobs, Absturz, Netz): Transport, kein Befund.
+    if (/closed|Timeout|timeout|net::|ERR_|Zeitlimit|abgebrochen|Budget/i.test(msg)) {
+      const grund = `Prüfung abgebrochen: ${msg.slice(0, 100)}`;
+      setState("send_health_check_fehler", `${r.ts} ${grund}`);
+      console.warn(`[healthcheck] ${grund} – letzter Befund bleibt bestehen.`);
+      r.grund = grund;
+      return r;
+    }
+    r.grund = `Selbst-Check-Fehler: ${msg.slice(0, 80)}`;
     finalisieren(r);
     return r;
   }
@@ -128,6 +154,7 @@ function finalisieren(r: HealthReport): void {
   setState("send_health", r.ok ? "ok" : "broken");
   setState("send_health_grund", r.grund ?? "");
   setState("send_health_ts", r.ts);
+  setState("send_health_check_fehler", ""); // ein echter Befund löscht den Transport-Vermerk
 
   // Nur bei ZUSTANDSWECHSEL melden (nicht bei jedem Lauf spammen).
   if (!r.ok && vorher !== "broken") {

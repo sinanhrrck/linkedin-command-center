@@ -4,7 +4,7 @@ import { db, setAutonomy, type IntentKat } from "../db/index.js";
 import { events } from "../core/events.js";
 import { governor } from "../core/safetyGovernor.js";
 import { countByStatus, hotLeads } from "./crm.js";
-import { pendingDrafts, sendDraft, setDraftStatus, pitchZuNachricht, chooseDraftApproach, type Draft } from "./drafts.js";
+import { pendingDrafts, approveDraft, setDraftStatus, pitchZuNachricht, chooseDraftApproach, type Draft } from "./drafts.js";
 import { computeBilanz } from "./bilanz.js";
 import { tagesbericht, letzteWoche, wochenbericht } from "./berichte.js";
 import { pendingPosts, approvePost, discardPost } from "./content.js";
@@ -225,13 +225,27 @@ export function startTelegram() {
     ctx.reply("▶ Outreach fortgesetzt.");
   });
 
+  /**
+   * „Senden“ = FREIGEBEN, nicht direkt senden (Fix 2026-10-08). Telegram läuft im Engine-Prozess
+   * und teilt sich den einen Browser-Tab mit Agent, Postfach-Scan und Outreach. Ein Direktversand
+   * hier lief an der seriellen Job-Warteschlange (index.ts `einzeln`) vorbei – zwei Abläufe konnten
+   * denselben Tab gleichzeitig navigieren, genau die Ursache früherer Fehl- und Doppelversände.
+   * Jetzt wie im Cockpit: Entwurf wird `approved`, der nächste Versandlauf der Engine schickt ihn
+   * gedrosselt über den Governor (alle 10 Minuten).
+   */
   bot.callbackQuery(/^send:(\d+)$/, async (ctx) => {
     if (!allowed(ctx.chat?.id)) return ctx.answerCallbackQuery("Nicht erlaubt.");
     const id = Number(ctx.match[1]);
-    await ctx.answerCallbackQuery("Wird gesendet…");
-    const res = await sendDraft(id).catch((e) => ({ ok: false, reason: String(e) }));
+    const d = db.prepare("SELECT status, phase FROM drafts WHERE id=?").get(id) as { status: string; phase: string | null } | undefined;
+    if (!d) return ctx.answerCallbackQuery("Entwurf nicht gefunden.");
+    if (d.status === "sent") { await ctx.answerCallbackQuery("Schon gesendet."); return ctx.editMessageText("✅ Bereits gesendet.").catch(() => {}); }
+    if (d.status === "approved") { await ctx.answerCallbackQuery("Schon freigegeben."); return ctx.editMessageText("✅ Freigegeben – die Engine sendet ihn beim nächsten Lauf.").catch(() => {}); }
+    if (d.status !== "pending" || d.phase === "approach") return ctx.answerCallbackQuery(`Nicht freigebbar (${d.phase === "approach" ? "erst Richtung wählen" : d.status}).`);
+    await ctx.answerCallbackQuery("Freigegeben.");
+    const ok = approveDraft(id);
     await ctx.editMessageText(
-      res.ok ? "✅ Gesendet." : `⏭ Nicht gesendet: ${res.reason ?? "unbekannt"}`,
+      ok ? "✅ Freigegeben – die Engine sendet ihn gedrosselt beim nächsten Lauf (spätestens in 10 Minuten)."
+         : `⏭ Nicht freigegeben: ${db.prepare("SELECT blockiert_grund FROM drafts WHERE id=?").pluck().get(id) ?? "Kontext passt nicht mehr"}`,
     ).catch(() => {});
   });
 
@@ -558,6 +572,17 @@ export function startTelegram() {
     bot.api.sendMessage(
       config.telegram.chatId,
       `🔇 ${e.schatten ? "Würde nicht mehr antworten" : "Antworte nicht mehr"}: ${e.participant}\n${e.grund}.\n💬 ${e.threadUrl}\n${e.schatten ? "" : "Rückgängig: Cockpit → Kontakte → ▶ Wieder freigeben."}`,
+    ).catch(() => {});
+  });
+
+  // ESKALATION OHNE TEXT (2026-10-08): die KI konnte keine Antwort schreiben (Guthaben, Netz, API).
+  // Der Entwurf kommt leer über draft:new; diese Zeile nennt den Grund, damit Sinan weiß, dass
+  // ER antworten muss – vorher verschwand so eine Nachricht still.
+  events.on("agent:eskaliert", (e: { participant: string; grund: string; threadUrl: string }) => {
+    if (!bot || !config.telegram.chatId || !e.grund.startsWith("KI-Fehler")) return;
+    bot.api.sendMessage(
+      config.telegram.chatId,
+      `⚠️ Keine Antwort möglich an ${e.participant}: ${e.grund}\nBitte selbst antworten.\n💬 ${e.threadUrl}`,
     ).catch(() => {});
   });
 

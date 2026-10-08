@@ -9,8 +9,14 @@ process.env.DB_PATH = join(dir, "enginewatch.sqlite");
 const { db, setState } = await import("../db/index.js");
 const {
   protokolliereNeustart, offeneNeustartMeldungen, markiereNeustartsBerichtet,
-  kuerzeNeustartProtokoll, stillstandGrund,
+  kuerzeNeustartProtokoll, stillstandGrund, jobHaengt,
 } = await import("../modules/engineWatch.js");
+const { recordJobFailure, retryJob } = await import("../core/jobReliability.js");
+
+// Sendeweg frisch geprüft und in Ordnung – sonst erklärt die Diagnose (zu Recht) den fehlenden
+// Selbst-Check, und die Tests unten messen nicht das, was sie messen sollen.
+const sendewegOk = () => { setState("send_health", "ok"); setState("send_health_ts", new Date().toISOString()); setState("send_health_check_fehler", ""); };
+sendewegOk();
 
 // Warm-up abgeschlossen, damit die Caps die vollen Werte haben und die Tests nicht
 // versehentlich den Warm-up-Zweig messen.
@@ -88,6 +94,52 @@ test("die Dauer seit der letzten Sendung wird gemessen", () => {
   sende("message", 4 * 3600);
   const stand = stillstandGrund();
   assert.ok(stand.seitSek !== null && stand.seitSek > 3.5 * 3600, `erwartet ~4h, war ${stand.seitSek}`);
+});
+
+test("ein defekter oder ungeprüfter Sendeweg ist ein benannter Grund", () => {
+  leereAktionen(); leereEntwuerfe();
+  setState("send_health", "broken"); setState("send_health_grund", "Senden-Knopf nicht gefunden");
+  let stand = stillstandGrund();
+  assert.equal(stand.steht, true);
+  assert.match(stand.grund, /defekt.*Senden-Knopf/);
+  // Prüfung älter als 8 h = Governor blockiert ebenfalls → muss erklärt werden.
+  setState("send_health", "ok"); setState("send_health_ts", new Date(Date.now() - 9 * 3600_000).toISOString());
+  setState("send_health_check_fehler", "2026-10-08T07:15:00.000Z Prüfung nicht möglich: net::ERR_NAME_NOT_RESOLVED");
+  stand = stillstandGrund();
+  assert.equal(stand.steht, true);
+  assert.match(stand.grund, /nicht frisch geprüft/);
+  assert.match(stand.grund, /ERR_NAME_NOT_RESOLVED/, "der Grund der ausgefallenen Prüfung gehört in die Erklärung");
+  sendewegOk();
+  assert.equal(stillstandGrund().steht, false);
+});
+
+test("ein nach wiederholten Fehlern angehaltener Sende-Job wird genannt", () => {
+  leereAktionen(); leereEntwuerfe(); sendewegOk();
+  for (let i = 0; i < 3; i++) recordJobFailure("sendApproved", new Error("Target closed"));
+  const stand = stillstandGrund();
+  assert.equal(stand.steht, true);
+  assert.match(stand.grund, /Angehalten.*sendApproved/);
+  assert.match(stand.tun, /freigeben/);
+  retryJob("sendApproved");
+  assert.equal(stillstandGrund().steht, false);
+});
+
+test("ein Job, der sein Zeitlimit weit überschreitet, gilt als hängend", () => {
+  leereAktionen(); leereEntwuerfe(); sendewegOk();
+  db.prepare("DELETE FROM bot_activity").run();
+  setState("engine_active_job", "agent");
+  // agent hat 20 Min Limit + 10 Min Puffer: nach 25 Minuten noch nicht hängend, nach 40 schon.
+  db.prepare("INSERT INTO bot_activity(job,status,started_at) VALUES('agent','running',datetime('now','-25 minutes'))").run();
+  assert.equal(jobHaengt(), null);
+  db.prepare("UPDATE bot_activity SET started_at=datetime('now','-40 minutes')").run();
+  const h = jobHaengt();
+  assert.ok(h && h.job === "agent" && h.minuten >= 39, `erwartet hängenden agent-Job, war ${JSON.stringify(h)}`);
+  const stand = stillstandGrund();
+  assert.match(stand.grund, /„agent“ hängt/);
+  // Kein aktiver Job → nichts hängt, egal was in der Tabelle steht.
+  setState("engine_active_job", "");
+  assert.equal(jobHaengt(), null);
+  db.prepare("DELETE FROM bot_activity").run();
 });
 
 test.after(() => {

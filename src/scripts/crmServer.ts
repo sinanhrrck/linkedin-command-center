@@ -21,7 +21,7 @@ import {
 } from "../modules/campaigns.js";
 import { addSalesTask, completeSalesTask, deleteSalesTask } from "../modules/salesDesk.js";
 import { addContactNote, deleteContactNote } from "../modules/contactNotes.js";
-import { heartbeatAlter, protokolliereNeustart } from "../modules/engineWatch.js";
+import { heartbeatAlter, jobHaengt, protokolliereNeustart } from "../modules/engineWatch.js";
 import { createDatabaseBackup } from "../core/backups.js";
 import { governor } from "../core/safetyGovernor.js";
 import { createExperiment, setExperimentStatus, EXPERIMENT_METRICS, type ExperimentMetric } from "../modules/experiments.js";
@@ -1582,7 +1582,19 @@ server.listen(PORT, HOST, () => {
       setState("engine_gewollt", "1");
       setTimeout(starteEngine, 1500);
       setInterval(() => {
-        if (getState("engine_gewollt") === "1" && !engineAlive()) {
+        if (getState("engine_gewollt") !== "1") return;
+        // HÄNGENDER JOB (2026-10-08): der Heartbeat lebt, aber die Job-Warteschlange steht, weil ein
+        // Job sein Zeitlimit weit überschritten hat. Vorher der stillste aller Stillstände – der
+        // Watchdog sah einen gesunden Prozess. Neustart ist sicher: ein Job, der 10 Minuten über dem
+        // Limit hängt, sendet nichts mehr; der Startlauf setzt 'sending'-Entwürfe auf 'unknown'.
+        const haengt = jobHaengt();
+        if (engineAlive() && haengt) {
+          protokolliereNeustart({ grund: "watchdog", detail: `Job „${haengt.job}“ hängt seit ${haengt.minuten} Minuten (Zeitlimit überschritten).`, letzterJob: haengt.job, heartbeatAlterSek: heartbeatAlter() });
+          console.warn(`[server] Job „${haengt.job}“ hängt seit ${haengt.minuten} Min – Watchdog startet die Engine neu.`);
+          starteEngine();
+          return;
+        }
+        if (!engineAlive()) {
           const alter = heartbeatAlter();
           const job = getState("engine_active_job") || null;
           // IN DIE DATENBANK, nicht nur nach stdout: stdout ist `docker logs` und wird bei

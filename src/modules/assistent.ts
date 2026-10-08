@@ -53,6 +53,9 @@ NextLead ist ein LinkedIn-Vertriebsassistent. Er findet passende Leute (vor alle
 - Not-Aus (roter Knopf) stoppt jeden Versand sofort. Sicherheitspause bei Auffälligkeiten (z. B. Checkpoint).
 - Annahmequoten-Schutz: bei schlechter Annahmequote weniger Vernetzungsanfragen.
 - Doppel-Versand-Sperre: dieselbe Nachricht geht nie zweimal an dieselbe Person.
+- Selbst-Check des Sendewegs alle 6 Stunden: meldet er "defekt" oder ist er älter als 8 Stunden, gehen keine Nachrichten raus (Knopf "Sendeweg jetzt prüfen" in den Einstellungen). Kommt LinkedIn gar nicht erst an (Netz, Lese-Budget), bleibt der alte Befund stehen und wird nur als "Prüfung ausgefallen" vermerkt.
+- Hängt ein Engine-Job weit über seinem Zeitlimit, nennt "Warum steht etwas still" ihn; auf dem Server startet der Watchdog die Engine dann von selbst neu. Ein nach drei Fehlern angehaltener Job wird ebenfalls genannt und lässt sich im Cockpit wieder freigeben.
+- Telegram "Senden" gibt einen Entwurf nur FREI, gesendet wird er von der Engine beim nächsten Versandlauf (spätestens 10 Minuten) – genau wie im Cockpit. Kann die KI im Gespräche-Agenten keine Antwort schreiben (Guthaben, Netz), kommt die Nachricht als leere Eskalation mit Grund zu dir statt still liegen zu bleiben.
 
 ## Nachrichten
 - Erstnachricht nach angenommener Vernetzung: persönlicher Bezug, ein nützlicher Gedanke, eine leichte Frage. Kein Pitch.

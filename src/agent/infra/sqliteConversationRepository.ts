@@ -128,6 +128,10 @@ export class SqliteConversationRepository implements ConversationRepository {
        ON CONFLICT(thread_url) DO UPDATE SET incoming_hash=excluded.incoming_hash, decision=excluded.decision, reply_text=excluded.reply_text, sent=0, ts=datetime('now')`,
     ).run(threadUrl, incomingHash, decision, replyText);
   }
+  /** Schatten-Modus: offene „senden“-Entscheidungen zu „entwurf“ machen (nie ungeprüft nachsenden). */
+  schattenEntscheidungenEntschaerfen(): number {
+    return this.db.prepare("UPDATE agent_processed SET decision='entwurf' WHERE decision='senden' AND sent=0").run().changes;
+  }
   markiereGesendet(threadUrl: string): void {
     this.db.prepare("UPDATE agent_processed SET sent=1 WHERE thread_url=?").run(threadUrl);
   }

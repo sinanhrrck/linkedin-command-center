@@ -77,7 +77,7 @@ function entscheidungen(): Row[] {
         AND ki_original IS NOT NULL AND TRIM(ki_original)<>''
         AND created_at >= datetime('now', ?)
         AND (status IN ('approved','sent')
-             OR (status='discarded' AND COALESCE(rejection_reason,'') NOT IN ('stumm','expired')
+             OR (status='discarded' AND COALESCE(rejection_reason,'') NOT IN ('stumm','expired','superseded')
                  AND COALESCE(rejection_reason,'') NOT LIKE 'relationship_%'))
       ORDER BY COALESCE(freigegeben_at, created_at) DESC, id DESC`,
   ).all(...AGENT_ENTWURF_INTENTS, `-${TAGE} days`) as Row[];

@@ -1,6 +1,32 @@
 import { db, getState } from "../db/index.js";
 import { governor } from "../core/safetyGovernor.js";
 import { leseStand } from "../core/leseBudget.js";
+import { sendHealthStand } from "../core/sendHealth.js";
+import { openJobFailures } from "../core/jobReliability.js";
+import { JOB_TIMEOUT_MS, DEFAULT_JOB_TIMEOUT_MS } from "../core/jobTimeout.js";
+
+/** Jobs, deren Stillstand bedeutet, dass nichts mehr rausgeht. Lese-Jobs (feed, acceptance) nicht. */
+const SENDE_JOBS: ReadonlySet<string> = new Set(["sendApproved", "agent", "outreach", "morgen", "drafts", "healthcheck"]);
+
+/**
+ * HÄNGT EIN JOB? (2026-10-08) Jeder Job hat ein kooperatives Zeitlimit (core/jobTimeout.ts); danach
+ * wird der Browser geschlossen und die Promise SOLL enden. Tut sie es nicht, steht die serielle
+ * Warteschlange für immer – der Heartbeat läuft aber weiter, also merkt der Watchdog nichts.
+ * Maßstab: die laufende Zeile in `bot_activity` ist älter als Zeitlimit + 10 Minuten Puffer.
+ * Dient Diagnose UND Watchdog (crmServer.ts); beide Prozesse lesen dieselbe Tabelle.
+ */
+export function jobHaengt(now = Date.now()): { job: string; minuten: number } | null {
+  const aktiv = getState("engine_active_job");
+  if (!aktiv) return null;
+  const row = db.prepare(
+    "SELECT job, started_at FROM bot_activity WHERE status='running' AND job=? ORDER BY id DESC LIMIT 1",
+  ).get(aktiv) as { job: string; started_at: string } | undefined;
+  if (!row) return null;
+  const alterMs = now - new Date(`${row.started_at.replace(" ", "T")}Z`).getTime();
+  if (!Number.isFinite(alterMs)) return null;
+  const limit = (JOB_TIMEOUT_MS[row.job] ?? DEFAULT_JOB_TIMEOUT_MS) + 10 * 60_000;
+  return alterMs > limit ? { job: row.job, minuten: Math.round(alterMs / 60_000) } : null;
+}
 
 /**
  * WARUM DIESES MODUL EXISTIERT (2026-09-22)
@@ -119,8 +145,24 @@ export function stillstandGrund(): Stillstand {
 
   if (g.notAus) return fertig("Der Not-Aus ist aktiv.", "Im Cockpit unter „Not-Aus“ wieder freigeben.");
   if (g.paused) return fertig(`Der Sicherheits-Stopp hat ausgelöst${g.pauseReason ? `: ${g.pauseReason}` : "."}`, "In den Einstellungen prüfen und fortsetzen.");
+  // HÄNGENDER JOB (2026-10-08): der Heartbeat tickt unabhängig von der Job-Warteschlange. Hängt ein
+  // Job, läuft nichts mehr – und der Watchdog sah einen gesunden Prozess. Das ist der stillste Stillstand.
+  const haengt = jobHaengt();
+  if (haengt) return fertig(`Der Job „${haengt.job}“ hängt seit ${haengt.minuten} Minuten – dahinter staut sich alles.`, "Engine im Cockpit neu starten; der Watchdog tut es auf dem Server von selbst.");
   if (!g.withinWorkingHours) return fertig(`Ausserhalb der Arbeitszeit (${g.workingHoursText}).`, "");
   if (budget.erschoepft) return fertig("Das Lese-Budget für heute ist aufgebraucht.", "Setzt sich morgen früh von selbst zurück.");
+  // SENDEWEG (2026-10-08): der Governor blockiert Nachrichten bei „defekt“ und bei einer Prüfung,
+  // die älter als 8 h ist. Beides hieß in dieser Diagnose bisher „kein Hinderungsgrund“.
+  const health = sendHealthStand();
+  if (health.status === "broken") return fertig(`Der Selbst-Check meldet den Sendeweg als defekt: ${health.reason ?? "unbekannt"}.`, "Im Cockpit „Sendeweg jetzt prüfen“ – ist LinkedIn umgebaut, müssen die Selektoren angepasst werden.");
+  if (health.status !== "ok") {
+    const fehler = getState("send_health_check_fehler");
+    return fertig(`Der Sendeweg ist nicht frisch geprüft (${health.reason ?? health.status})${fehler ? `; letzte Prüfung: ${fehler.slice(25, 140)}` : ""}.`, "Im Cockpit „Sendeweg jetzt prüfen“ auslösen.");
+  }
+  // TOTE JOBS (2026-10-08): nach drei Fehlern hält `jobReliability` einen Job an – bis jemand ihn
+  // im Cockpit freigibt. Ohne diese Zeile sah das nach einem Bot aus, der grundlos nichts tut.
+  const tot = openJobFailures().filter((j) => j.status === "dead" && SENDE_JOBS.has(j.job));
+  if (tot.length) return fertig(`Angehalten nach wiederholten Fehlern: ${tot.map((j) => `${j.job} (${(j.lastError ?? "").slice(0, 60)})`).join("; ")}.`, "Im Cockpit unter Betrieb den Job erneut freigeben.");
 
   const connectVoll = g.connect.today >= (g.connect.allowedCap || g.connect.effectiveCap);
   const messageVoll = g.message.today >= g.message.effectiveCap;
