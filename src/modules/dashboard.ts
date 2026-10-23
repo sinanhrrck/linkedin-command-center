@@ -31,6 +31,7 @@ import { pruefeAusgehend } from "../core/ausgehendCheck.js";
 import { erlaubteLinks } from "./angebot.js";
 import { followupPlan } from "./playbook.js";
 import { autoFreigabeStand } from "./freigabe.js";
+import { getAusrichtung } from "./ausrichtung.js";
 
 const APP_VERSION = (() => {
   try { return String(createRequire(import.meta.url)("../../package.json").version || "unbekannt"); }
@@ -668,6 +669,9 @@ export function getDashboardData() {
     })(),
     mode: getMode(),
     agentMode: getAgentMode(),
+    ausrichtung: getAusrichtung(), // Standard ↔ AEC (modules/ausrichtung.ts)
+    // Offene Regelvorschläge aus dem Training (modules/training.ts) → Zahl am Navigationspunkt.
+    trainingVorschlaege: (db.prepare("SELECT COUNT(*) n FROM sim_regeln WHERE status='vorschlag'").get() as { n: number }).n,
     agentVertrauen: agentVertrauen(), // Stufe „Gespräche vorsichtig“: was geht von selbst, was fehlt zur nächsten Stufe
 
     focus: getFocus(),

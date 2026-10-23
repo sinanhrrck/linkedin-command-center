@@ -12,6 +12,7 @@
     "source": "tsx src/scripts/source.ts",
     "accept": "tsx src/scripts/checkAcceptances.ts",
     "crm": "tsx src/scripts/crmServer.ts",
+    "trainingsseite": "tsx src/scripts/trainingsSeite.ts",
     "drafts": "tsx src/scripts/genDrafts.ts",
     "send": "tsx src/scripts/sendDraft.ts",
     "test": "tsx --test src/core/*.test.ts",

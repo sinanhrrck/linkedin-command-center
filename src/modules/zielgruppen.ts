@@ -26,15 +26,8 @@ export type Zielgruppe = ZielgruppenRegel & {
  * (kein Pitch, Du-Form, keine Emojis …) stehen weiter im Code von personalize.firstMessage und
  * gelten immer, egal was hier steht.
  */
-export const STANDARD_ERSTNACHRICHT = `AUFBAU (3 kurze Bausteine, genau in dieser Reihenfolge):
-1. Persönliche Anknüpfung (1 Zeile). Etwas Konkretes aus dem Profil: Bank, Standort, Ausbildungsjahr, ein Post. Etwas, das nur auf diese Person zutrifft.
-2. Eigener Bezug (1 kurzer Satz). Dass du selbst mal in der Bank angefangen hast. NUR diese Tatsache: keine Lehre daraus, kein Rat, keine Aussage über Weichen, Richtung, Chancen oder was man unterschätzt.
-3. Leichte Frage (1 Zeile). Genau EINE ehrliche Frage zu ihrer aktuellen Situation, die man in fünf Sekunden beantworten kann. Die Nachricht endet mit dieser Frage.
-
-GUTE BEISPIELE:
-Beispiel 1: Hey Marvin, ich hab gesehen du bist im 2. Lehrjahr bei der Sparkasse Köln. Ich hab damals auch als Azubi in der Bank angefangen. Wie erlebst du den Alltag da gerade?
-Beispiel 2: Hey Lisa, cool dass du deine Ausbildung bei der Volksbank machst. Ich war früher selbst bei der Bank. Was ist bisher das Überraschendste für dich in der Praxis?
-Beispiel 3 (Ausbildung schon fertig): Hey Jonas, ich hab gesehen du bist bei der Sparkasse Köln als Bankkaufmann. Ich hab damals auch in der Bank angefangen. Wie ging's für dich nach der Ausbildung weiter?`;
+export { STANDARD_ERSTNACHRICHT } from "./erstnachrichtPrompt.js";
+import { STANDARD_ERSTNACHRICHT } from "./erstnachrichtPrompt.js";
 
 export function alleZielgruppen(): Zielgruppe[] {
   return db.prepare("SELECT * FROM zielgruppen ORDER BY id").all() as Zielgruppe[];

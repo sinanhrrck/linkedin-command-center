@@ -593,3 +593,40 @@ CREATE TABLE IF NOT EXISTS termine (
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_termine_thread ON termine(thread_url, art, status);
+
+-- TRAINING (2026-10-23): simulierte Chats im Cockpit. Ein Mensch spielt den Lead, der Bot antwortet
+-- mit den ECHTEN Gesprächs-Prompts. Nichts davon berührt contacts/actions/crm_stage_events/drafts –
+-- Simulationen dürfen keine Kennzahl verfälschen. `verlauf`/`conversation` = JSON.
+CREATE TABLE IF NOT EXISTS sim_chats (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  tester        TEXT,
+  lead_name     TEXT NOT NULL,
+  lead_headline TEXT,
+  ausrichtung   TEXT NOT NULL DEFAULT 'standard',
+  verlauf       TEXT NOT NULL DEFAULT '[]',
+  conversation  TEXT,
+  status        TEXT NOT NULL DEFAULT 'laeuft', -- laeuft | uebergabe | beendet
+  ende_grund    TEXT,
+  zusage        TEXT,    -- ja | vielleicht | nein (Urteil des Testers)
+  note          INTEGER, -- 1..5
+  feedback      TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  beendet_at    TEXT,
+  modus         TEXT NOT NULL DEFAULT 'lead',    -- lead = Mensch spielt den Lead | bot = Mensch spielt Sinan
+  quelle        TEXT NOT NULL DEFAULT 'cockpit', -- cockpit | link (importiert von der Trainingsseite)
+  quelle_key    TEXT                             -- link:<runId> – macht den Import wiederholbar
+);
+-- Eindeutige Indizes auf quelle_key legt db/index.ts NACH dem Spalten-Nachtrag an (ältere Testbestände).
+-- Aus Feedback abgeleitete Regeln. Wirken erst, wenn ein Mensch sie annimmt (status='aktiv').
+CREATE TABLE IF NOT EXISTS sim_regeln (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  chat_id      INTEGER,
+  bereich      TEXT NOT NULL DEFAULT 'gespraech', -- gespraech | erstnachricht | beispiel (menschlich geschriebene Nachricht)
+  regel        TEXT NOT NULL,
+  begruendung  TEXT,
+  status       TEXT NOT NULL DEFAULT 'vorschlag', -- vorschlag | aktiv | verworfen | aus
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  entschieden_at TEXT,
+  quelle_key   TEXT -- link:<runId>:<n> beim Import, sonst NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sim_regeln_status ON sim_regeln(status, bereich);

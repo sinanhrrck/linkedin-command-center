@@ -1,4 +1,3 @@
-import { vertriebswissen } from "../../core/vertriebswissen.js";
 /**
  * AGENT-RUNNER – die Laufzeit-Verdrahtung (das „Umschalten"). Hängt den neuen Sales-Agent an
  * die echte Inbox und den echten Versand. STRENG gated:
@@ -17,10 +16,9 @@ import { markInboundReply } from "../../modules/crm.js";
 import { recordCrmStage } from "../../modules/crmStages.js";
 import { db, getAgentMode } from "../../db/index.js";
 import { events } from "../../core/events.js";
-import { generateText } from "../../core/textLlm.js";
-import { generateClaude, claudeAvailable } from "../../core/claude.js";
-import { promptKontext } from "../../context.js";
+import { gespraechsKontext, aecAktiv } from "../../modules/ausrichtung.js";
 import { GovernorBlocked } from "../../core/safetyGovernor.js";
+import { analyzeLlm, replyLlm } from "./llmKanaele.js";
 import { SqliteConversationRepository } from "../infra/sqliteConversationRepository.js";
 import { handleIncomingMessage } from "../application/handleIncomingMessage.js";
 import { neueConversation } from "../domain/conversation.js";
@@ -29,19 +27,7 @@ import { istStumm, stummschalten } from "../../modules/stumm.js";
 import { agentVertrauen, darfAutonom } from "../../modules/agentVertrauen.js";
 import { antwortRisiko } from "../domain/policy/risiko.js";
 
-/**
- * KI-Kanäle für den Agent. WICHTIG (Fix 2026-07-24): BEIDE Schritte (Analyse UND Antwort) laufen
- * über Claude, sobald ein bezahlter Key konfiguriert ist. Vorher nutzte die Analyse immer das
- * kostenlose Gemini (~20 Aufrufe/Tag, geteilt mit Erstnachrichten) → nach wenigen Gesprächen war
- * das Kontingent leer und der Agent konnte NICHTS mehr analysieren = "der Agent macht nichts".
- * Der Voll-Auto-Agent ist ohnehin der bezahlte Pfad; ohne Claude-Key fällt beides auf Gemini zurück.
- */
-const claudeAn = () => config.llm.autopilotProvider === "claude" && claudeAvailable();
-// Vertriebswissen als gecachter System-Block – für Analyse UND Antwort derselbe Text, damit der
-// Cache zwischen beiden Aufrufen trifft. Es ändert keine Regel des Agenten (core/vertriebswissen.ts).
-const wissen = () => vertriebswissen("gespraech") || undefined;
-const analyzeLlm = (p: string) => (claudeAn() ? generateClaude(p, undefined, wissen()) : generateText(p, undefined, wissen()));
-const replyLlm = (p: string) => (claudeAn() ? generateClaude(p, undefined, wissen()) : generateText(p, undefined, wissen()));
+// KI-Kanäle (Analyse + Antwort) liegen in llmKanaele.ts – der Trainings-Simulator nutzt dieselben.
 
 /** Stabiler Kurz-Fingerabdruck (djb2) der eingegangenen Nachricht – Basis der Idempotenz-Sperre. */
 function fingerprint(text: string): string {
@@ -65,7 +51,10 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
   // „senden/unsent“. Solange der Schatten läuft, werden sie zu „entwurf“ – damit beim Umschalten
   // auf vorsichtig/automatisch nichts Ungeprüftes nachgesendet wird.
   if (schatten) repo.schattenEntscheidungenEntschaerfen();
-  const persona = promptKontext();
+  // Ausrichtung (Standard/AEC) wird je Tick gelesen → der Schalter wirkt ab dem nächsten Tick,
+  // auch für laufende Gespräche, ohne Engine-Neustart.
+  const persona = gespraechsKontext();
+  const angebot = angebotsWahl(new Date(), undefined, { nurAec: aecAktiv() });
   const threads = await fetchThreads(max);
 
   for (const t of threads) {
@@ -126,7 +115,7 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
     // ---- NEUE Nachricht → einmal durch die Pipeline (kostet KI) ----
     let e;
     try {
-      e = await handleIncomingMessage(conv, t.messages, { persona, angebot: angebotsWahl(), analyzeLlm, replyLlm, maxRegenerierungen: 1 });
+      e = await handleIncomingMessage(conv, t.messages, { persona, angebot, analyzeLlm, replyLlm, maxRegenerierungen: 1 });
     } catch (err) {
       // Pipeline-Fehler (KI weg, Guthaben leer, Netz) nicht in einer Endlosschleife wiederholen:
       // abhaken, aber NICHT still (Fix 2026-10-08). Vorher wurde „nichts“ vermerkt – die Person

@@ -16,6 +16,7 @@
       <button class="nav" data-view="campaigns"><span class="nav-icon">◇</span>Kampagnen <i id="nav-campaigns"></i></button>
       <button class="nav" data-view="contacts"><span class="nav-icon">○</span>Kontakte</button>
       <button class="nav" data-view="insights"><span class="nav-icon">↗</span>Auswertung</button>
+      <button class="nav" data-view="training"><span class="nav-icon">◌</span>Training <i id="nav-training"></i></button>
     </nav>
     <button class="nav settings-nav" data-view="settings"><span class="nav-icon">⚙</span>Einstellungen</button>
     <div class="side-status"><span id="side-dot"></span><div><b id="side-state">Prüfe…</b><small id="side-detail">Lokale Engine</small><small id="app-version" class="app-version">Version wird geprüft</small></div></div>
@@ -24,7 +25,7 @@
   <main>
     <header class="topbar">
       <div><p id="page-kicker">DEIN ARBEITSTAG</p><h1 id="page-title">Heute</h1></div>
-      <div class="top-actions"><span id="top-status" class="top-status"></span><span id="updated-at">–</span><button id="feedback-open" class="support-button">Feedback</button><button id="emergency" class="danger-ghost">Not-Aus</button></div>
+      <div class="top-actions"><span id="top-status" class="top-status"></span><span id="updated-at">–</span><button id="ausrichtung-top" class="ausrichtung-top" type="button" title="Ausrichtung umschalten: Standard oder alle Gespräche nur zur Potenzialanalyse (AEC)">Ausrichtung: Standard</button><button id="feedback-open" class="support-button">Feedback</button><button id="emergency" class="danger-ghost">Not-Aus</button></div>
     </header>
 
     <section class="view active" id="view-today">
@@ -116,6 +117,45 @@
       <section class="page-intro compact"><div><span class="eyebrow">Eine Kontaktbasis</span><h2>Kontakte und Gespräche</h2><p>Jede Person erscheint nur einmal. Filter zeigen, wo der Kontakt gerade steht.</p></div></section>
       <div class="contact-toolbar"><input id="contact-search" type="search" placeholder="Name oder Headline suchen"/><select id="contact-filter"><option value="all">Alle Kontakte</option><option value="attention">Braucht Entscheidung</option><option value="paused">Wiedervorlagen</option><option value="excluded">Nicht mehr anschreiben</option><option value="ausserhalb">Außerhalb der Zielgruppen</option><option value="new">Noch nicht kontaktiert</option><option value="invited">Anfrage offen</option><option value="accepted">Angenommen</option><option value="messaged">Angeschrieben</option><option value="replied">Hat geantwortet</option><option value="closed">Abgeschlossen</option></select><span id="identity-quality" class="identity-quality"></span><span id="contact-count"></span></div>
       <div class="contact-table"><div class="contact-scroll"><div class="contact-row contact-head"><button type="button" data-sort="name">Kontakt</button><button type="button" data-sort="status">Status</button><button type="button" data-sort="score">Score</button><button type="button" data-sort="beruehrung">Letzte Berührung</button><span>Nächster Schritt</span><span></span></div><div id="contact-rows"></div></div></div>
+    </section>
+
+    <section class="view" id="view-training">
+      <div class="training-grid">
+        <section class="setting-card training-chat">
+          <div id="training-start">
+            <span class="eyebrow">Neue Simulation</span><h3>Wen spielst du?</h3><p>Du spielst den Lead, der Bot antwortet mit denselben Anweisungen wie bei echten Gesprächen. Nichts geht an LinkedIn, nichts landet im CRM oder in den Zahlen. Danach bewertest du, und daraus entstehen Regelvorschläge, die erst nach dem Annehmen wirken.</p>
+            <div class="training-form">
+              <label>Dein Name <small>(damit man sieht, wer trainiert hat)</small><input id="training-tester" maxlength="60" placeholder="z. B. Sinan"></label>
+              <label>Name der Person, die du spielst<input id="training-name" maxlength="60" placeholder="Max Muster"></label>
+              <label>Ihre LinkedIn-Headline<input id="training-headline" maxlength="200" placeholder="Auszubildender Bankkaufmann bei der Sparkasse Heidelberg"></label>
+            </div>
+            <p id="training-ausrichtung" class="muted"></p>
+            <button id="training-los" class="primary" type="button">Simulation starten</button>
+          </div>
+          <div id="training-run" class="hidden">
+            <div class="training-head"><div><b id="training-wer"></b><small id="training-info"></small></div><button id="training-neu" type="button">Neu</button></div>
+            <div id="training-messages" class="training-messages" aria-live="polite"></div>
+            <form id="training-eingabe" class="training-eingabe"><textarea id="training-text" rows="2" maxlength="1500" placeholder="Antworte als Lead … (Enter sendet, Shift+Enter neue Zeile)"></textarea><button class="primary" type="submit">Senden</button></form>
+            <div class="training-ende"><button id="training-bewerten" type="button">Chat beenden und bewerten</button></div>
+          </div>
+          <div id="training-rate" class="hidden">
+            <span class="eyebrow">Bewertung</span><h3>Wie war der Bot?</h3>
+            <p class="training-frage">Hättest du als diese Person einem Termin zugesagt?</p>
+            <div class="segmented training-wahl" id="training-zusage"><button type="button" data-zusage="ja">Ja</button><button type="button" data-zusage="vielleicht">Vielleicht</button><button type="button" data-zusage="nein">Nein</button></div>
+            <p class="training-frage">Note für das ganze Gespräch</p>
+            <div class="training-noten" id="training-note"><button type="button" data-note="1">1</button><button type="button" data-note="2">2</button><button type="button" data-note="3">3</button><button type="button" data-note="4">4</button><button type="button" data-note="5">5</button></div>
+            <small class="muted">1 = hätte mich abgeschreckt · 5 = genau so</small>
+            <p class="training-frage">Was hat gestört, was war gut?</p>
+            <textarea id="training-feedback" rows="4" maxlength="2000" placeholder="z. B. Zu früh das Angebot gebracht, zweimal hintereinander nach dem Warum gefragt …"></textarea>
+            <div class="review-actions"><button id="training-zurueck" type="button">Zurück zum Chat</button><button id="training-absenden" class="primary" type="button">Bewertung abschicken</button></div>
+          </div>
+        </section>
+        <aside class="training-side">
+          <section class="setting-card"><span class="eyebrow">Zur Freigabe</span><h3>Regelvorschläge</h3><p>Aus dem Feedback abgeleitet. Annehmen heißt: gilt ab sofort für echte Gespräche. Du kannst den Text vorher anpassen. „Beispiel“ ist eine Nachricht, die ein Mensch als Sinan geschrieben hat: der Bot übernimmt davon Ton und Satzbau.</p><div id="training-vorschlaege"></div><div class="training-import"><label for="training-datei" class="training-import-knopf">Trainings-Dateien importieren</label><input id="training-datei" type="file" accept=".json,application/json" multiple class="hidden"><small id="training-import-info" class="muted"></small></div></section>
+          <section class="setting-card"><span class="eyebrow">Gilt gerade</span><h3>Aktive Regeln</h3><div id="training-regeln"></div></section>
+          <section class="setting-card"><span class="eyebrow">Verlauf</span><h3>Letzte Trainings</h3><p id="training-statistik"></p><div id="training-chats"></div></section>
+        </aside>
+      </div>
     </section>
 
     <section class="view" id="view-insights">
@@ -223,6 +263,7 @@
         <h2 data-stab="betrieb" class="settings-group"><span>Betrieb</span><small>Läuft der Bot, und wie viel entscheidet er selbst?</small></h2>
         <section data-stab="betrieb" class="setting-card"><span class="eyebrow">Engine</span><h3 id="engine-title">Lokale Engine</h3><p id="engine-copy"></p><div class="button-row"><button id="engine-toggle" class="primary"></button><button id="backup-now">Jetzt sichern</button></div></section>
         <section data-stab="betrieb" class="setting-card"><span class="eyebrow">Automatik</span><h3>Wer entscheidet?</h3><div id="automation-levels" class="segmented"><button data-level="vorschlaege">Ich prüfe alles</button><button data-level="halb">Erstkontakt automatisch</button><button data-level="agent_test">Gespräche testen</button><button data-level="agent_vorsichtig">Gespräche vorsichtig</button><button data-level="agent_live">Gespräche automatisch</button></div><p id="automation-copy"></p><div id="agent-vertrauen" class="agent-vertrauen hidden"></div></section>
+        <section data-stab="betrieb" class="setting-card"><span class="eyebrow">Ausrichtung</span><h3>Wohin führen die Gespräche?</h3><div id="ausrichtung-seg" class="segmented"><button data-ausrichtung="standard">Standard</button><button data-ausrichtung="aec">Nur AEC</button></div><p id="ausrichtung-copy"></p></section>
         <section id="kalender-card" data-stab="betrieb" class="setting-card wide-card kalender-card">
           <div class="section-head"><div><span class="eyebrow">Kalender</span><h3>Vereinbarte Termine automatisch eintragen</h3></div><div class="head-side" id="kal-knoepfe"></div></div>
           <p>Ist im Chat ein Termin mit Tag und Uhrzeit von beiden Seiten bestätigt, trägt NextLead ihn in deinen Google Kalender ein, zum Beispiel „AEC Auswertung Max Muster/Dein Name“, und meldet es dir per Telegram. Verschiebungen ändern den Eintrag. Ist das Datum nicht eindeutig, trägt er nichts ein und fragt dich.</p>

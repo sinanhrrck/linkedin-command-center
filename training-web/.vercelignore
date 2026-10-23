@@ -1,0 +1,5 @@
+# Steuert, was beim Deploy hochgeladen wird. api/_bot.json MUSS mit (liegt nur auf dem Server, wird nie
+# als Datei ausgeliefert, weil nur public/ statisch ist) – deshalb steht es hier bewusst NICHT drin.
+node_modules
+.vercel
+README.md

@@ -9,7 +9,7 @@ test("B1, P1 und AEC sind drei eigenständige Gesprächswege", () => {
   assert.equal(isGoalCode("AEC"), true);
   assert.equal(goalDefinition("B1").label, "Kunde");
   assert.equal(goalDefinition("P1").label, "Vertriebspartner");
-  assert.equal(goalDefinition("AEC").label, "AEC");
+  assert.equal(goalDefinition("AEC").label, "Potenzialanalyse"); // Sinan 2026-10-23: AEC = Potenzialanalyse
 });
 
 test("LinkedIn-Such-URLs entstehen aus Freitext ohne manuelle URL-Eingabe", () => {

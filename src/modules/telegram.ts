@@ -11,6 +11,7 @@ import { pendingPosts, approvePost, discardPost } from "./content.js";
 import { stillstandGrund, type Stillstand } from "./engineWatch.js";
 import { analyseAlsText, letzteAnalyse, type WochenAnalyse } from "./kiAnalyse.js";
 import { terminLoeschen } from "./termine.js";
+import { setAusrichtung } from "./ausrichtung.js";
 
 /**
  * Telegram-Steuerung: Entwürfe freigeben/senden, offene Nachrichten sehen, Tages-Status.
@@ -178,7 +179,7 @@ export function startTelegram() {
   bot.command("start", (ctx) =>
     ctx.reply(
       `👋 LinkedIn Command Center verbunden.\nDeine Chat-ID: ${ctx.chat.id}\n\n` +
-        `/status – Tages-Status & Zahlen\n/warum – warum geht gerade nichts raus?\n/tag – Tagesbericht · /woche – Wochenbericht · /vorwoche\n/entwuerfe – offene Nachrichten freigeben\n/leads – Hot Leads (haben geantwortet)\n/pause – Outreach anhalten\n/resume – fortsetzen`,
+        `/status – Tages-Status & Zahlen\n/warum – warum geht gerade nichts raus?\n/tag – Tagesbericht · /woche – Wochenbericht · /vorwoche\n/entwuerfe – offene Nachrichten freigeben\n/leads – Hot Leads (haben geantwortet)\n/pause – Outreach anhalten\n/resume – fortsetzen\n/aec – alle Gespräche nur zur Potenzialanalyse · /standard – zurück`,
     ),
   );
 
@@ -223,6 +224,17 @@ export function startTelegram() {
     if (!allowed(ctx.chat.id)) return;
     governor.resume();
     ctx.reply("▶ Outreach fortgesetzt.");
+  });
+  // AUSRICHTUNG (2026-10-23): Standard ↔ AEC per Befehl, derselbe State wie der Cockpit-Knopf.
+  bot.command("aec", (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    setAusrichtung("aec");
+    ctx.reply("🎯 Ausrichtung AEC: Jedes Gespräch führt ab der nächsten Antwort nur noch zur Potenzialanalyse. Zurück mit /standard.");
+  });
+  bot.command("standard", (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    setAusrichtung("standard");
+    ctx.reply("↩︎ Ausrichtung Standard: Gespräche laufen wieder wie im Profil beschrieben.");
   });
 
   /**

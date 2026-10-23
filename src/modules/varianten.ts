@@ -24,7 +24,8 @@ const VETO = { minEntscheidungen: 6, maxAblehnung: 0.5 };
 const POSITIV = ["interested", "question", "meeting"];
 
 export type Arm = { key: string; titel: string; anweisung: string };
-export type Wahl = { slot: string; arm: string; anweisung: string };
+export type { Wahl } from "./erstnachrichtPrompt.js";
+import type { Wahl } from "./erstnachrichtPrompt.js";
 
 /**
  * Arme je Slot. Bewusst wenige (2–3): bei ~16 Nachrichten am Tag braucht jeder Arm Wochen,
@@ -134,10 +135,7 @@ export function waehleArm(slot: string, rng: () => number = Math.random): Wahl |
   return { slot, arm: arm.key, anweisung: arm.anweisung };
 }
 
-/** Prompt-Baustein für eine Wahl. */
-export function variantenBlock(w: Wahl | null): string {
-  return w ? `\nVARIANTE FÜR DIESE NACHRICHT (hat Vorrang vor dem Aufbau oben): ${w.anweisung}\n` : "";
-}
+export { variantenBlock } from "./erstnachrichtPrompt.js";
 
 export function registriereVersand(input: {
   contactId: number; draftId?: number | null; kind: string; stufe?: number | null; slot: string; arm: string; goalCode?: string | null; zielgruppe?: string | null;

@@ -158,6 +158,93 @@ braucht den Governor NICHT.
   ACHTUNG bei langen Seiten: der In-App-Browser-Pane paintet weit unten nach Scroll teils
   nicht (Artefakt) — DOM/oberer Bereich sind maßgeblich, nicht der Leerscreenshot.
 
+## UPDATE 2026-10-23 (2) — Training: Chats simulieren, bewerten, Regeln freigeben (`modules/training.ts`)
+Sinans Vorgabe: Seite, auf der jeder Chats simulieren und danach Feedback geben kann, damit der Bot
+besser wird. Entscheidungen: im Cockpit (Team mit Dashboard-Passwort), Feedback am Chat-Ende, Regeln
+wirken erst nach Freigabe durch einen Menschen.
+- **Dieselbe Pipeline wie live:** Erstnachricht über `firstMessage` (unechter Kontakt id -1), jede
+  Antwort über `handleIncomingMessage` mit `gespraechsKontext()`, `angebotsWahl({nurAec})` und den
+  KI-Kanälen aus `agent/runtime/llmKanaele.ts` (aus agentRunner herausgezogen, damit beide dieselben
+  nutzen). Eskalation/Schweigen/Entwurf werden dem Tester als Hinweis gezeigt; Termin-Zusage beendet
+  den Bot-Teil (`status='uebergabe'`).
+- **Simulationen berühren NIE** contacts/drafts/actions/crm_stage_events/agent_* (Test prüft das).
+  Eigene Tabellen `sim_chats` (Verlauf + Conversation als JSON) und `sim_regeln`.
+- **Lernen:** `beendeSimulation` speichert Zusage/Note/Freitext, EIN KI-Aufruf `regelVorschlaege` → max. 3
+  Regeln (`bereich` gespraech|erstnachricht) als `vorschlag`. Erst `regelEntscheiden(annehmen)` macht sie
+  `aktiv` (Text editierbar, max. 20 aktiv). `trainingsRegeln.ts` (DB-only, gegen Import-Zyklus) liefert
+  den Block: `gespraechsKontext()` hängt die Gesprächs-Regeln an, `firstMessage` die Erstnachricht-Regeln.
+  Ohne aktive Regel sind alle Prompts byte-gleich zu vorher.
+- API `GET /api/training` (Übersicht) bzw. `?chat=<id>`, `POST /api/training` action start|antwort|ende|regel.
+  Cockpit: Navigationspunkt „Training“ (`#view-training`, Badge = offene Vorschläge aus
+  `dashboard.trainingVorschlaege`), eigener Ladepfad `ladeTraining` mit laufender Nummer; laufender Chat
+  und Testername liegen im localStorage. Telegram meldet Vorschläge NICHT (Dashboard- und Engine-Prozess
+  teilen keinen Event-Bus).
+- **TRAININGSSEITE PER LINK** (gleicher Tag, Sinan: „eine Page, wo jeder mit dem Link drauf kann, als Bot
+  menschlich schreiben ODER als Kunde den Bot pitchen lassen“): claude.ai-Artifact „NextLead Chat-Training“,
+  https://claude.ai/artifact/1FYy1VmxnFQZidW5Hgi4dE. Läuft komplett im Browser (KI über `sample` auf dem
+  Zugang des Testers, Speicher über `db`), weil der Heimserver von außen unerreichbar bleiben muss.
+  Rolle „Ich bin der Bot“: KI spielt einen Azubi mit verborgener Haltung (unsicher/zufrieden/skeptisch/…),
+  Auswertung wählt 1–2 der Menschen-Nachrichten WÖRTLICH als `beispiel` + Regeln. Rolle „Ich bin der
+  Lead“: Bot schreibt mit eingebauten Anweisungen, Tester bewertet. db: `sessions/<uid>/runs/<runId>`,
+  Regeln `sessions` read/write owner + `sessions/{self}` interact (geprüft: fremde Läufe unsichtbar).
+  ZWEI ANSICHTEN: Tester sehen Training + eigene Läufe; nur der Besitzer (`user.isOwner()`) bekommt den
+  Umschalter „Auswertung“ (Kennzahlen, Personen-Tabelle, alle Läufe aufklappbar, Export). Durchgesetzt
+  wird das von den db-Regeln, nicht nur von der Oberfläche.
+  NUR Mitglieder der eigenen claude.ai-Organisation können speichern (Außenstehende haben `view`).
+  Rückweg: Besitzer exportiert JSON (`format: "nextlead-training"`) → Cockpit Training → Import
+  (`importiereTrainings`, `POST /api/training action=import`). Wiederholbar über `quelle_key`
+  (`link:<runId>`, `link:<runId>:<n>`), alles kommt als `vorschlag`. Neuer Bereich `beispiel` (max. 8
+  aktiv) → `trainingsRegelnBlock("gespraech")` hängt sie als „So klingt ein Mensch“ an.
+  DIE SEITE ENTHÄLT DIE BOT-ANWEISUNGEN FEST (persona aus `promptKontext`, AEC-Block, Angebot): nach
+  Profiländerung `npm run trainingsseite` (Template `training-seite/template.html`, Ausgabe gitignored,
+  weil das Profil drinsteht) und das Artifact mit derselben URL neu veröffentlichen. Erstversion aus dem
+  Mac-App-Profil vom 23.10. gebaut, nicht aus dem Server-Profil.
+- **ÖFFENTLICHE WEBSITE `training-web/`** (gleicher Tag): Sinans Kollegen sind NICHT in seinem claude.ai-Team
+  → auf dem Artifact könnten sie nichts speichern; Externe (Studie) erst recht nicht. Deshalb Vercel-Projekt
+  `nextlead-training` (https://nextlead-training.vercel.app, Konto sinanhrrck): `/` = anonyme Studie im
+  Fragebogen-Stil (Einwilligung, Altersgruppe/Tätigkeit, nur Rolle „Lead“, Likert-Skalen), `/team` = Chat-Training
+  mit beiden Rollen. Server-Funktionen `api/ki.mjs` (Bot bzw. KI-Lead, Anthropic-SDK, `claude-opus-5-5` +
+  `fallbacks: "default"`, JSON-Schema-Ausgabe), `api/abschluss.mjs` (Auswertung + Mail über Resend mit
+  Importdatei im Anhang), `api/info.mjs`. KEINE Speicherung – das Postfach ist die Ablage. Bot-Anweisungen nur
+  serverseitig in `api/_bot.json` (gitignored, `.vercelignore` lädt sie trotzdem hoch, von außen 404 geprüft).
+  Secrets setzt Sinan selbst in Vercel (README dort). Solange `ANTHROPIC_API_KEY`/`RESEND_API_KEY`/`MAIL_TO`/
+  `VERANTWORTLICH_*` fehlen, sperrt die Seite den Start. Cockpit-Import nimmt mehrere Dateien auf einmal.
+  **1:1 STATT NACHBAU** (Sinan: „er soll 1:1 so klingen“): Die Website bündelt Original-Code
+  (`src/trainingsweb/kern.ts` → `training-web/api/_kern.mjs` per esbuild) und füttert ihn mit
+  `baueSnapshot()` (`src/trainingsweb/snapshot.ts` → `api/_bot.json`). Dafür herausgelöst, Prompts BYTE-GLEICH
+  verifiziert: `core/saubern.ts` (aus context.ts), `core/terminVorschlag.ts` (zweiTermine/ctaText aus
+  angebot.ts), `modules/erstnachrichtPrompt.ts` (Erstnachricht-Prompt, STANDARD_ERSTNACHRICHT, variantenBlock,
+  variationBlock, korrekturBlock, mitAusbildungsCheckPur, mitAusgangsCheckPur). DIESE MODULE BLEIBEN DB-/FS-FREI,
+  sonst lässt sich der Kern nicht bündeln. Bot-Kanal auf der Website = generateClaude (Modell aus Snapshot,
+  1024 Tokens, Vertriebswissen gecacht). `trainingsweb.test.ts` prüft identische Prompts Website vs. Live.
+  Nur ein auf dem Server erzeugter Snapshot ist 1:1 (`--nur-snapshot`, Ablauf in training-web/README.md);
+  der aktuelle stammt vom Mac (ohne Vertriebswissen, alte Zielgruppen-Daten).
+  Migration: `quelle_key`-Indizes legt db/index.ts NACH dem Spalten-Nachtrag an (ältere sim_*-Tabellen).
+- Kopfzeile darf unter 600 px umbrechen (Ausrichtungs-Knopf machte sie zu breit).
+- Tests: `src/core/training.test.ts` (5), `src/core/trainingsweb.test.ts` (3). LOKAL LAUFEN DIE TESTS JETZT WIEDER: der better-sqlite3-Absturz
+  unter Node 24.21 verschwindet mit großer Young Generation, Datei für Datei:
+  `node --min-semi-space-size=256 --max-semi-space-size=256 --import tsx src/core/<datei>.test.ts`
+  (die Flags sind in NODE_OPTIONS verboten). So gelaufen: 226/226 grün.
+
+## UPDATE 2026-10-23 — Ausrichtung Standard ↔ AEC per Knopfdruck (`modules/ausrichtung.ts`)
+Sinans Vorgabe: Bot per Knopfdruck komplett auf AEC umstellen, zurückschaltbar. AEC = die kostenlose
+Potenzialanalyse samt Auswertungsgespräch (goals.ts beschreibt AEC jetzt so, Label „Potenzialanalyse“).
+- **Nur eine Laufzeit-Weiche** (State `ausrichtung`), KEINE Änderung an profil.local.json, Zielgruppen
+  oder Kampagnen → Zurückschalten stellt alles exakt wieder her. Im Standard sind alle Prompts
+  BYTE-GLEICH zu vorher (geprüft für converseStep + messageAusIdee).
+- **Wirkt nur auf Antworten in Gesprächen** (Sinans Auswahl: Gesprächsziel + bestehende Gespräche),
+  NICHT auf Erstnachricht, Nachfassen, Reaktivierung, Zielgruppen, Lead-Suche. Baustein
+  `gespraechsKontext()` = `promptKontext()` + AEC-Block; benutzt in Agent (agentRunner), converseStep,
+  pitchIdeen, messageAusIdee, Neuschreiben von `message`-Entwürfen, Coach für `message`. Neue
+  Antwort-Prompts bitte ebenfalls über `gespraechsKontext()` bauen, nie über `promptKontext()`.
+- `angebotsWahl(now, p, {nurAec})`: nur das Karriere-Angebot, Potenzialanalyse zuerst (Schalter vom
+  Aufrufer übergeben, angebot.ts bleibt DB-frei). `goalForConversation` liefert bei AEC für JEDEN Chat
+  das AEC-Ziel (Kampagnen-Zuordnung bleibt). converseStep tauscht bei AEC den Finanzberatungs-Weg und
+  den Verdienst-Rechnungs-Pitch (Phase 5) aus, statt sich auf den Vorrang-Hinweis zu verlassen.
+- Bereits fertige Entwürfe werden nicht umgeschrieben. Bedienung: Knopf oben rechts (`#ausrichtung-top`),
+  Karte Einstellungen → Betrieb, `POST /api/ausrichtung {ausrichtung}`, Telegram `/aec` + `/standard`.
+- Tests: `src/core/ausrichtung.test.ts` (4).
+
 ## UPDATE 2026-10-07 — Voll-Automatik: Schweigen können + „Komplett stumm“
 Sinans Vorgabe: Bot auf Auto, „ich will mich damit nicht mehr beschäftigen“. Dafür fehlten zwei
 Dinge: der Agent antwortete auf JEDE Nachricht (Recruiter, Software-Verkäufer, Abwesenheitsnotizen,

@@ -1,4 +1,5 @@
 import { db } from "../db/index.js";
+import { aecAktiv } from "./ausrichtung.js";
 
 export const GOAL_CODES = ["B1", "P1", "AEC"] as const;
 export type GoalCode = (typeof GOAL_CODES)[number];
@@ -23,8 +24,9 @@ const DEFINITIONS: Record<GoalCode, Omit<ConversationGoal, "campaignId">> = {
   },
   AEC: {
     code: "AEC",
-    label: "AEC",
-    instruction: "Führe das Gespräch behutsam zum hinterlegten AEC-Ziel. Nutze nur Fakten aus Profil, Auftrag und Gespräch; erfinde keine Bedeutung oder Leistungsbeschreibung für AEC.",
+    label: "Potenzialanalyse",
+    // Sinan 2026-10-23: AEC IST die kostenlose Potenzialanalyse samt Auswertungsgespräch.
+    instruction: "Führe das Gespräch bei echtem Signal behutsam zur kostenlosen Potenzialanalyse (AEC) mit anschließendem Auswertungsgespräch. Der Person gegenüber heißt sie Potenzialanalyse. Kein Finanz-Beratungstermin, keine Vertriebspartnerschaft.",
   },
 };
 
@@ -45,6 +47,9 @@ export function goalForConversation(threadUrl: string, participant = ""): Conver
         AND (c.profile_url=? OR lower(trim(c.full_name))=lower(trim(?)))
       ORDER BY CASE WHEN c.profile_url=? THEN 0 ELSE 1 END LIMIT 1`,
   ).get(threadUrl, participant, threadUrl) as { campaign_id: number; goal_code: string } | undefined;
+  // AUSRICHTUNG AEC: jedes Gespräch – mit oder ohne Kampagne, auch ein laufendes – hat das AEC-Ziel.
+  // Die Kampagnen-Zuordnung bleibt erhalten (Messregel 2), nur das Gesprächsziel wird überstimmt.
+  if (aecAktiv()) return goalDefinition("AEC", row?.campaign_id ?? null);
   return row && isGoalCode(row.goal_code) ? goalDefinition(row.goal_code, row.campaign_id) : null;
 }
 

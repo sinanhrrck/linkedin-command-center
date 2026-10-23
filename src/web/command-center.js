@@ -65,7 +65,7 @@ const relativeTime = (value) => {
 const VIEW_META = {
   today: ["DEIN ARBEITSTAG", "Heute"], campaigns: ["GEZIELTE AUFTRÄGE", "Kampagnen"],
   contacts: ["DEINE KONTAKTBASIS", "Kontakte"], insights: ["ZAHLEN MIT KONTEXT", "Auswertung"],
-  settings: ["ARBEITSWEISE", "Einstellungen"],
+  settings: ["ARBEITSWEISE", "Einstellungen"], training: ["BOT VERBESSERN", "Training"],
 };
 /** Kampagnen sind stillgelegt (config.campaigns.enabled). Solange der Schalter aus ist, ist der
  * Bereich weder in der Navigation noch über einen alten Link erreichbar. Der Code bleibt. */
@@ -77,6 +77,7 @@ function showView(view) {
   document.querySelectorAll(".nav[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === activeView));
   $("page-kicker").textContent = VIEW_META[activeView][0]; $("page-title").textContent = VIEW_META[activeView][1];
   window.scrollTo({ top: 0, behavior: "smooth" });
+  if (activeView === "training") ladeTraining();
 }
 document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => showView(button.dataset.view)));
 
@@ -218,6 +219,7 @@ const GROUPS = [
 function renderToday() {
   const attention = state.attention || {};
   $("nav-attention").textContent = attention.total || "";
+  $("nav-training").textContent = state.trainingVorschlaege || "";
   $("work-total").textContent = `${attention.total || 0} offene Entscheidungen`;
   $("attention-title").textContent = attention.total ? `${attention.total} Entscheidungen sind nach Wirkung sortiert.` : "Heute ist alles entschieden.";
   $("attention-copy").textContent = attention.systemIssues ? `${attention.systemIssues} technische Hinweise stehen vor neuer Akquise.` : "Antworten zuerst, dann Freigaben. NextLead erledigt den Rest im Hintergrund.";
@@ -239,6 +241,7 @@ function renderToday() {
   renderQueue();
   renderQuick();
   renderTopStatus();
+  renderAusrichtung();
   renderTodayKpis();
   renderDecisions();
 }
@@ -292,6 +295,31 @@ const ENTSCHEIDUNG_ART = { message: "Antwort", pitchidee: "Antwort · Richtung",
 const WICHTIG_INTENT = { chance: "Chance", meeting: "Termin", einwand: "Einwand", goal_deviation: "Zielwechsel" };
 let entscheidungenAlle = false;
 const zeitKurz = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
+
+/**
+ * AUSRICHTUNG (2026-10-23): Standard ↔ AEC. Knopf oben rechts (immer sichtbar) und Karte in
+ * Einstellungen → Betrieb. Beide schalten denselben State über /api/ausrichtung.
+ */
+const AUSRICHTUNG_TEXT = {
+  standard: "Gespräche laufen wie im Profil beschrieben: Potenzialanalyse bei Orientierungs-Signalen, Beratungstermin bei Geldfragen.",
+  aec: "Jedes Gespräch, auch jedes laufende, führt nur noch zur kostenlosen Potenzialanalyse (AEC) mit Auswertungsgespräch. Kein Finanztermin, kein Partner-Thema. Erstnachricht, Nachfassen und Zielgruppen bleiben unverändert.",
+};
+function renderAusrichtung() {
+  const a = state.ausrichtung === "aec" ? "aec" : "standard";
+  const top = $("ausrichtung-top");
+  if (top) { top.textContent = a === "aec" ? "AEC aktiv" : "Ausrichtung: Standard"; top.classList.toggle("aec", a === "aec"); }
+  document.querySelectorAll("[data-ausrichtung]").forEach((b) => b.classList.toggle("active", b.dataset.ausrichtung === a));
+  const copy = $("ausrichtung-copy"); if (copy) copy.textContent = AUSRICHTUNG_TEXT[a];
+}
+async function setzeAusrichtung(a) {
+  if (a === (state.ausrichtung === "aec" ? "aec" : "standard")) return;
+  const frage = a === "aec"
+    ? "Bot auf AEC umstellen?\n\n" + AUSRICHTUNG_TEXT.aec + "\n\nGilt ab der nächsten Antwort. Zurückschalten stellt alles exakt wieder her."
+    : "Zurück auf Standard?\n\n" + AUSRICHTUNG_TEXT.standard;
+  if (!confirm(frage)) return;
+  try { await post("/api/ausrichtung", { ausrichtung: a }); await load(); toast(a === "aec" ? "Bot ist jetzt auf AEC ausgerichtet." : "Bot läuft wieder im Standard."); }
+  catch (error) { toast(error.message); }
+}
 
 function renderTopStatus() {
   const el = $("top-status"); if (!el) return;
@@ -2004,6 +2032,8 @@ $("acceptance-protection-toggle").onclick = async (event) => {
   finally { button.disabled = false; }
 };
 $("backup-now").onclick = async () => { await post("/api/backup"); toast("Sicherung erstellt."); };
+$("ausrichtung-top")?.addEventListener("click", () => setzeAusrichtung(state.ausrichtung === "aec" ? "standard" : "aec"));
+document.querySelectorAll("[data-ausrichtung]").forEach((button) => button.addEventListener("click", () => setzeAusrichtung(button.dataset.ausrichtung)));
 document.querySelectorAll("[data-level]").forEach((button) => button.addEventListener("click", async () => { await post("/api/automatik", { level: button.dataset.level }); await load(); toast("Automatik aktualisiert."); }));
 $("source-add").onclick = async () => {
   try {
@@ -2202,3 +2232,145 @@ document.querySelectorAll("[data-insight-tab]").forEach((b) => b.addEventListene
 let gemerkterTab = "ueberblick";
 try { gemerkterTab = localStorage.getItem("insight-tab") || "ueberblick"; } catch { /* egal */ }
 zeigeInsightTab(gemerkterTab);
+
+/**
+ * TRAINING (2026-10-23): Chats simulieren und bewerten. Eigener Ladepfad wie `ladeWirkung` – mit
+ * laufender Nummer statt Lade-Sperre, damit eine späte Antwort nie eine neuere überschreibt.
+ * Laufender Chat + eigener Name bleiben im Browser (localStorage), damit ein Neuladen nichts verliert.
+ */
+const TRAINING_CHAT_KEY = "nextlead.training.chat", TRAINING_TESTER_KEY = "nextlead.training.tester";
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* privat */ } };
+let trainingAnfrage = 0, trainingChat = null, trainingWahl = { zusage: null, note: null }, trainingBusy = false;
+const ZUSAGE_TEXT = { ja: "Zusage", vielleicht: "Vielleicht", nein: "Absage" };
+const BEREICH_TEXT = { gespraech: "Gespräch", erstnachricht: "Erstnachricht", beispiel: "Beispiel" };
+
+async function ladeTraining() {
+  const nr = ++trainingAnfrage;
+  try {
+    const id = Number(lsGet(TRAINING_CHAT_KEY));
+    const [daten, chat] = await Promise.all([
+      fetch("/api/training", { cache: "no-store" }).then((r) => r.json()),
+      id ? fetch(`/api/training?chat=${id}`, { cache: "no-store" }).then((r) => r.json()).then((d) => d.chat) : Promise.resolve(null),
+    ]);
+    if (nr !== trainingAnfrage) return;
+    if (chat && !chat.zusage) trainingChat = chat; else { trainingChat = null; lsSet(TRAINING_CHAT_KEY, null); }
+    zeichneTraining(daten);
+  } catch (error) { if (nr === trainingAnfrage) toast(`Training nicht ladbar: ${error.message}`); }
+}
+
+function zeichneTraining(daten) {
+  if (daten) {
+    $("training-ausrichtung").textContent = daten.ausrichtung === "aec"
+      ? "Ausrichtung: AEC. Der Bot führt nur zur Potenzialanalyse, genau wie gerade live."
+      : "Ausrichtung: Standard. Der Bot arbeitet genau wie gerade live.";
+    const vorschlaege = daten.regeln.filter((r) => r.status === "vorschlag");
+    const aktiv = daten.regeln.filter((r) => r.status !== "vorschlag");
+    $("nav-training").textContent = vorschlaege.length || "";
+    $("training-vorschlaege").innerHTML = vorschlaege.length ? vorschlaege.map((r) => `<div class="training-regel" data-regel="${r.id}">
+        <textarea rows="${r.bereich === "beispiel" ? 3 : 2}" maxlength="${r.bereich === "beispiel" ? 500 : 200}">${esc(r.regel)}</textarea>
+        <small>${BEREICH_TEXT[r.bereich] || "Gespräch"} · ${esc(r.begruendung || "")}${r.tester ? ` · aus dem Training von ${esc(r.tester)}` : ""}</small>
+        <div class="button-row"><button type="button" data-regel-aktion="verwerfen">Verwerfen</button><button type="button" class="primary" data-regel-aktion="annehmen">Annehmen</button></div></div>`).join("")
+      : `<p class="training-leer">Keine offenen Vorschläge.</p>`;
+    $("training-regeln").innerHTML = aktiv.length ? aktiv.map((r) => `<div class="training-regel ${r.status === "aus" ? "aus" : ""}" data-regel="${r.id}">
+        <span>${esc(r.regel)}</span><small>${BEREICH_TEXT[r.bereich] || "Gespräch"}${r.status === "aus" ? " · abgeschaltet" : ""}</small>
+        <div class="button-row">${r.status === "aus" ? `<button type="button" data-regel-aktion="annehmen">Wieder einschalten</button>` : `<button type="button" data-regel-aktion="aus">Abschalten</button>`}</div></div>`).join("")
+      : `<p class="training-leer">Noch keine Regel angenommen. Der Bot arbeitet wie bisher.</p>`;
+    const st = daten.statistik;
+    $("training-statistik").textContent = st.bewertet ? `${st.bewertet} bewertet · ${st.zusagen} Zusagen (${pct(st.zusagen, st.bewertet)} %) · Note im Schnitt ${String(st.durchschnitt).replace(".", ",")}` : "Noch kein Chat bewertet.";
+    $("training-chats").innerHTML = daten.chats.length ? daten.chats.map((c) => `<div class="training-chatzeile"><b>${esc(c.lead_name)}${c.ausrichtung === "aec" ? " · AEC" : ""}${c.modus === "bot" ? " · als Bot" : ""}${c.quelle === "link" ? " · Link" : ""}</b><span>${esc(c.tester || "?")} · ${c.zusage ? `${ZUSAGE_TEXT[c.zusage]}, Note ${c.note}` : c.status === "laeuft" ? "läuft" : "unbewertet"} · ${relativeTime(c.created_at)}</span></div>`).join("") : `<p class="training-leer">Noch keine Simulation.</p>`;
+  }
+  const phase = !trainingChat ? "start" : trainingChat.status === "laeuft" && !trainingWahl.offen ? "run" : "rate";
+  $("training-start").classList.toggle("hidden", phase !== "start");
+  $("training-run").classList.toggle("hidden", phase !== "run");
+  $("training-rate").classList.toggle("hidden", phase !== "rate");
+  $("training-zurueck").classList.toggle("hidden", !trainingChat || trainingChat.status !== "laeuft");
+  if (!$("training-tester").value) $("training-tester").value = lsGet(TRAINING_TESTER_KEY) || "";
+  if (trainingChat) zeichneTrainingChat();
+  document.querySelectorAll("[data-zusage]").forEach((b) => b.classList.toggle("active", b.dataset.zusage === trainingWahl.zusage));
+  document.querySelectorAll("[data-note]").forEach((b) => b.classList.toggle("active", Number(b.dataset.note) === trainingWahl.note));
+}
+
+function zeichneTrainingChat(denkt = false) {
+  const c = trainingChat;
+  $("training-wer").textContent = `Du bist ${c.lead_name}`;
+  $("training-info").textContent = `${c.lead_headline || ""}${c.ausrichtung === "aec" ? " · Ausrichtung AEC" : ""}`;
+  const box = $("training-messages");
+  box.innerHTML = c.verlauf.map((m) => `<div class="tm ${m.art || (m.sender === "Sinan" ? "bot" : "lead")}">${esc(m.text)}</div>`).join("")
+    + (denkt ? `<div class="tm denkt">Sinan schreibt …</div>` : "");
+  box.scrollTop = box.scrollHeight;
+}
+
+async function trainingSchritt(fn) {
+  if (trainingBusy) return;
+  trainingBusy = true;
+  try { await fn(); } catch (error) { toast(error.message); } finally { trainingBusy = false; }
+}
+
+$("training-los").addEventListener("click", () => trainingSchritt(async () => {
+  const tester = $("training-tester").value.trim();
+  if (!tester) { $("training-tester").focus(); throw new Error("Bitte deinen Namen eintragen."); }
+  lsSet(TRAINING_TESTER_KEY, tester);
+  $("training-los").textContent = "Erstnachricht wird geschrieben …";
+  try {
+    const r = await post("/api/training", { action: "start", tester, name: $("training-name").value, headline: $("training-headline").value }, 90000);
+    trainingChat = r.chat; trainingWahl = { zusage: null, note: null }; lsSet(TRAINING_CHAT_KEY, String(r.chat.id));
+    zeichneTraining(null); $("training-text").focus();
+  } finally { $("training-los").textContent = "Simulation starten"; }
+}));
+
+$("training-eingabe").addEventListener("submit", (event) => { event.preventDefault(); trainingSchritt(async () => {
+  const text = $("training-text").value.trim(); if (!text || !trainingChat) return;
+  trainingChat = { ...trainingChat, verlauf: [...trainingChat.verlauf, { sender: trainingChat.lead_name, text, art: "lead" }] };
+  $("training-text").value = ""; zeichneTrainingChat(true);
+  try {
+    const r = await post("/api/training", { action: "antwort", id: trainingChat.id, text }, 120000);
+    trainingChat = r.chat;
+  } catch (error) { await ladeTraining(); $("training-text").value = text; throw error; }
+  if (trainingChat.status !== "laeuft") trainingWahl.offen = true;
+  zeichneTraining(null); $("training-text").focus();
+}); });
+$("training-text").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("training-eingabe").requestSubmit(); } });
+$("training-bewerten").addEventListener("click", () => { trainingWahl.offen = true; zeichneTraining(null); });
+$("training-zurueck").addEventListener("click", () => { trainingWahl.offen = false; zeichneTraining(null); });
+$("training-neu").addEventListener("click", () => { if (!confirm("Diesen Chat ohne Bewertung verlassen und neu anfangen?")) return; trainingChat = null; trainingWahl = { zusage: null, note: null }; lsSet(TRAINING_CHAT_KEY, null); zeichneTraining(null); });
+document.querySelectorAll("[data-zusage]").forEach((b) => b.addEventListener("click", () => { trainingWahl.zusage = b.dataset.zusage; zeichneTraining(null); }));
+document.querySelectorAll("[data-note]").forEach((b) => b.addEventListener("click", () => { trainingWahl.note = Number(b.dataset.note); zeichneTraining(null); }));
+$("training-absenden").addEventListener("click", () => trainingSchritt(async () => {
+  if (!trainingChat) { await ladeTraining(); throw new Error("Kein laufender Trainings-Chat."); }
+  if (!trainingWahl.zusage || !trainingWahl.note) throw new Error("Bitte Zusage und Note wählen.");
+  $("training-absenden").textContent = "Wird ausgewertet …";
+  try {
+    const r = await post("/api/training", { action: "ende", id: trainingChat.id, zusage: trainingWahl.zusage, note: trainingWahl.note, feedback: $("training-feedback").value }, 90000);
+    toast(r.kiFehler ? "Bewertung gespeichert. Regelvorschläge gerade nicht möglich (KI)." : r.vorschlaege ? `Danke. ${r.vorschlaege} ${r.vorschlaege > 1 ? "Regelvorschläge" : "Regelvorschlag"} zur Freigabe.` : "Danke. Kein neuer Regelvorschlag nötig.");
+    trainingChat = null; trainingWahl = { zusage: null, note: null }; lsSet(TRAINING_CHAT_KEY, null); $("training-feedback").value = "";
+    await ladeTraining();
+  } finally { $("training-absenden").textContent = "Bewertung abschicken"; }
+}));
+document.querySelector(".training-side").addEventListener("click", (event) => {
+  const knopf = event.target.closest("[data-regel-aktion]"); if (!knopf) return;
+  const zeile = knopf.closest("[data-regel]");
+  const entscheidung = knopf.dataset.regelAktion;
+  const regel = entscheidung === "annehmen" ? zeile.querySelector("textarea")?.value : undefined;
+  trainingSchritt(async () => {
+    await post("/api/training", { action: "regel", id: Number(zeile.dataset.regel), entscheidung, regel });
+    toast(entscheidung === "annehmen" ? "Regel gilt ab sofort für echte Gespräche." : entscheidung === "aus" ? "Regel abgeschaltet." : "Vorschlag verworfen.");
+    await ladeTraining();
+  });
+});
+
+$("training-datei").addEventListener("change", () => trainingSchritt(async () => {
+  // Mehrere Dateien auf einmal: jede Trainings-Mail hat eine eigene Datei im Anhang.
+  const dateien = [...($("training-datei").files || [])]; $("training-datei").value = "";
+  if (!dateien.length) return;
+  const i = { sitzungen: 0, neueSitzungen: 0, vorschlaege: 0 };
+  for (const datei of dateien) {
+    let daten;
+    try { daten = JSON.parse(await datei.text()); } catch { throw new Error(`„${datei.name}“ ist keine Trainings-Datei.`); }
+    const r = await post("/api/training", { action: "import", daten }, 60000);
+    for (const k of Object.keys(i)) i[k] += r.import[k];
+  }
+  $("training-import-info").textContent = `${i.sitzungen} Sitzungen in der Datei, ${i.neueSitzungen} neu, ${i.vorschlaege} neue Vorschläge.`;
+  toast(i.vorschlaege ? `${i.vorschlaege} neue Vorschläge zur Freigabe.` : "Nichts Neues in dieser Datei.");
+  await ladeTraining();
+}));

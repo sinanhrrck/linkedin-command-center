@@ -4,14 +4,17 @@ import { generateClaude, claudeAvailable } from "../core/claude.js";
 import { config } from "../config.js";
 import type { Contact } from "./crm.js";
 import { promptKontext, saubern, erstnachrichtAngle, type Zielgruppe } from "../context.js";
+import { gespraechsKontext, aecAktiv } from "./ausrichtung.js";
+import { trainingsRegelnBlock } from "./trainingsRegeln.js";
 import type { ConversationGoal, GoalCode } from "./goals.js";
 import { learningGuidance } from "./learning.js";
 import { ausbildungsStand, ausbildungsVorgabe, behauptetLaufendeAusbildung } from "../core/ausbildungsStand.js";
 import { angebotsHinweis, beweisBlock, type Route } from "./angebot.js";
 import { ZWECK_ANWEISUNG, zweckFuer } from "./playbook.js";
-import { variantenBlock, type Wahl } from "./varianten.js";
+import type { Wahl } from "./varianten.js";
 import { faktenBlock, profilFakten } from "./profilFakten.js";
-import { STANDARD_ERSTNACHRICHT, erstnachrichtFuer, zielgruppenName } from "./zielgruppen.js";
+import { erstnachrichtFuer, zielgruppenName } from "./zielgruppen.js";
+import { STANDARD_ERSTNACHRICHT, erstnachrichtPrompt, korrekturBlock, mitAusbildungsCheckPur, variantenBlock, variationBlock, type TextVariation } from "./erstnachrichtPrompt.js";
 
 /**
  * Router für den Autopilot-Text: bezahltes Claude (Standard im Voll-Modus, Qualität +
@@ -48,35 +51,10 @@ function standQuelle(c: Contact): string | null | undefined {
  * Entwurf als eine falsche Anrede. Die Aufrufer behandeln den Fehler als „kein Text".
  */
 async function mitAusbildungsCheck(c: Contact, prompt: string): Promise<string> {
-  const text = saubern(await generateText(prompt));
-  if (ausbildungsStand(standQuelle(c)) === "in_ausbildung" || !behauptetLaufendeAusbildung(text)) return text;
-  const zweiter = saubern(await generateText(`${prompt}
-
-KORREKTUR: Dein letzter Entwurf hat behauptet, die Person sei gerade in der Ausbildung. Das ist FALSCH.
-Verworfener Entwurf: ${text}
-Schreibe neu, ohne eine laufende Ausbildung zu unterstellen.`));
-  if (behauptetLaufendeAusbildung(zweiter)) {
-    throw new Error(`Text unterstellt ${c.full_name ?? "der Person"} eine laufende Ausbildung, Profil sagt anders – kein Entwurf`);
-  }
-  return zweiter;
+  return mitAusbildungsCheckPur(prompt, standQuelle(c), c.full_name, (p) => generateText(p));
 }
 
-export type TextVariation = {
-  instruction: string;
-  rejectedTexts?: string[];
-};
-
-function variationBlock(variation?: TextVariation): string {
-  if (!variation) return "";
-  const rejected = (variation.rejectedTexts || []).filter(Boolean).slice(-5);
-  return `\nVERBINDLICHE NEUE GESPRÄCHSRICHTUNG:\n${variation.instruction}\n` +
-    (rejected.length ? `\nBEREITS ABGELEHNT. Übernimm weder deren Gesprächsidee noch Satzbau oder Frage:\n${rejected.map((text, i) => `${i + 1}. ${text}`).join("\n")}\n` : "");
-}
-
-/** Rückmeldung der Ausgangsprüfung (drafts.mitAusgangsCheck) für den einen Neuversuch. */
-function korrekturBlock(korrektur?: string): string {
-  return korrektur ? `\nKORREKTUR (zwingend beachten): ${korrektur}\nSchreib die Nachricht neu und vermeide genau diese Fehler.\n` : "";
-}
+export type { TextVariation } from "./erstnachrichtPrompt.js";
 
 /**
  * Kurze, personalisierte Vernetzungsnotiz (< 200 Zeichen, LinkedIn-Limit).
@@ -114,42 +92,11 @@ export async function firstMessage(c: Contact, variation?: TextVariation, goal?:
   const aufbau = variation
     ? `AUFBAU FÜR DIESE NEUGENERIERUNG:\nFolge der unten genannten neuen Gesprächsrichtung. Du darfst die übliche Reihenfolge Profilbezug, eigene Geschichte, offene Frage ausdrücklich verlassen. Nutze nur Bausteine, die zu dieser Richtung passen.`
     : (aufbauOverride?.trim() || eigene?.text || STANDARD_ERSTNACHRICHT);
-  const prompt = `Du bist Sinan. Du schreibst LinkedIn-Erstnachrichten an ${gruppe ? `Menschen aus der Zielgruppe „${gruppe}“` : "Auszubildende oder Berufseinsteiger im Bankwesen"}. Dein Ziel ist NIEMALS der Verkauf oder Pitch in der ersten Nachricht, sondern das Öffnen eines echten, lockeren Gesprächs auf Augenhöhe. Du bist neugierig, ehrlich und kommst sofort auf den Punkt. Du warst selbst mal Azubi in einer Bank und holst die Leute genau über diese gemeinsame Lebenslage ab.
-
-${aufbau}
-${variationBlock(variation)}
-
-HARTE STIL- UND FORMATREGELN (Zwingend einhalten, gelten auch gegen jede Anleitung oben):
-- IMMER Duzen, niemals siezen.
-- KEINE Emojis. Niemals.
-- KEINE Gedankenstriche (weder - noch als langer Strich) als Satztrenner. Nutze nur Punkt, Komma oder Fragezeichen.
-- GESPROCHENE SPRACHE: Schreibe "Ich hab" statt "Ich habe", "Mir ging's" statt "Mir ging es". Kling wie ein echter Mensch.
-- KURZE SÄTZE: Ein Gedanke pro Satz. Keine Schachtelsätze.
-- MAXIMAL 4-5 Zeilen gesamt.
-- MAXIMAL EINE einzige Frage in der gesamten Nachricht.
-- KEINE Aufzählungen in der Nachricht.
-- KEINE Floskeln wie "Ich hoffe es geht dir gut". Starte direkt mit "Hey [Name]".
-- KEIN Pitch, keine Firma nennen, kein Produkt, keine Verdienst-Zahlen, keine Verkaufsbegriffe ("spannende Möglichkeit").
-- KEINE Ratschläge oder Lebensweisheiten (etwa über Weichen, die richtige Richtung oder was man nach der Ausbildung unterschätzt). Das wirkt wie die Vorbereitung eines Pitches.
-- Beispiele, die eine laufende Ausbildung voraussetzen, passen NUR, wenn die Person laut AUSBILDUNGSSTAND wirklich in der Ausbildung ist.
-
-SCHLECHTE BEISPIELE (SO NICHT):
-Falsch: "Ich sehe du bist in der Finanzbranche, hast du schon mal über Selbstständigkeit nachgedacht?" (Riecht nach Pitch, zu aufdringlich.)
-Falsch: "Bei uns verdienst du das 3-fache deines aktuellen Gehalts." (Verkauf in Nachricht 1, verbrannt.)
-Falsch: "Ich hätte da eine spannende Möglichkeit für dich, die perfekt zu deinem Profil passt." (Klassische Bot-Nachricht, Marketing-Sprache.)
-Falsch: "Hallo, ich hoffe es geht dir gut. Ich würde mich freuen, wenn wir uns vernetzen könnten." (Floskel, kein Anknüpfungspunkt, langweilig.)
-Falsch: "Ich hab gemerkt, dass nach der Ausbildung die Weichen schneller gestellt werden, als man denkt." (Lebensweisheit, riecht nach kommendem Pitch.)
-
-INPUT für diese Person (nutze nur, was da ist; erfinde nichts dazu):
-Name: ${c.full_name ?? "Unbekannt"}
-Profil-Headline (enthält oft Bank, Ausbildungsjahr, Studiengang, Standort): ${c.headline ?? "unbekannt"}
-${faktenBlock(c.id)}${ausbildungsVorgabe(standQuelle(c))}
-${goal ? `\nLANGFRISTIGER GESPRÄCHSAUFTRAG: ${goal.code} – ${goal.label}. ${goal.instruction}\nDie Erstnachricht bleibt trotzdem ein echter Icebreaker ohne Pitch. Wähle nur eine Anknüpfung, die später natürlich zu diesem Ziel passen kann.` : ""}
-${kampagnenFakten ? `\n${kampagnenFakten}\nNutze diese Angaben nur, um die richtige Anknüpfung und Tonlage zu wählen. Erwähne weder Kampagne, Angebot, Event noch Nutzen in dieser ersten Nachricht.` : ""}
-${learningGuidance(goal?.code ?? null)}
-
-${variation ? "" : variantenBlock(variante ?? null)}${korrekturBlock(korrektur)}
-OUTPUT-REGEL: Generiere GENAU EINE Nachricht nach obigem Aufbau. Nichts drumherum, keine Erklärungen davor oder danach, kein "Hier ist die Nachricht:". Gib ausschließlich den Text der Nachricht aus.`;
+  const prompt = erstnachrichtPrompt({
+    gruppe, aufbau, variation, name: c.full_name, headline: c.headline, fakten: faktenBlock(c.id), stand: standQuelle(c),
+    goal, kampagnenFakten, learning: learningGuidance(goal?.code ?? null), regeln: trainingsRegelnBlock("erstnachricht"),
+    variante, korrektur,
+  });
   return mitAusbildungsCheck(c, prompt);
 }
 
@@ -221,7 +168,7 @@ function goalBlock(goal?: ConversationGoal | null): string {
 - Ziel: ${goal.instruction}
 - Bleib auf diesem Weg, solange das Gespräch dazu passt.
 - Wenn die Person klar einen anderen der drei Wege öffnet, markiere goalAlignment als "different_goal" und suggestedGoal als B1, P1 oder AEC.
-- B1 bedeutet Kunde/Kundenberatung. P1 bedeutet Vertriebspartner. AEC ist ein eigenständiges Ziel; erfinde keine Bedeutung dafür.
+- B1 bedeutet Kunde/Kundenberatung. P1 bedeutet Vertriebspartner. AEC bedeutet kostenlose Potenzialanalyse mit Auswertungsgespräch.
 - Bei einer Abweichung darfst du eine hilfreiche Antwort vorschlagen, aber der Bot hält vor dem Senden an und meldet die Richtungsänderung.
 `;
 }
@@ -232,18 +179,18 @@ function goalBlock(goal?: ConversationGoal | null): string {
  * kurzen Kennenlern-Telefonat bewegen, ohne aufdringlich zu sein.
  */
 export async function converseStep(messages: { sender: string; text: string }[], participant: string, goal?: ConversationGoal | null): Promise<ConverseStep | null> {
-  const transcript = messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
-  const prompt = `Du bist Sinan und führst einen LinkedIn-Chat mit ${participant}.
-${promptKontext()}
-${goalBlock(goal)}
-${learningGuidance(goal?.code ?? null)}
+  // AUSRICHTUNG AEC (modules/ausrichtung.ts): Finanzberatungs-Weg und Verdienst-Rechnung fliegen raus,
+  // statt sich nur auf den Vorrang-Hinweis zu verlassen – widersprüchliche Anweisungen gewinnt sonst die längere.
+  const aec = aecAktiv();
+  const wegeBlock = aec
+    ? `EIN WEG (Ausrichtung AEC): Jedes Signal (Orientierung, Unzufriedenheit, Karriere-Unsicherheit, aber auch
+Geldfragen) führt höchstens zur kostenlosen Potenzialanalyse mit Auswertungsgespräch. Kein Beratungstermin
+zu Finanzfragen, kein Nebenjob-/Verdienst-/Partner-Thema. Geldfragen kurz und ehrlich anerkennen, im Chat
+nicht beraten. Die Einwand-Beispiele unten zu Nebenberuf und Vertrieb gelten hier nicht: bei Skepsis ehrlich
+sagen, dass die Analyse kostenlos und unverbindlich ist und nichts verkauft wird.
 
-DEINE ROLLE IN DIESEM CHAT:
-Du chattest mit Bankkaufmann-Azubis und Berufseinsteigern. Ziel ist NICHT ein Verkauf im Chat,
-sondern ein echtes Gespräch, das – wenn ein echtes Signal kommt – in einen kurzen Termin mündet.
-Du bist neugierig, ehrlich, direkt, klingst wie ein Mensch, hast keine Eile. Du löst Probleme.
-
-ZWEI SIGNALE, ZWEI WEGE (WICHTIG – ordne richtig ein, siehe auch "Dein Angebot" oben):
+`
+    : `ZWEI SIGNALE, ZWEI WEGE (WICHTIG – ordne richtig ein, siehe auch "Dein Angebot" oben):
 - WEG FINANZBERATUNG: Macht die Person von sich aus ein GELD-/FINANZTHEMA auf oder stellt KONKRETE
   Finanzfragen (Konten strukturieren, Aktien/Risiko, etwas finanzieren wie den Führerschein, bei der
   Bank bleiben oder wechseln, Sparen, Absicherung), dann ist DAS das Signal für ein Beratungsgespräch.
@@ -258,7 +205,22 @@ ZWEI SIGNALE, ZWEI WEGE (WICHTIG – ordne richtig ein, siehe auch "Dein Angebot
 Nutze immer den Weg, der zum SIGNAL der Person passt. Sinan macht beides – nimm nicht automatisch an,
 es ginge nur um einen Nebenjob/Partneraufbau.
 
-GRUNDSÄTZE (immer):
+`;
+  const phase5 = aec
+    ? "5. Nutzen konkret: was die Analyse der Person bringt (Klarheit über Stärken und den eigenen Weg, hilft bei Jobsuche und Gehaltsgespräch). Keine Verdienst-Rechnung."
+    : `5. Nutzen konkret (Rechnungs-Pitch): Zahlen sprechen lassen, ehrlich bleiben. Bsp: "Rechne mal: 40 Std Bank für 2.800 brutto, das sind ~17€ die Stunde. Was wäre, wenn du das nebenberuflich in 10-15 Std schaffst?" Ehrlich: "realistisch nebenberuflich 500-3.000€, hauptberuflich mehr. Kein Selbstläufer, aber machbar."`;
+  const transcript = messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
+  const prompt = `Du bist Sinan und führst einen LinkedIn-Chat mit ${participant}.
+${gespraechsKontext()}
+${goalBlock(goal)}
+${learningGuidance(goal?.code ?? null)}
+
+DEINE ROLLE IN DIESEM CHAT:
+Du chattest mit Bankkaufmann-Azubis und Berufseinsteigern. Ziel ist NICHT ein Verkauf im Chat,
+sondern ein echtes Gespräch, das – wenn ein echtes Signal kommt – in einen kurzen Termin mündet.
+Du bist neugierig, ehrlich, direkt, klingst wie ein Mensch, hast keine Eile. Du löst Probleme.
+
+${wegeBlock}GRUNDSÄTZE (immer):
 - Wahrheit vor Wachstum. Kein Überreden, keine Manipulation, keine falschen Versprechen.
 - Erst zuhören, dann reden. Fragen sind wichtiger als Antworten.
 - Ohne identifiziertes Problem kein Angebot. Kein Pitch, bevor du die Situation verstehst.
@@ -270,7 +232,7 @@ DIE 7 PHASEN (Reihenfolge flexibel je nach Antwort, immer nur EIN Schritt pro Na
 2. Situation verstehen: offene Fragen, über mehrere Nachrichten verteilt (Lehrjahr, Alltag, warum Bank, Plan nach der Ausbildung).
 3. Pain identifizieren: dort bohren wo es zieht. Typische Pains: Verkaufsdruck statt echter Beratung, niedriges Gehalt (Azubi ~1.100€, ausgelernt oft 2.800-3.200€ brutto), starre Hierarchien, Produkte verkaufen die man selbst nicht gut findet, keine echte Perspektive, repetitive Aufgaben. Konkret fragen: "Wie ist das bei euch mit dem Verkaufsdruck?" oder "Wenn du ehrlich bist, deckt sich der Alltag mit dem was du dir vorgestellt hast?"
 4. Kontrast setzen: wenn Pain sichtbar ist, eine Alternative zeigen – als Story oder Beobachtung, kein Pitch (z.B. "Ich war selbst in der Branche und hab gemerkt, dass ich woanders für dieselbe Zeit das Doppelte verdienen kann.").
-5. Nutzen konkret (Rechnungs-Pitch): Zahlen sprechen lassen, ehrlich bleiben. Bsp: "Rechne mal: 40 Std Bank für 2.800 brutto, das sind ~17€ die Stunde. Was wäre, wenn du das nebenberuflich in 10-15 Std schaffst?" Ehrlich: "realistisch nebenberuflich 500-3.000€, hauptberuflich mehr. Kein Selbstläufer, aber machbar."
+${phase5}
 6. Commitment abfragen: nicht direkt nach der Nummer, sondern nach Interesse: "Wär das grundsätzlich was, das dich interessieren würde?" Ja → Phase 7. Nein → sauber raus, kein Nachbohren.
 7. Termin und Nummer: zwei Optionen anbieten ("Lass uns kurz telefonieren, 20 Min reichen. Was passt besser, morgen 18 Uhr oder Donnerstag 19 Uhr?"), nach Zusage "Auf welche Nummer erreiche ich dich?", danach mit Datum, Uhrzeit, Nummer bestätigen.
 
@@ -327,7 +289,7 @@ Wiederholung des intents.`;
 export async function pitchIdeen(messages: { sender: string; text: string }[], participant: string): Promise<string[]> {
   const transcript = messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
   const prompt = `Du bist Sinan. Der LinkedIn-Chat mit ${participant} ist PITCHBEREIT – die Person hat ein Signal gegeben (Unsicherheit, Unzufriedenheit, echtes Interesse oder fragt selbst nach).
-${promptKontext()}
+${gespraechsKontext()}
 
 Deine Aufgabe: Schlage 3 VERSCHIEDENE Ansätze vor, WIE Sinan das Gespräch jetzt behutsam Richtung Angebot bzw. kurzes Telefonat drehen könnte. Nur die Ansätze als kurze Beschreibung in Klartext (je EIN Satz), KEINE fertige Nachricht. Nutze verschiedene Winkel, z.B.: über den genannten Pain anknüpfen, über eine ehrliche Zahl/Rechnung, über Sinans eigene Geschichte, über eine lockere offene Frage. Kein Druck, kein Verhör.
 
@@ -351,7 +313,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Array aus genau 3 Strings, z.B. ["Ansatz
 export async function messageAusIdee(messages: { sender: string; text: string }[], participant: string, idee: string): Promise<string> {
   const transcript = messages.map((m) => `${m.sender || "?"}: ${m.text}`).join("\n");
   const prompt = `Du bist Sinan und führst einen LinkedIn-Chat mit ${participant}.
-${promptKontext()}
+${gespraechsKontext()}
 ${learningGuidance(null)}
 Schreibe Sinans nächste Nachricht, die GENAU diesen gewählten Ansatz umsetzt: "${idee}".
 Strenge Stil-Regeln: Du, keine Emojis, keine Gedankenstriche, kurze gesprochene Sätze, max 4-5 Zeilen,

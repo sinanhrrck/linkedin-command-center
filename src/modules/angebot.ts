@@ -2,6 +2,9 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { config } from "../config.js";
 import { getProfil, type LeadMagnet, type Profil } from "../profil.js";
 import { generateText } from "../core/textLlm.js";
+import { ctaText, zweiTermine } from "../core/terminVorschlag.js";
+
+export { zweiTermine };
 
 /**
  * ANGEBOTS-SCHICHT (2026-09-23, Sinan: „vertrieblicher, stell dir vor du bist Alex Hormozi“).
@@ -30,33 +33,9 @@ export function leadMagnet(key: string, p: Profil = getProfil()): LeadMagnet | n
   return leadMagnete(null, p).find((m) => m.key === key) ?? null;
 }
 
-const WOCHENTAG = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
-
-/**
- * Die nächsten zwei echten Werktags-Termine (frühestens morgen). Die KI bekommt sie fertig, damit
- * sie kein Datum erfindet und nicht „nächste Woche irgendwann“ schreibt – ein konkreter Vorschlag
- * ist der leichteste Weg zu einem Ja.
- */
-export function zweiTermine(now = new Date(), stunden: [number, number] = [17, 18]): string[] {
-  const out: string[] = [];
-  const d = new Date(now);
-  d.setHours(0, 0, 0, 0);
-  for (let i = 1; out.length < 2 && i < 14; i++) {
-    const tag = new Date(d);
-    tag.setDate(d.getDate() + i);
-    if (tag.getDay() === 0 || tag.getDay() === 6) continue;
-    const name = i === 1 ? "morgen" : WOCHENTAG[tag.getDay()];
-    out.push(`${name} um ${stunden[out.length]} Uhr`);
-  }
-  return out;
-}
-
 /** Wie der nächste Schritt formuliert wird: Link, wenn vorhanden, sonst zwei feste Vorschläge. */
 export function ctaAnweisung(now = new Date(), p: Profil = getProfil()): string {
-  const link = p.buchungslink?.trim();
-  if (link) return `Nächster Schritt: Schick diesen Link zum Termin-Aussuchen, unverändert: ${link}`;
-  const [a, b] = zweiTermine(now);
-  return `Nächster Schritt: Schlag GENAU diese zwei Termine vor (nichts anderes erfinden): ${a} oder ${b}. Frag, was besser passt.`;
+  return ctaText(now, p.buchungslink);
 }
 
 /** Alle Links, die ein Text enthalten darf. Alles andere ist erfunden. */
@@ -74,9 +53,20 @@ const magnetZeile = (m: LeadMagnet) =>
  * passt. Vorher bot die Phase `call_angebot` immer die Potenzialanalyse an – auch wenn jemand
  * gerade konkrete Geldfragen gestellt hatte und eigentlich ins Beratungsgespräch gehörte.
  */
-export function angebotsWahl(now = new Date(), p: Profil = getProfil()): string {
-  const alle = leadMagnete(null, p);
+export function angebotsWahl(now = new Date(), p: Profil = getProfil(), opts: { nurAec?: boolean } = {}): string {
   const cta = ctaAnweisung(now, p);
+  // AUSRICHTUNG AEC (modules/ausrichtung.ts): nur das Karriere-Angebot, die Potenzialanalyse zuerst.
+  // Der Schalter wird vom Aufrufer übergeben, damit dieses Modul DB-frei bleibt.
+  if (opts.nurAec) {
+    const karriere = leadMagnete("karriere", p).sort((a, b) =>
+      Number(b.key === "potenzialanalyse") - Number(a.key === "potenzialanalyse"));
+    const m = karriere[0];
+    return `# Welches Angebot? (Ausrichtung AEC)
+Es gibt nur EIN Angebot: ${m ? magnetZeile(m) : "die kostenlose Potenzialanalyse. Nutzen: Klarheit über die eigenen Stärken und Antriebe, schwarz auf weiß. Ablauf: 15–20 Minuten online ausfüllen, danach geht Sinan das Ergebnis im Auswertungsgespräch mit der Person durch."}
+Kein anderes Angebot, auch nicht bei Geldfragen.
+${cta}`;
+  }
+  const alle = leadMagnete(null, p);
   if (!alle.length) {
     return `# Welches Angebot?
 Wähle nach dem Signal der Person: Orientierung/Karriere/Jobsuche → das Karriere-Angebot aus "Dein Angebot". Konkrete Geld-/Finanzfragen → ein kurzes, kostenloses Gespräch, in dem genau diese Fragen durchgegangen werden. Nie beides in einer Nachricht.

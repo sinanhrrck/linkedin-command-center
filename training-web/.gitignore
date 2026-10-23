@@ -1,0 +1,5 @@
+# Enthält Sinans Profil (Persona, Beispiele) – wird mit `npm run trainingsseite` gebaut, nie committen.
+api/_bot.json
+node_modules/
+.vercel/
+api/_kern.mjs

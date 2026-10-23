@@ -2,6 +2,7 @@ import { vertriebswissen } from "../core/vertriebswissen.js";
 import { db } from "../db/index.js";
 import { generateText } from "../core/textLlm.js";
 import { promptKontext, saubern } from "../context.js";
+import { gespraechsKontext } from "./ausrichtung.js";
 import { pruefeAusgehend } from "../core/ausgehendCheck.js";
 import { erlaubteLinks, angebotsHinweis } from "./angebot.js";
 import { faktenBlock } from "./profilFakten.js";
@@ -49,7 +50,7 @@ export async function kiCoach(draftId: number): Promise<CoachUrteil> {
   ].filter(Boolean).join("\n");
 
   const prompt = `Du bist ein erfahrener Vertriebscoach (Denkweise wie Alex Hormozi: Wert zuerst, klare leichte nächste Schritte, kein Druck) und prüfst eine LinkedIn-Nachricht, die gleich rausgehen soll.
-${promptKontext()}
+${d.kind === "message" ? gespraechsKontext() : promptKontext()}
 
 ${kontext}
 

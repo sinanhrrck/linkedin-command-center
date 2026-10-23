@@ -7,7 +7,7 @@
  * (Anführungszeichen/Emoji-Overkill/Bindestrich-Floskeln) – die inhaltliche Prüfung macht später
  * der Response Validator (Phase 3).
  */
-import { saubern } from "../../context.js";
+import { saubern } from "../../core/saubern.js";
 import { buildReplyPrompt, type ReplyPromptInput } from "../prompt/promptBuilder.js";
 import type { LlmFn } from "./analyzer.js";
 

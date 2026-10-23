@@ -51,6 +51,8 @@ import { kiCoach } from "../modules/coach.js";
 import { kiWochenanalyse, letzteAnalyse } from "../modules/kiAnalyse.js";
 import { bericht, type BerichtArt } from "../modules/berichte.js";
 import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
+import { istAusrichtung, setAusrichtung } from "../modules/ausrichtung.js";
+import { starteSimulation, simAntwort, beendeSimulation, regelEntscheiden, simChat, trainingUebersicht, importiereTrainings } from "../modules/training.js";
 
 // Server-Modus: ohne DASHBOARD_TOKEN gar nicht erst starten (siehe core/serverMode.ts).
 pruefeServerStartbedingungen();
@@ -750,6 +752,27 @@ const server = createServer((req, res) => {
 
   // NOT-AUS: mit EINEM Klick jeden Versand blockieren (ohne die Engine zu stoppen). Setzt das
   // Flag, das der Governor VOR jeder sendenden Aktion prüft. Wirkt sofort für alle Sendewege.
+  // AUSRICHTUNG (2026-10-23): Standard ↔ AEC. Nur ein State-Flag, wirkt ab dem nächsten Agent-Tick
+  // auch auf laufende Gespräche; zurückschalten stellt alles exakt wieder her (modules/ausrichtung.ts).
+  if (url.pathname === "/api/ausrichtung" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { ausrichtung } = JSON.parse(body || "{}");
+        if (!istAusrichtung(ausrichtung)) {
+          res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad ausrichtung", reason: "Unbekannte Ausrichtung." }));
+          return;
+        }
+        setAusrichtung(ausrichtung);
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ausrichtung }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: String(e) }));
+      }
+    });
+    return;
+  }
+
   if (url.pathname === "/api/notaus" && req.method === "POST") {
     let body = "";
     req.on("data", (c) => (body += c));
@@ -1202,6 +1225,39 @@ const server = createServer((req, res) => {
     return;
   }
   // KI-ASSISTENT (unten rechts im Cockpit). Rein lesend, ein Claude-Aufruf je Frage.
+  // TRAINING (2026-10-23): simulierte Chats + Feedback → Regelvorschläge, die erst nach Freigabe
+  // wirken (modules/training.ts). Nichts davon sendet oder berührt echte Kontakte/Kennzahlen.
+  if (url.pathname === "/api/training" && req.method === "GET") {
+    try {
+      const id = Number(url.searchParams.get("chat"));
+      const daten = id ? { chat: simChat(id) } : trainingUebersicht();
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }).end(JSON.stringify(daten));
+    } catch (e) {
+      res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+    }
+    return;
+  }
+  if (url.pathname === "/api/training" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      try {
+        const b = JSON.parse(body || "{}");
+        const id = Number(b.id);
+        let ergebnis: unknown;
+        if (b.action === "start") ergebnis = { chat: await starteSimulation(b) };
+        else if (b.action === "antwort") ergebnis = { chat: await simAntwort(id, b.text) };
+        else if (b.action === "ende") ergebnis = await beendeSimulation(id, b);
+        else if (b.action === "regel") { regelEntscheiden(id, b.entscheidung, b.regel); ergebnis = {}; }
+        else if (b.action === "import") ergebnis = { import: importiereTrainings(b.daten) };
+        else throw new Error("Unbekannte Aktion.");
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...(ergebnis as object) }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
   if (url.pathname === "/api/assistent" && req.method === "POST") {
     let body = "";
     req.on("data", (c) => (body += c));

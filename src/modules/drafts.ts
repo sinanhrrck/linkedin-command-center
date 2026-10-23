@@ -18,6 +18,8 @@ import { contactForConversation, recordCrmStage } from "./crmStages.js";
 import { zgBedingung } from "../core/zielgruppenRegel.js";
 import { erstnachrichtFuer, zielgruppenPruefung } from "./zielgruppen.js";
 import { promptKontext, saubern } from "../context.js";
+import { gespraechsKontext } from "./ausrichtung.js";
+import { mitAusgangsCheckPur } from "./erstnachrichtPrompt.js";
 import { events } from "../core/events.js";
 import { directionOptions, feedbackInstruction, type DraftDirection, type RejectionReason } from "./draftDirections.js";
 import { campaignContext } from "./campaigns.js";
@@ -178,15 +180,9 @@ async function mitAusgangsCheck(
   ctx: AusgehendKontext,
   wer: string,
 ): Promise<string> {
-  const erster = await erzeuge();
-  if (!erster) return "";
-  const p1 = pruefeAusgehend(erster, { erlaubteLinks: erlaubteLinks(), ...ctx });
-  if (p1.ok) return erster;
-  const zweiter = await erzeuge(`Dein letzter Entwurf wurde abgelehnt: ${p1.gruende.join("; ")}. Verworfener Entwurf: ${erster}`).catch(() => "");
-  const p2 = zweiter ? pruefeAusgehend(zweiter, { erlaubteLinks: erlaubteLinks(), ...ctx }) : { ok: false, gruende: ["kein Text"] };
-  if (p2.ok) return zweiter;
-  console.error(`[sicherheit] ${ctx.kind}-Text für ${wer} verworfen (${p2.gruende.join("; ")}).`);
-  return "";
+  const r = await mitAusgangsCheckPur(erzeuge, (text) => pruefeAusgehend(text, { erlaubteLinks: erlaubteLinks(), ...ctx }));
+  if (!r.text && r.gruende[0] !== "kein Text") console.error(`[sicherheit] ${ctx.kind}-Text für ${wer} verworfen (${r.gruende.join("; ")}).`);
+  return r.text;
 }
 
 export async function createFollowupDraft(c: Contact): Promise<boolean> {
@@ -692,7 +688,7 @@ async function regenerateText(d: Draft, instruction: string, rejectedTexts: stri
   }
   // Thread-Antwort, Reaktivierung und Fallback ohne Kontakt.
   return saubern(await generateText(
-    `Du bist Sinan und antwortest ${d.participant || "jemandem"} auf eine LinkedIn-Nachricht.\n${promptKontext()}\n` +
+    `Du bist Sinan und antwortest ${d.participant || "jemandem"} auf eine LinkedIn-Nachricht.\n${d.kind === "message" ? gespraechsKontext() : promptKontext()}\n` +
     `Letzte Nachricht von ${d.participant || "der Person"}:\n"${d.incoming}"\n` +
     `Bisheriger abgelehnter Entwurf als Sachkontext:\n"${d.draft}"\n` +
     `VERBINDLICHE NEUE RICHTUNG: ${instruction}\nSchreibe Sinans Antwort konkret und natürlich.${avoid}\nNur der Nachrichtentext.`,

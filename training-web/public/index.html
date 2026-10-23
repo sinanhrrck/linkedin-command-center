@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>LinkedIn-Gesprächsstudie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: eine ruhige Spalte wie ein Studienfragebogen – Fortschritt oben, ein Schritt pro Ansicht. */
+:root {
+  --bg: #f4f6f7; --paper: #ffffff; --sunk: #eaeef0; --line: #d5dde1;
+  --ink: #17242b; --muted: #58676f; --accent: #1d5c63; --accent-ink: #ffffff; --accent-soft: #e2eeef;
+  --lead: #eef1f3; --good: #1f6f4f; --good-soft: #e1f2ea; --bad: #a32a3c; --bad-soft: #f8e6e9; --warn-soft: #fbf1dc; --warn-line: #e1c27c;
+  --li-blue: #0a66c2; --li-blue-ink: #ffffff; --li-blue-off: #a8c8ea; --li-line: #e0dfdc; --li-muted: #666666; --li-hover: #f3f2ef;
+  --av-bot: #dbe7f5; --av-bot-ink: #0a66c2; --av-lead: #f2e2d3; --av-lead-ink: #8a4b18;
+  --li-font: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Fira Sans", Ubuntu, Oxygen, sans-serif;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: "Public Sans", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #10171b; --paper: #172127; --sunk: #121b20; --line: #2b3a42;
+  --ink: #e5ecef; --muted: #9aabb3; --accent: #74b6bd; --accent-ink: #0c1b1d; --accent-soft: #1b3236;
+  --lead: #1f2c33; --li-blue: #71b7fb; --li-blue-ink: #0b1826; --li-blue-off: #2e4a66; --li-line: #38434f; --li-muted: #a5adb5; --li-hover: #1d2730;
+  --av-bot: #1d3550; --av-bot-ink: #9cc9fb; --av-lead: #3d2b1d; --av-lead-ink: #f0c49c; --good: #6cc8a0; --good-soft: #153029; --bad: #f08b9b; --bad-soft: #3a1c23; --warn-soft: #2e2716; --warn-line: #7a6431; color-scheme: dark } }
+* { box-sizing: border-box }
+html, body { margin: 0 }
+[hidden] { display: none !important } /* sonst schlägt display:grid der .blatt-Abschnitte das hidden-Attribut */
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--sans); padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.seite { max-width: 720px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 20px; }
+.kopf { display: grid; gap: 6px }
+.kicker { font: 600 12px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--accent) }
+h1 { font: 700 clamp(27px, 4.4vw, 36px)/1.12 var(--serif); margin: 0; letter-spacing: -.01em; text-wrap: balance }
+h2 { font: 700 22px/1.25 var(--serif); margin: 0; text-wrap: balance }
+.fortschritt { display: grid; gap: 7px }
+.fortschritt-text { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums }
+.balken { height: 6px; background: var(--sunk); border-radius: 99px; overflow: hidden }
+.balken i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .3s ease }
+.blatt { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: clamp(18px, 4vw, 30px); display: grid; gap: 18px; min-width: 0 }
+.blatt p { margin: 0 }
+.leise { color: var(--muted); font-size: 14px }
+.info-liste { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 15px }
+.kasten { background: var(--sunk); border-radius: 12px; padding: 14px 16px; font-size: 14.5px; display: grid; gap: 8px }
+.kasten.warn { background: var(--warn-soft); border: 1px solid var(--warn-line) }
+.einwilligung { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; cursor: pointer }
+.einwilligung input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); flex: none }
+.feld { display: grid; gap: 7px; font-weight: 600; font-size: 15px; min-width: 0 }
+.feld .leise { font-weight: 400 }
+input[type=text], select, textarea { font: inherit; font-size: 15px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; width: 100% }
+textarea { resize: vertical }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 2px }
+.optionen { display: flex; flex-wrap: wrap; gap: 8px }
+.optionen button, .skala button { border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 500 15px var(--sans); padding: 9px 15px; border-radius: 10px; cursor: pointer; font-variant-numeric: tabular-nums }
+.optionen button[aria-pressed="true"], .skala button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink) }
+.skala-zeile { display: grid; gap: 8px; padding: 14px 0; border-top: 1px solid var(--line) }
+.skala-zeile:first-of-type { border-top: 0; padding-top: 0 }
+.skala { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px }
+.skala button { padding: 9px 0 }
+.skala-enden { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); font-weight: 400 }
+.rollen { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
+.rolle { text-align: left; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 12px; padding: 15px; display: grid; gap: 5px; cursor: pointer; font: inherit }
+.rolle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft) }
+.rolle b { font: 700 17px var(--serif) }
+.rolle span { font-size: 14px; color: var(--muted) }
+.felder { display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
+.felder .breit { grid-column: 1 / -1 }
+.rollenkarte { border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 0 12px 12px 0; padding: 14px 16px; display: grid; gap: 4px }
+.rollenkarte b { font: 700 18px var(--serif) }
+.knopfreihe { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center }
+.knopf { border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 600 15px var(--sans); padding: 11px 18px; border-radius: 10px; cursor: pointer }
+.knopf.haupt { background: var(--accent); border-color: var(--accent); color: var(--accent-ink) }
+.knopf:disabled { opacity: .45; cursor: not-allowed }
+.hinweis-fehler { color: var(--bad); font-size: 14px }
+/* Chat im LinkedIn-Messaging-Stil: Liste statt Blasen, Avatar + fetter Name + Uhrzeit, Folgezeilen gruppiert. */
+.li-chat { padding: 0; gap: 0; overflow: hidden; font-family: var(--li-font) }
+.li-kopf { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--li-line); flex-wrap: wrap }
+.wer { display: flex; gap: 10px; align-items: center; min-width: 0 }
+.wer b { display: block; font-size: 15px } .wer small { display: block; color: var(--li-muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis }
+.knopf.klein { padding: 6px 14px; font-size: 13.5px; border-radius: 999px; font-family: var(--li-font) }
+.li-avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font: 600 14px var(--li-font); flex: none; background: var(--av-bot); color: var(--av-bot-ink) }
+.li-avatar.lead { background: var(--av-lead); color: var(--av-lead-ink) }
+.li-avatar.gross { width: 40px; height: 40px; font-size: 16px }
+.li-verlauf { display: flex; flex-direction: column; gap: 14px; min-height: 300px; max-height: 58vh; overflow-y: auto; padding: 16px }
+.li-gruppe { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: start }
+.li-zeile { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 14px }
+.li-zeile b { font-weight: 600 } .li-zeile span { color: var(--li-muted); font-size: 12.5px; font-variant-numeric: tabular-nums }
+.li-text { margin: 2px 0 0; font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere }
+.li-text + .li-text { margin-top: 8px }
+.li-text.entwurf { color: var(--li-muted); font-style: italic }
+.li-hinweis { align-self: center; max-width: 92%; text-align: center; color: var(--li-muted); font-size: 12.5px; padding: 2px 8px }
+.li-tippt { display: inline-flex; gap: 4px; padding: 6px 0 2px }
+.li-tippt i { width: 6px; height: 6px; border-radius: 50%; background: var(--li-muted); animation: tipp 1.2s infinite ease-in-out }
+.li-tippt i:nth-child(2) { animation-delay: .15s } .li-tippt i:nth-child(3) { animation-delay: .3s }
+@keyframes tipp { 0%, 60%, 100% { opacity: .3; transform: translateY(0) } 30% { opacity: 1; transform: translateY(-3px) } }
+.li-eingabe { border-top: 1px solid var(--li-line); display: grid }
+.li-eingabe textarea { border: 0; border-radius: 0; padding: 12px 16px; font: 14px/1.45 var(--li-font); resize: none; background: var(--paper) }
+.li-eingabe textarea:focus-visible { outline: none; box-shadow: inset 0 -2px 0 var(--li-blue) }
+.li-leiste { display: flex; align-items: center; gap: 12px; padding: 8px 12px 10px 16px; border-top: 1px solid var(--li-line) }
+.li-icons { display: flex; gap: 14px; align-items: center; color: var(--li-muted) }
+.li-icons svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round }
+.li-gif { font: 700 12px var(--li-font); border: 1.5px solid currentColor; border-radius: 4px; padding: 0 3px; line-height: 16px }
+.li-tipp { margin-left: auto; color: var(--li-muted); font-size: 11.5px }
+.li-senden { border: 0; border-radius: 999px; background: var(--li-blue); color: var(--li-blue-ink); font: 600 14px var(--li-font); padding: 6px 16px; cursor: pointer }
+.li-senden:disabled { background: var(--li-blue-off); cursor: default }
+@media (max-width: 540px) { .li-tipp { display: none } .li-senden { margin-left: auto } }
+@media (prefers-reduced-motion: reduce) { .li-tippt i { animation: none; opacity: .6 } }
+.vorschlag { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 4px; font-size: 15px }
+.vorschlag .art { font: 700 11.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--accent) }
+.vorschlag small { color: var(--muted) }
+.fuss { font-size: 12.5px; color: var(--muted); text-align: center }
+@media (max-width: 540px) { .rollen, .felder { grid-template-columns: 1fr } .skala button { font-size: 14px } }
+@media (prefers-reduced-motion: reduce) { .balken i { transition: none } }
+</style>
+</head>
+<body>
+<div class="seite">
+  <header class="kopf">
+    <span class="kicker" id="kicker">Studie · ca. 8 Minuten</span>
+    <h1 id="titel">Wie wirken Nachrichten auf LinkedIn?</h1>
+  </header>
+  <div class="fortschritt" aria-live="polite"><div class="fortschritt-text"><span id="schritt-name"></span><span id="schritt-zahl"></span></div><div class="balken"><i id="balken"></i></div></div>
+
+  <!-- STUDIE 1: Information + Einwilligung -->
+  <section class="blatt" id="s-info" hidden>
+    <h2>Worum es geht</h2>
+    <p>Wir untersuchen, wie Nachrichten auf LinkedIn auf junge Menschen wirken: Was wirkt echt und interessiert, was wirkt wie Werbung oder wie ein Bot? Die Nachrichten in diesem Gespräch schreibt ein KI-Assistent. Deine Einschätzung hilft, ihn ehrlicher und menschlicher zu machen.</p>
+    <ul class="info-liste">
+      <li><b>Ablauf:</b> zwei kurze Fragen zu dir, ein Chat von etwa 5 Nachrichten, danach ein kurzer Fragebogen.</li>
+      <li><b>Rolle:</b> Du schlüpfst in die Rolle einer Person in der Bankausbildung. Antworte so, wie du an ihrer Stelle wirklich reagieren würdest.</li>
+      <li><b>Anonym:</b> Wir fragen weder Namen noch E-Mail-Adresse. Schreib im Chat bitte keine echten persönlichen Daten.</li>
+      <li><b>Was mit deinen Antworten passiert:</b> Chat, Bewertung, Altersgruppe und Tätigkeit werden am Ende per E-Mail an den Verantwortlichen der Studie geschickt und ausgewertet. Die Texte werden dafür vom KI-Anbieter Anthropic verarbeitet. Auf dieser Seite selbst wird nichts gespeichert.</li>
+      <li><b>Freiwillig:</b> Du kannst jederzeit abbrechen, indem du die Seite schließt. Dann wird nichts übermittelt. Weil wir keine Namen erfassen, lassen sich abgeschickte Antworten später keiner Person zuordnen.</li>
+      <li><b>Teilnahme ab 18 Jahren.</b></li>
+    </ul>
+    <div class="kasten" id="kontakt-kasten"><span><b>Verantwortlich:</b> <span id="v-name"></span></span><span><b>Kontakt bei Fragen:</b> <span id="v-kontakt"></span></span></div>
+    <label class="einwilligung" for="zustimmung"><input type="checkbox" id="zustimmung"><span>Ich bin mindestens 18 Jahre alt, habe die Informationen gelesen und bin mit der Teilnahme einverstanden.</span></label>
+    <div class="knopfreihe"><span class="hinweis-fehler" id="info-fehler"></span><button class="knopf haupt" id="info-weiter" type="button" disabled>Weiter</button></div>
+  </section>
+
+  <!-- STUDIE 2: Angaben -->
+  <section class="blatt" id="s-angaben" hidden>
+    <h2>Zwei kurze Fragen zu dir</h2>
+    <div class="feld">Wie alt bist du?<div class="optionen" id="o-alter" role="group" aria-label="Altersgruppe"></div></div>
+    <div class="feld">Was machst du gerade hauptsächlich?<div class="optionen" id="o-taetigkeit" role="group" aria-label="Tätigkeit"></div></div>
+    <div class="knopfreihe"><button class="knopf haupt" id="angaben-weiter" type="button" disabled>Weiter</button></div>
+  </section>
+
+  <!-- STUDIE 3: Aufgabe -->
+  <section class="blatt" id="s-aufgabe" hidden>
+    <h2>Deine Rolle</h2>
+    <div class="rollenkarte"><b id="karte-name"></b><span id="karte-headline"></span></div>
+    <p>Stell dir vor, du bist diese Person. Du hast auf LinkedIn eine Vernetzungsanfrage von einem Sinan angenommen, den du nicht kennst. Gleich schreibt er dir.</p>
+    <p>Antworte so, wie du an ihrer Stelle wirklich reagieren würdest: kurz, ausführlich, skeptisch oder neugierig. Es gibt kein Richtig oder Falsch. Wenn du keine Lust mehr hast, beendest du das Gespräch einfach.</p>
+    <div class="knopfreihe"><button class="knopf haupt" id="aufgabe-los" type="button">Gespräch starten</button></div>
+  </section>
+
+  <!-- TEAM: Start -->
+  <section class="blatt" id="s-team" hidden>
+    <h2>Welche Rolle übernimmst du?</h2>
+    <div class="rollen">
+      <button class="rolle" id="rolle-bot" type="button" aria-pressed="true"><b>Ich bin der Bot</b><span>Du schreibst die Nachrichten an den Lead, die KI spielt einen Azubi. Der Bot lernt daraus, wie ein Mensch schreibt.</span></button>
+      <button class="rolle" id="rolle-lead" type="button" aria-pressed="false"><b>Ich bin der Lead</b><span>Der Bot schreibt dich an und versucht, dich für einen Termin zu gewinnen. Danach sagst du, wie er war.</span></button>
+    </div>
+    <div class="felder">
+      <label class="feld" for="t-name">Dein Vorname<input type="text" id="t-name" maxlength="40" autocomplete="given-name"></label>
+      <label class="feld" for="t-ausr">Ausrichtung des Bots<select id="t-ausr"><option value="standard">Standard</option><option value="aec">Nur AEC (Potenzialanalyse)</option></select></label>
+      <label class="feld" for="t-lead-name">Name des Leads<input type="text" id="t-lead-name" maxlength="60"></label>
+      <label class="feld" for="t-lead-headline">LinkedIn-Headline<input type="text" id="t-lead-headline" maxlength="200"></label>
+      <label class="feld breit" for="t-typ" id="t-typ-feld">Wie tickt der Lead? <span class="leise">(nur du siehst das, die KI spielt es)</span><select id="t-typ"></select></label>
+    </div>
+    <p class="leise">Es wird niemand Echtes angeschrieben. Chat und Bewertung gehen am Ende per E-Mail an Sinan, die Texte verarbeitet dafür der KI-Anbieter Anthropic.</p>
+    <div class="knopfreihe"><span class="hinweis-fehler" id="team-fehler"></span><button class="knopf haupt" id="team-los" type="button">Chat starten</button></div>
+  </section>
+
+  <!-- Chat -->
+  <section class="blatt li-chat" id="s-chat" hidden>
+    <div class="li-kopf">
+      <div class="wer"><div class="li-avatar gross" id="chat-avatar"></div><div><b id="chat-name"></b><small id="chat-headline"></small></div></div>
+      <button class="knopf klein" id="beenden" type="button">Gespräch beenden</button>
+    </div>
+    <div class="li-verlauf" id="verlauf" aria-live="polite"></div>
+    <form class="li-eingabe" id="eingabe">
+      <textarea id="text" rows="3" maxlength="1500" aria-label="Deine Nachricht" placeholder="Nachricht schreiben …"></textarea>
+      <div class="li-leiste">
+        <div class="li-icons" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          <span class="li-gif">GIF</span>
+          <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg>
+        </div>
+        <span class="li-tipp">Enter sendet · Shift+Enter neue Zeile</span>
+        <button class="li-senden" id="senden" type="submit" disabled>Senden</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Fragebogen / Auswertung -->
+  <section class="blatt" id="s-frage" hidden>
+    <h2 id="frage-titel">Ein paar Fragen zum Gespräch</h2>
+    <div id="frage-lead">
+      <div class="skala-zeile"><span class="feld">Hättest du einem Telefonat oder Termin zugesagt?</span><div class="optionen" id="f-zusage" role="group" aria-label="Zusage"><button type="button" data-v="ja" aria-pressed="false">Ja</button><button type="button" data-v="vielleicht" aria-pressed="false">Vielleicht</button><button type="button" data-v="nein" aria-pressed="false">Nein</button></div></div>
+      <div id="skalen"></div>
+      <div class="skala-zeile"><span class="feld">Welche Note gibst du dem Schreiber insgesamt?</span><div class="skala" id="f-note" role="group" aria-label="Note"></div><div class="skala-enden"><span>1 · hat mich abgeschreckt</span><span>5 · genau richtig</span></div></div>
+    </div>
+    <div class="kasten" id="frage-bot" hidden></div>
+    <label class="feld" for="feedback"><span id="feedback-frage">Was hat dich gestört, was war gut?</span><textarea id="feedback" rows="4" maxlength="2000"></textarea></label>
+    <div class="knopfreihe"><span class="hinweis-fehler" id="frage-fehler"></span><button class="knopf" id="zurueck" type="button">Zurück zum Gespräch</button><button class="knopf haupt" id="absenden" type="button">Absenden</button></div>
+  </section>
+
+  <!-- Danke -->
+  <section class="blatt" id="s-danke" hidden>
+    <h2>Vielen Dank für deine Teilnahme!</h2>
+    <p id="danke-text"></p>
+    <div id="danke-team" hidden>
+      <div class="kasten" id="danke-urteil"></div>
+      <div id="danke-vorschlaege"></div>
+    </div>
+    <div class="knopfreihe"><button class="knopf haupt" id="nochmal" type="button">Noch eine Runde</button></div>
+  </section>
+
+  <p class="fuss" id="fuss">Diese Seite setzt keine Cookies und speichert nichts dauerhaft.</p>
+</div>
+
+<script>
+const TEAM = location.pathname.replace(/\/+$/, "") === "/team";
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const zufall = (l) => l[Math.floor(Math.random() * l.length)];
+
+// Name und Headline passen immer zusammen (keine „Tim, Bankkauffrau“).
+const PERSONEN = {
+  w: { namen: ["Lena", "Aylin", "Marie", "Sophie", "Hanna", "Elif"], headlines: ["Auszubildende Bankkauffrau bei der Sparkasse", "Bankkauffrau in Ausbildung bei einer Großbank", "Azubi zur Bankkauffrau | 3. Lehrjahr | Sparkasse", "Auszubildende Bankkauffrau · Volksbank · 2. Lehrjahr"] },
+  m: { namen: ["Jonas", "Tim", "Can", "Luca", "Elias", "Noah"], headlines: ["Azubi Bankkaufmann | Volksbank | 2. Lehrjahr", "Auszubildender Bankkaufmann · Kundenberatung", "Bankkaufmann in Ausbildung bei der Sparkasse", "Auszubildender Bankkaufmann | 1. Lehrjahr"] },
+};
+const zufallsPerson = () => { const g = PERSONEN[zufall(["w", "m"])]; return { name: zufall(g.namen), headline: zufall(g.headlines) }; };
+const TYPEN = [["unsicher", "Unsicher, wie es nach der Ausbildung weitergeht"], ["zufrieden", "Zufrieden, will bei der Bank bleiben"], ["skeptisch", "Skeptisch, wittert Vertrieb"], ["knapp", "Schreibt knapp, hat wenig Zeit"], ["geld", "Hat Geldfragen im Hinterkopf"], ["offen", "Offen und gesprächig"]];
+const ALTER = ["18–20", "21–25", "26–35", "36 oder älter"];
+const TAETIGKEIT = ["Schule", "Ausbildung", "Studium", "berufstätig", "anderes"];
+const SKALEN = [["menschlich", "Die Nachrichten wirkten wie von einem echten Menschen."], ["bedraengt", "Ich fühlte mich bedrängt oder verkauft."], ["interesse", "Die Person schien sich wirklich für mich zu interessieren."]];
+
+const SCHRITTE = TEAM
+  ? { "s-team": [1, "Vorbereitung"], "s-chat": [2, "Gespräch"], "s-frage": [3, "Auswertung"], "s-danke": [3, "Fertig"] }
+  : { "s-info": [1, "Information"], "s-angaben": [2, "Zu dir"], "s-aufgabe": [3, "Deine Rolle"], "s-chat": [4, "Gespräch"], "s-frage": [5, "Fragebogen"], "s-danke": [5, "Fertig"] };
+const GESAMT = TEAM ? 3 : 5;
+
+let s = null, teilnehmer = TEAM ? { art: "team" } : { art: "studie" }, antworten = { zusage: null, note: null, skalen: {} }, busy = false, frageOffen = false;
+const SPEICHER = TEAM ? "nl-training-team" : "nl-training-studie";
+const merke = () => { try { s ? sessionStorage.setItem(SPEICHER, JSON.stringify({ s, teilnehmer })) : sessionStorage.removeItem(SPEICHER); } catch {} };
+
+function zeige(id) {
+  for (const sec of document.querySelectorAll(".blatt")) sec.hidden = sec.id !== id;
+  const [n, name] = SCHRITTE[id] || [1, ""];
+  $("schritt-name").textContent = name;
+  $("schritt-zahl").textContent = id === "s-danke" ? "abgeschlossen" : `Schritt ${n} von ${GESAMT}`;
+  $("balken").style.width = `${id === "s-danke" ? 100 : Math.round((n - 1) / GESAMT * 100 + 100 / GESAMT / 2)}%`;
+  window.scrollTo({ top: 0 });
+}
+
+async function api(pfad, daten) {
+  const r = await fetch(pfad, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(daten) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.fehler) throw new Error(j.fehler || "Die Verbindung hat nicht geklappt. Versuch es nochmal.");
+  return j;
+}
+
+function optionen(box, werte, onWahl) {
+  box.replaceChildren(...werte.map((w) => { const b = el("button", null, w); b.type = "button"; b.dataset.v = w; b.setAttribute("aria-pressed", "false"); return b; }));
+  box.onclick = (ev) => { const b = ev.target.closest("button"); if (!b) return; box.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); onWahl(b.dataset.v); };
+}
+
+function neueSitzung(modus, lead, ausrichtung) {
+  s = { id: `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, modus, ausrichtung, erstellt: new Date().toISOString(), lead, verlauf: [], ende: null, gedanken: [] };
+  antworten = { zusage: null, note: null, skalen: {} }; frageOffen = false; $("feedback").value = "";
+}
+
+// ---------- Chat ----------
+const uhrzeit = (t) => new Date(t || Date.now()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+const initialen = (n) => String(n || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+const anzeigeName = (rolle) => rolle === "sinan"
+  ? (s.modus === "bot" ? "Bot (du)" : (TEAM ? "Bot" : "Sinan"))
+  : (s.modus === "lead" ? `${s.lead.name} (du)` : s.lead.name);
+
+function zeichneChat(denkt = "") {
+  $("chat-name").textContent = s.modus === "lead" ? (TEAM ? "Bot" : "Sinan") : s.lead.name;
+  $("chat-headline").textContent = s.modus === "lead" ? `schreibt dir · du bist ${s.lead.name}, ${s.lead.headline}` : s.lead.headline;
+  $("chat-avatar").textContent = s.modus === "lead" ? "S" : initialen(s.lead.name);
+  $("chat-avatar").className = `li-avatar gross ${s.modus === "lead" ? "" : "lead"}`;
+  const box = $("verlauf"); box.replaceChildren();
+  let gruppe = null, letzte = null;
+  const neueGruppe = (rolle, zeit) => {
+    const g = el("div", "li-gruppe");
+    g.append(el("div", `li-avatar ${rolle === "lead" ? "lead" : ""}`, rolle === "sinan" ? "S" : initialen(s.lead.name)));
+    const inhalt = el("div"); const zeile = el("div", "li-zeile");
+    zeile.append(el("b", null, anzeigeName(rolle)), el("span", null, `· ${uhrzeit(zeit)}`));
+    inhalt.append(zeile); g.append(inhalt); box.append(g);
+    return inhalt;
+  };
+  for (const m of s.verlauf) {
+    if (m.rolle === "hinweis") { box.append(el("div", "li-hinweis", m.text)); gruppe = null; letzte = null; continue; }
+    if (!gruppe || letzte !== m.rolle) { gruppe = neueGruppe(m.rolle, m.zeit); letzte = m.rolle; }
+    gruppe.append(el("p", `li-text${m.entwurf ? " entwurf" : ""}`, m.text));
+  }
+  if (denkt) {
+    const ziel = gruppe && letzte === denkt ? gruppe : neueGruppe(denkt, Date.now());
+    const t = el("div", "li-tippt"); t.setAttribute("aria-label", "schreibt"); t.append(el("i"), el("i"), el("i")); ziel.append(t);
+  }
+  box.scrollTop = box.scrollHeight;
+  const zu = !!s.ende;
+  $("text").disabled = zu || busy;
+  $("senden").disabled = zu || busy || !$("text").value.trim();
+  $("text").placeholder = zu ? "Das Gespräch ist zu Ende. Weiter mit „Weiter“ oben." : "Nachricht schreiben …";
+  $("beenden").textContent = zu ? "Weiter" : "Gespräch beenden";
+}
+const echteVerlauf = () => s.verlauf.filter((m) => m.rolle !== "hinweis");
+async function schritt(aufgabe) {
+  if (busy) return; busy = true; zeichneChat(aufgabe === "bot" ? "sinan" : "lead");
+  try {
+    const r = await api("/api/ki", { aufgabe, sitzung: { ...s, verlauf: echteVerlauf() } });
+    if (aufgabe === "bot") {
+      // Antwort kommt aus der echten Bot-Pipeline: Nachricht, Entwurf (live erst geprüft), Übergabe oder Schweigen.
+      if (r.conv) s.conv = r.conv;
+      if (r.nachricht) s.verlauf.push({ rolle: "sinan", text: r.nachricht, quelle: "ki", zeit: Date.now(), entwurf: !!r.entwurf });
+      if (r.hinweis) s.verlauf.push({ rolle: "hinweis", text: TEAM || !["uebergabe", "stumm"].includes(r.ende) ? r.hinweis : "Hier würde das Gespräch persönlich weitergehen." });
+      if (r.ende) s.ende = r.ende;
+    } else {
+      s.verlauf.push({ rolle: "lead", text: r.antwort, quelle: "ki", zeit: Date.now() });
+      if (r.gedanke) s.gedanken.push(r.gedanke);
+      if (r.ende) { s.ende = r.ende; s.verlauf.push({ rolle: "hinweis", text: r.ende === "zusage" ? `${s.lead.name} hat zugesagt.` : `${s.lead.name} ist ausgestiegen.` }); }
+    }
+  } catch (e) { s.verlauf.push({ rolle: "hinweis", text: e.message }); }
+  finally { busy = false; merke(); zeichneChat(); }
+}
+$("eingabe").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const text = $("text").value.trim(); if (!text || !s || s.ende || busy) return;
+  $("text").value = "";
+  s.verlauf.push({ rolle: s.modus === "bot" ? "sinan" : "lead", text, quelle: "mensch", zeit: Date.now() });
+  $("senden").disabled = true;
+  schritt(s.modus === "bot" ? "lead" : "bot");
+});
+$("text").addEventListener("input", () => { $("senden").disabled = !!s?.ende || busy || !$("text").value.trim(); });
+$("text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("eingabe").requestSubmit(); } });
+$("beenden").onclick = () => {
+  if (busy) return;
+  if (!s.verlauf.some((m) => m.quelle === "mensch")) { s.verlauf.push({ rolle: "hinweis", text: "Schreib mindestens eine Nachricht, bevor du beendest." }); zeichneChat(); return; }
+  frageOffen = true; zeigeFragen();
+};
+
+// ---------- Fragebogen ----------
+function zeigeFragen() {
+  const leadModus = s.modus === "lead";
+  $("frage-lead").hidden = !leadModus; $("frage-bot").hidden = leadModus;
+  $("zurueck").hidden = !!s.ende;
+  $("frage-titel").textContent = leadModus ? "Ein paar Fragen zum Gespräch" : "Wie lief dein Gespräch?";
+  $("feedback-frage").textContent = leadModus ? "Was hat dich gestört, was war gut? (optional)" : "Was wolltest du dem Bot zeigen? (optional)";
+  if (!leadModus) $("frage-bot").textContent = s.ende === "zusage" ? `${s.lead.name} hat zugesagt.` : s.ende === "absage" ? `${s.lead.name} ist ausgestiegen.` : "Offen beendet.";
+  $("frage-fehler").textContent = "";
+  zeige("s-frage");
+}
+$("f-zusage").onclick = (ev) => { const b = ev.target.closest("button"); if (!b) return; antworten.zusage = b.dataset.v; $("f-zusage").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); };
+function skala(box, onWahl) {
+  box.replaceChildren(...[1, 2, 3, 4, 5].map((n) => { const b = el("button", null, String(n)); b.type = "button"; b.dataset.v = n; b.setAttribute("aria-pressed", "false"); return b; }));
+  box.onclick = (ev) => { const b = ev.target.closest("button"); if (!b) return; box.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); onWahl(Number(b.dataset.v)); };
+}
+skala($("f-note"), (v) => { antworten.note = v; });
+$("skalen").replaceChildren(...SKALEN.map(([k, frage]) => {
+  const z = el("div", "skala-zeile"); const box = el("div", "skala"); box.setAttribute("role", "group"); box.setAttribute("aria-label", frage);
+  skala(box, (v) => { antworten.skalen[k] = v; });
+  const enden = el("div", "skala-enden"); enden.append(el("span", null, "1 · stimme gar nicht zu"), el("span", null, "5 · stimme voll zu"));
+  z.append(el("span", "feld", frage), box, enden); return z;
+}));
+$("zurueck").onclick = () => { frageOffen = false; zeige("s-chat"); zeichneChat(); };
+$("absenden").onclick = async () => {
+  if (busy) return;
+  if (s.modus === "lead" && (!antworten.zusage || !antworten.note)) { $("frage-fehler").textContent = "Bitte beantworte die Frage zur Zusage und vergib eine Note."; return; }
+  busy = true; $("absenden").disabled = true; $("absenden").textContent = "Wird gesendet …"; $("frage-fehler").textContent = "";
+  try {
+    const r = await api("/api/abschluss", { sitzung: { ...s, verlauf: echteVerlauf() }, ergebnis: { ...antworten, feedback: $("feedback").value.trim() }, teilnehmer });
+    s = null; merke();
+    $("danke-text").textContent = TEAM
+      ? (r.gesendet ? "Dein Training ist bei Sinan angekommen. Er entscheidet, was der Bot davon übernimmt." : "Die Auswertung hat geklappt, die E-Mail an Sinan aber nicht. Sag ihm bitte kurz Bescheid.")
+      : (r.gesendet ? "Deine Antworten wurden übermittelt. Du kannst die Seite jetzt schließen oder noch eine Runde mit einer anderen Person machen." : "Leider konnten deine Antworten gerade nicht übermittelt werden. Versuch es später noch einmal.");
+    $("danke-team").hidden = !TEAM;
+    if (TEAM) {
+      $("danke-urteil").textContent = r.urteil || "Keine Einschätzung.";
+      const box = $("danke-vorschlaege"); box.replaceChildren();
+      if (!r.vorschlaege?.length) box.append(el("p", "leise", "Kein neuer Vorschlag: nichts, was der Bot nicht schon kann."));
+      for (const v of r.vorschlaege || []) { const d = el("div", "vorschlag"); d.append(el("span", "art", { beispiel: "Beispiel-Nachricht", erstnachricht: "Regel · Erstnachricht", gespraech: "Regel · Gespräch" }[v.bereich]), el("div", null, v.text), el("small", null, v.begruendung)); box.append(d); }
+    }
+    zeige("s-danke");
+  } catch (e) { $("frage-fehler").textContent = e.message; }
+  finally { busy = false; $("absenden").disabled = false; $("absenden").textContent = "Absenden"; }
+};
+$("nochmal").onclick = () => { if (TEAM) { neuerTeamLead(); zeige("s-team"); } else { neuerStudienLead(); zeige("s-aufgabe"); } };
+
+// ---------- Studie ----------
+function neuerStudienLead() { const p = zufallsPerson(); s = null; $("karte-name").textContent = p.name; $("karte-headline").textContent = p.headline; }
+$("zustimmung").onchange = () => { $("info-weiter").disabled = !$("zustimmung").checked || $("info-weiter").dataset.gesperrt === "1"; };
+$("info-weiter").onclick = () => zeige("s-angaben");
+const angabenFertig = () => { $("angaben-weiter").disabled = !(teilnehmer.alter && teilnehmer.taetigkeit); };
+optionen($("o-alter"), ALTER, (v) => { teilnehmer.alter = v; angabenFertig(); });
+optionen($("o-taetigkeit"), TAETIGKEIT, (v) => { teilnehmer.taetigkeit = v; angabenFertig(); });
+$("angaben-weiter").onclick = () => { neuerStudienLead(); zeige("s-aufgabe"); };
+$("aufgabe-los").onclick = () => {
+  neueSitzung("lead", { name: $("karte-name").textContent, headline: $("karte-headline").textContent, typ: "unsicher" }, "standard");
+  zeige("s-chat"); zeichneChat(); schritt("bot");
+};
+
+// ---------- Team ----------
+let teamModus = "bot";
+function neuerTeamLead() { const p = zufallsPerson(); $("t-lead-name").value = p.name; $("t-lead-headline").value = p.headline; $("t-typ").value = zufall(TYPEN)[0]; }
+function zeichneTeam() {
+  $("rolle-bot").setAttribute("aria-pressed", String(teamModus === "bot"));
+  $("rolle-lead").setAttribute("aria-pressed", String(teamModus === "lead"));
+  $("t-typ-feld").hidden = teamModus !== "bot";
+  $("team-los").textContent = teamModus === "bot" ? "Chat starten" : "Vom Bot anschreiben lassen";
+}
+$("rolle-bot").onclick = () => { teamModus = "bot"; zeichneTeam(); };
+$("rolle-lead").onclick = () => { teamModus = "lead"; zeichneTeam(); };
+$("team-los").onclick = () => {
+  const name = $("t-name").value.trim();
+  if (!name) { $("team-fehler").textContent = "Bitte trag deinen Vornamen ein."; $("t-name").focus(); return; }
+  if ($("team-los").dataset.gesperrt === "1") return;
+  $("team-fehler").textContent = "";
+  teilnehmer = { art: "team", name };
+  try { localStorage.setItem("nl-training-name", name); } catch {}
+  const p = zufallsPerson();
+  neueSitzung(teamModus, { name: $("t-lead-name").value.trim() || p.name, headline: $("t-lead-headline").value.trim() || p.headline, typ: $("t-typ").value }, $("t-ausr").value);
+  zeige("s-chat"); zeichneChat();
+  if (s.modus === "lead") schritt("bot"); else { $("text").focus(); merke(); }
+};
+
+// ---------- Start ----------
+(async () => {
+  if (TEAM) {
+    document.title = "NextLead Chat-Training";
+    $("kicker").textContent = "NextLead · Bot-Training";
+    $("titel").textContent = "Chat-Training";
+    $("fuss").textContent = "Gesendet wird hier nichts, niemand Echtes wird angeschrieben.";
+    $("t-typ").replaceChildren(...TYPEN.map(([v, t]) => { const o = el("option", null, t); o.value = v; return o; }));
+    neuerTeamLead(); zeichneTeam();
+    try { $("t-name").value = localStorage.getItem("nl-training-name") || ""; } catch {}
+  }
+  try {
+    const alt = JSON.parse(sessionStorage.getItem(SPEICHER) || "null");
+    if (alt?.s?.verlauf?.length) { s = alt.s; teilnehmer = alt.teilnehmer; zeige("s-chat"); zeichneChat(); }
+  } catch {}
+  if (!s) zeige(TEAM ? "s-team" : "s-info");
+  let info = { bereit: false };
+  try { info = await (await fetch("/api/info", { cache: "no-store" })).json(); } catch {}
+  $("v-name").textContent = info.verantwortlich || "wird noch ergänzt";
+  $("v-kontakt").textContent = info.kontakt || "wird noch ergänzt";
+  if (!info.bereit) {
+    for (const id of ["info-weiter", "team-los"]) { $(id).dataset.gesperrt = "1"; $(id).disabled = true; }
+    $("info-fehler").textContent = $("team-fehler").textContent = "Die Seite ist noch nicht fertig eingerichtet.";
+    $("kontakt-kasten").classList.add("warn");
+  }
+})();
+</script>
+</body>
+</html>

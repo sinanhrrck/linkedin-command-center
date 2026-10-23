@@ -1,0 +1,9 @@
+{
+  "name": "nextlead-training-web",
+  "private": true,
+  "type": "module",
+  "description": "Öffentliche Trainings- und Studienseite für den NextLead-Bot (Vercel). Siehe README.md.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.132.1"
+  }
+}

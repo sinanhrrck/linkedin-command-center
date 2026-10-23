@@ -12,6 +12,17 @@ export const db = new Database(config.paths.dbPath);
 db.pragma("journal_mode = WAL");
 db.exec(readFileSync(join(__dirname, "schema.sql"), "utf-8"));
 
+// Training (2026-10-23): Spalten der ersten Fassung nachtragen, erst DANN die Indizes darauf anlegen.
+// CREATE TABLE IF NOT EXISTS ergänzt keine Spalten – ohne das bräche der Start mit „no such column“.
+for (const [tabelle, spalte, def] of [
+  ["sim_chats", "modus", "TEXT NOT NULL DEFAULT 'lead'"], ["sim_chats", "quelle", "TEXT NOT NULL DEFAULT 'cockpit'"],
+  ["sim_chats", "quelle_key", "TEXT"], ["sim_regeln", "quelle_key", "TEXT"],
+] as const) {
+  try { db.exec(`ALTER TABLE ${tabelle} ADD COLUMN ${spalte} ${def}`); } catch { /* existiert */ }
+}
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sim_chats_quelle ON sim_chats(quelle_key) WHERE quelle_key IS NOT NULL");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sim_regeln_quelle ON sim_regeln(quelle_key) WHERE quelle_key IS NOT NULL");
+
 for (const [column, definition] of [
   ["screenshot_base64", "TEXT"],
   ["screenshot_mime", "TEXT"],
