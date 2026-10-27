@@ -3,3 +3,6 @@
 node_modules
 .vercel
 README.md
+# Nie hochladen: `vercel link`/`vercel env pull` legen hier Schlüssel ab.
+.env
+.env.*
