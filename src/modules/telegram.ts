@@ -640,6 +640,10 @@ export function startTelegram() {
       `🎯 AEC-Zusage Nr. ${e.stand.zusagen}${e.stand.ziel ? ` von ${e.stand.ziel}` : ""}: ${e.zusage.teilnehmer ?? "?"} (aus dem Kalendereintrag).`,
       { reply_markup: aecKnoepfe(e.zusage.id) }).catch(() => {});
   });
+  events.on("outreach:einladungslimit", (e: { bis: string }) => {
+    if (!bot || !config.telegram.chatId) return;
+    bot.api.sendMessage(config.telegram.chatId, `⏸ LinkedIn meldet das Wochenlimit für Einladungen. Vernetzen pausiert bis ${e.bis}. Nachrichten und Antworten laufen weiter.`).catch(() => {});
+  });
   events.on("aec:morgen", () => {
     if (!bot || !config.telegram.chatId) return;
     const st = aecStand();

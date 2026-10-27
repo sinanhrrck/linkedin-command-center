@@ -11,6 +11,9 @@ import { extrahiereProfilFakten, speichereProfilFakten } from "./profilFakten.js
 import { zielgruppenPruefung } from "./zielgruppen.js";
 import { pruefeTermin, type Nachricht } from "./termine.js";
 import { protokolliereVersand } from "./versandProtokoll.js";
+import { istAusstehendLabel, istEinladungsLimitText, labelGehoertZu, nameAusUeberschrift } from "../core/vernetzenPruefung.js";
+import { isoTag } from "../core/suchlimit.js";
+import { events } from "../core/events.js";
 
 /** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
 function normText(s: string): string {
@@ -132,17 +135,49 @@ const SEL = {
 };
 
 /** Findet den Vernetzen-Button – direkt oder nach Öffnen des "Mehr"-Menüs. */
-async function findConnectButton(page: import("playwright").Page) {
-  let btn = page.locator(SEL.connectBtn).first();
-  if ((await btn.count()) === 0) {
+/**
+ * Sucht den Vernetzen-Knopf GENAU DIESES Profils (Beschriftung muss den Profilnamen tragen, siehe
+ * core/vernetzenPruefung.ts). Vorher nahm `.first()` auf der ganzen Seite auch Vorschlagskarten fremder
+ * Leute – deren Knopf lädt sofort ein. Kein Name oder kein passender Knopf → leerer Locator, kein Klick.
+ */
+async function findConnectButton(page: import("playwright").Page, name: string | null) {
+  const passend = async () => {
+    const alle = page.locator(SEL.connectBtn);
+    const n = Math.min(await alle.count(), 40);
+    for (let i = 0; i < n; i++) {
+      const el = alle.nth(i);
+      if (labelGehoertZu(await el.getAttribute("aria-label").catch(() => null), name)) return el;
+    }
+    return null;
+  };
+  if (!name) return page.locator("#nextlead-kein-name-kein-klick");
+  let btn = await passend();
+  if (!btn) {
     const more = page.locator(SEL.moreBtn).first();
     if (await more.count()) {
       await more.click();
       await humanDelay(500, 1200);
-      btn = page.locator(SEL.connectBtn).first();
+      btn = await passend();
     }
   }
-  return btn;
+  return btn ?? page.locator("#nextlead-kein-passender-knopf");
+}
+
+/** Name aus der Profil-Überschrift (erste Zeile von main h1). */
+async function profilName(page: import("playwright").Page): Promise<string | null> {
+  const t = await page.locator("main h1").first().innerText({ timeout: 4000 }).catch(() => "");
+  return nameAusUeberschrift(t);
+}
+
+/** Ist für diese Person jetzt eine Einladung ausstehend? (Beleg für „ohne Fenster gesendet“) */
+async function einladungAusstehend(page: import("playwright").Page, name: string): Promise<boolean> {
+  const knoepfe = page.locator("main button[aria-label], main a[aria-label], main [role='button'][aria-label]");
+  const n = Math.min(await knoepfe.count(), 60);
+  for (let i = 0; i < n; i++) {
+    const l = await knoepfe.nth(i).getAttribute("aria-label").catch(() => null);
+    if (istAusstehendLabel(l) && labelGehoertZu(l, name)) return true;
+  }
+  return false;
 }
 
 /** True, wenn diese Person in den letzten 24 h schon eine Vernetzungsanfrage bekam. */
@@ -232,6 +267,12 @@ export async function sendConnectionRequest(profileUrl: string, note?: string, z
       console.info(`[outreach] Vernetzung übersprungen (${profileUrl}) – schon in den letzten 24h angefragt.`);
       return;
     }
+    // LinkedIns Wochenlimit für Einladungen: bis zum vermerkten Tag gar nicht erst Profile öffnen.
+    const limitBis = getState("einladungs_limit_bis");
+    if (limitBis && limitBis > isoTag()) {
+      console.info(`[outreach] Vernetzen pausiert bis ${limitBis} – LinkedIn-Wochenlimit für Einladungen.`);
+      return;
+    }
     return await governor.execute("connect", profileUrl, async () => {
       const page = await newPage();
       await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
@@ -240,7 +281,8 @@ export async function sendConnectionRequest(profileUrl: string, note?: string, z
       await erfasseProfilFakten(page, profileUrl);
       pruefeProfilGegenZielgruppe(profileUrl, zielgruppencheck); // VOR jedem Klick
 
-      const connect = await findConnectButton(page);
+      const name = await profilName(page);
+      const connect = await findConnectButton(page, name);
       if ((await connect.count()) === 0) {
         // Ist stattdessen „Nachricht“ sichtbar, besteht die Verbindung bereits. Nicht sieben
         // Tage erneut versuchen, sondern direkt korrekt ins CRM übernehmen.
@@ -251,9 +293,15 @@ export async function sendConnectionRequest(profileUrl: string, note?: string, z
           console.info(`[outreach] ${profileUrl} ist bereits vernetzt – als angenommen übernommen.`);
           return;
         }
-        // Weder Vernetzen noch Nachricht: möglicherweise ausstehend/nicht erreichbar. Nicht bei
+        // Einladung schon raus (ausstehend)? Dann nicht erneut versuchen, sondern übernehmen.
+        if (name && await einladungAusstehend(page, name)) {
+          db.prepare("UPDATE contacts SET status='invited', invited_at=COALESCE(invited_at,datetime('now')) WHERE profile_url=? AND status IN ('new','skipped')").run(profileUrl);
+          console.info(`[outreach] ${profileUrl}: Einladung ist schon ausstehend – übernommen.`);
+          return;
+        }
+        // Weder Vernetzen noch Nachricht: möglicherweise nicht erreichbar oder Name nicht lesbar. Nicht bei
         // jedem 12-Minuten-Tick dasselbe Profil erneut öffnen.
-        deferProfile(profileUrl, "Kein Vernetzen-Knopf gefunden", 7);
+        deferProfile(profileUrl, name ? "Kein Vernetzen-Knopf für dieses Profil" : "Profilname nicht lesbar – aus Sicherheit kein Klick", 7);
         recordReadSaving("profile_retry");
         throw new GovernorBlocked("Kein Vernetzen-Button gefunden");
       }
@@ -265,7 +313,27 @@ export async function sendConnectionRequest(profileUrl: string, note?: string, z
         .catch(() => {});
       await humanDelay(400, 900);
       await connect.evaluate((el) => (el as HTMLElement).click());
-      await humanDelay(1000, 2200);
+      // Auf das Fenster WARTEN statt fester Pause; LinkedIn braucht manchmal länger.
+      const dialog = page.locator('[role="dialog"]').first();
+      await dialog.waitFor({ state: "visible", timeout: 6000 }).catch(() => {});
+      await humanDelay(500, 1200);
+      if (await dialog.count()) {
+        const dialogText = await dialog.innerText().catch(() => "");
+        if (istEinladungsLimitText(dialogText)) {
+          await page.keyboard.press("Escape").catch(() => {});
+          const bis = isoTag(new Date(Date.now() + 7 * 86_400_000));
+          setState("einladungs_limit_bis", bis);
+          events.emit("outreach:einladungslimit", { bis });
+          throw new GovernorBlocked(`LinkedIn-Wochenlimit für Einladungen erreicht – Vernetzen pausiert bis ${bis}`);
+        }
+      } else if (name && await einladungAusstehend(page, name)) {
+        // Ohne Fenster direkt gesendet (kommt bei manchen Profilen vor) – das ist ein Erfolg.
+        db.prepare("UPDATE contacts SET status='invited', invited_at=datetime('now') WHERE profile_url = ?").run(profileUrl);
+        const direkt = db.prepare("SELECT id FROM contacts WHERE profile_url=?").get(profileUrl) as { id: number } | undefined;
+        if (direkt) recordCrmStage(direkt.id, "invited", "bot");
+        console.info(`[outreach] ✅ vernetzt mit ${profileUrl} (ohne Bestätigungsfenster)`);
+        return;
+      }
 
       if (note) {
         const addNote = page.locator(SEL.addNoteBtn).first();
@@ -279,7 +347,7 @@ export async function sendConnectionRequest(profileUrl: string, note?: string, z
       const send = page.locator(SEL.sendInvite).first();
       if (await send.count()) {
         await send.evaluate((el) => (el as HTMLElement).click());
-      } else throw new Error("Einladung-Senden-Button nicht gefunden");
+      } else throw new Error("Einladung-Senden-Button nicht gefunden (kein Fenster und keine ausstehende Einladung)");
       await humanDelay(600, 1400);
 
       db.prepare(

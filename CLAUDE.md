@@ -158,6 +158,23 @@ braucht den Governor NICHT.
   ACHTUNG bei langen Seiten: der In-App-Browser-Pane paintet weit unten nach Scroll teils
   nicht (Artefakt) — DOM/oberer Bereich sind maßgeblich, nicht der Leerscreenshot.
 
+## UPDATE 2026-10-27 (3) — Vernetzen klickte womöglich Fremde an (`core/vernetzenPruefung.ts`)
+Auslöser im Cockpit: „outreach – 3 technische Fehler: Einladung-Senden-Button nicht gefunden“. NICHT live
+verifiziert (Server nicht erreichbar), aber im Code eindeutig angelegt: `findConnectButton` nahm `.first()`
+von `[aria-label*="als Kontakt einladen"]` auf der GANZEN Seite. Steht „Vernetzen“ beim Profil nicht offen
+(unter „Mehr“, ausstehend, nur „Folgen“), trifft das die Vorschlagskarten rechts – deren Knopf lädt einen
+FREMDEN sofort ein, ohne Fenster → „Senden-Button nicht gefunden“, Einladung beim Falschen, nicht gezählt.
+- Jetzt: Name aus `main h1` (`nameAusUeberschrift`, ohne „(sie/ihr)“/„, CFP“), geklickt wird nur ein Knopf,
+  dessen aria-label ALLE Namensteile als ganze Wörter trägt (`labelGehoertZu`). Kein Name → kein Klick
+  (7 Tage zurückgestellt). „Mehr“-Menü wird nur geöffnet, wenn beim Profil kein passender Knopf steht.
+- Nach dem Klick wird auf das Fenster GEWARTET (6 s). Kein Fenster, aber „Ausstehend … <Name>“ → Erfolg
+  (ohne Fenster gesendet). Wochenlimit-Text im Fenster → Escape, state `einladungs_limit_bis` = +7 Tage,
+  Event `outreach:einladungslimit` (Telegram), GovernorBlocked; bis dahin öffnet `sendConnectionRequest`
+  gar keine Profile. Schon ausstehende Einladung beim Öffnen → Kontakt `invited`, kein neuer Versuch.
+- Tests: `src/core/vernetzenPruefung.test.ts` (3). Gesamt 238/238 grün, tsc sauber.
+- NACH DEPLOY: engine.log auf „vernetzt mit“, „ohne Bestätigungsfenster“, „Kein Vernetzen-Knopf für dieses
+  Profil“ und „Profilname nicht lesbar“ prüfen. Steigt Letzteres stark, hat LinkedIn die Überschrift geändert.
+
 ## UPDATE 2026-10-27 (2) — Sicher laufen lassen: Pitch-Bremse, Sammelfreigabe, Versandprotokoll
 Sinan: „unsicher, den Bot dauerhaft laufen zu lassen … pitcht zu schnell, peinliche Nachrichten, keine Übersicht,
 falsche Leute“. Vorgabe zur Bremse: „nicht an Nachrichten festmachen, sondern am Stand des Leads“.
