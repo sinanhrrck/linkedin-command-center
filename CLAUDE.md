@@ -158,6 +158,28 @@ braucht den Governor NICHT.
   ACHTUNG bei langen Seiten: der In-App-Browser-Pane paintet weit unten nach Scroll teils
   nicht (Artefakt) — DOM/oberer Bereich sind maßgeblich, nicht der Leerscreenshot.
 
+## UPDATE 2026-10-27 (2) — Sicher laufen lassen: Pitch-Bremse, Sammelfreigabe, Versandprotokoll
+Sinan: „unsicher, den Bot dauerhaft laufen zu lassen … pitcht zu schnell, peinliche Nachrichten, keine Übersicht,
+falsche Leute“. Vorgabe zur Bremse: „nicht an Nachrichten festmachen, sondern am Stand des Leads“.
+- **PITCH-BREMSE = LEAD-STAND.** Ursache gefunden: `call_anbieten` erkannte nur „lass uns telefonieren“, ein
+  Angebot der Potenzialanalyse/eines kostenlosen Gesprächs/Buchungslinks rutschte in JEDER Phase durch, und
+  `bedarf` (per Kaufsignal direkt aus dem Smalltalk erreichbar) verlangte sogar, das Angebot einzubringen.
+  Jetzt: `ANGEBOT_MUSTER` + `enthaeltAngebot()` im responseValidator zählen als `call_anbieten`; verboten in
+  allem vor `call_angebot` (auch bedarf/vertrauen/validierung). `call_angebot` erreicht der Lead nur über die
+  Score-Schwellen in `nextStage` (Trust/Interest/CallReadiness). `ANGEBOTS_PHASEN` im promptBuilder = nur noch
+  call_angebot/nummer/termin; die „Brücke“ nennt davor kein Angebot. `angebotErlaubt(stage)` ist die eine Quelle.
+  ÄNDERT DAS LIVE-VERHALTEN des Agenten (gewollt). converseStep (alter Pfad bei Agent aus) ist unverändert.
+- **SAMMELFREIGABE** (`freigabe.sammelFreigabe(gruppe, ausfuehren)`, `POST /api/drafts/alle`): `erst` = kind first
+  (Ausgangsprüfung + `zielgruppenPruefung`), `antworten` = kind message (Einwand/Termin/Eskalation/Zielwechsel und
+  Angebote vor dem Angebots-Zustand bleiben liegen). Erst Vorschau, dann Ausführung. Neue `freigabe_quelle`
+  `sammel`: beim Versand wie `auto` STRENG gegen die Zielgruppe (drafts.ts sendApprovedDrafts + sendDraft), KEIN
+  Lernsignal, zählt NICHT für agentVertrauen/Auto-Freigabe-Vertrauen (die zählen nur `mensch`).
+- **VERSANDPROTOKOLL** (`modules/versandProtokoll.ts`, Tabelle `versand_protokoll`): outreach.sendMessage/
+  sendThreadReply schreiben NACH dem belegten Versand Empfänger, Art und vollen Text; Event `versand:gesendet` →
+  Telegram mit Text (die textlose `action:done`-Meldung für message/reply/campaign entfällt). Cockpit: aufklappbar
+  „Heute gesendet“ auf „Heute“ (`dashboard.versandHeute`). Das Protokoll wirft nie (Versand ist schon passiert).
+- Tests: `src/core/sicherheitPaket.test.ts` (4).
+
 ## UPDATE 2026-10-27 — AEC-Monatsziel (`modules/aecZiel.ts`)
 Sinans Vorgabe: „das Ding muss ein AEC-Beast werden … Monatsziel eingeben, darauf hinarbeiten“. Seine Wahl:
 das Ziel zählt ZUSAGEN; „durchgeführt“ läuft als zweite Zahl mit (von Hand); Ziel steuert mit Prognose + Hebel.

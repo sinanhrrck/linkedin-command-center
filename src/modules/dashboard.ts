@@ -33,6 +33,7 @@ import { followupPlan } from "./playbook.js";
 import { autoFreigabeStand } from "./freigabe.js";
 import { getAusrichtung } from "./ausrichtung.js";
 import { aecStand } from "./aecZiel.js";
+import { versandHeute } from "./versandProtokoll.js";
 
 const APP_VERSION = (() => {
   try { return String(createRequire(import.meta.url)("../../package.json").version || "unbekannt"); }
@@ -672,6 +673,7 @@ export function getDashboardData() {
     agentMode: getAgentMode(),
     ausrichtung: getAusrichtung(), // Standard ↔ AEC (modules/ausrichtung.ts)
     aecZiel: aecStand(), // AEC-Monatsziel: Stand, Hochrechnung, Hebel (modules/aecZiel.ts)
+    versandHeute: versandHeute(), // Versandprotokoll: was heute nachweislich rausging, mit Text
     // Offene Regelvorschläge aus dem Training (modules/training.ts) → Zahl am Navigationspunkt.
     trainingVorschlaege: (db.prepare("SELECT COUNT(*) n FROM sim_regeln WHERE status='vorschlag'").get() as { n: number }).n,
     agentVertrauen: agentVertrauen(), // Stufe „Gespräche vorsichtig“: was geht von selbst, was fehlt zur nächsten Stufe

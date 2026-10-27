@@ -51,10 +51,14 @@
       </section>
       <div id="today-kpis" class="today-kpis" aria-label="Kennzahlen heute"></div>
       <section class="decisions" aria-labelledby="decisions-title">
-        <div class="section-head"><div><h3 id="decisions-title">Deine Entscheidungen <span id="decisions-count" class="count-chip"></span></h3><p class="muted">Wichtigstes zuerst. Ein Klick öffnet den Entwurf.</p></div><div class="head-side"><button id="scan-offene" type="button" title="Geht alle Chats durch, auch alte, und legt für jeden offenen Fall einen Entwurf zur Prüfung an. Dauert einige Minuten. Es wird nichts gesendet.">Postfach durchsuchen</button><button id="quick-open" type="button" class="primary" title="Alle offenen Entwürfe als Liste, mehrere auf einmal genehmigen">Alle schnell prüfen</button></div></div>
+        <div class="section-head"><div><h3 id="decisions-title">Deine Entscheidungen <span id="decisions-count" class="count-chip"></span></h3><p class="muted">Wichtigstes zuerst. Ein Klick öffnet den Entwurf.</p></div><div class="head-side"><button id="scan-offene" type="button" title="Geht alle Chats durch, auch alte, und legt für jeden offenen Fall einen Entwurf zur Prüfung an. Dauert einige Minuten. Es wird nichts gesendet.">Postfach durchsuchen</button><button id="alle-erst" type="button" title="Genehmigt alle Erstnachrichten, die jede Prüfung bestehen (Ausgangsprüfung, Zielgruppe). Du siehst vorher, wie viele es sind und was liegen bleibt.">Alle Erstnachrichten genehmigen</button><button id="alle-antworten" type="button" title="Genehmigt alle Antworten in laufenden Gesprächen, die jede Prüfung bestehen. Einwände, Termine, Übergaben und zu frühe Angebote bleiben bei dir.">Alle Antworten genehmigen</button><button id="quick-open" type="button" class="primary" title="Alle offenen Entwürfe als Liste, mehrere auf einmal genehmigen">Alle schnell prüfen</button></div></div>
         <div id="decision-list" class="decision-list"></div>
       </section>
       <section id="quick-review" class="quick-review hidden" aria-live="polite"></section>
+      <details class="versand-heute" id="versand-heute">
+        <summary><b>Heute gesendet</b> <span id="versand-zahl" class="count-chip"></span><span class="muted" id="versand-zusammen"></span></summary>
+        <div id="versand-liste" class="versand-liste"></div>
+      </details>
       <section id="reviewer" class="reviewer hidden" aria-live="polite"></section>
       <details class="bot-details" id="bot-details">
         <summary><span>Was der Bot gerade macht</span><small id="bot-summary"></small></summary>

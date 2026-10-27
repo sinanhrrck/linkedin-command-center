@@ -536,7 +536,9 @@ export function deleteDraft(id: number): boolean {
  * Genehmigen: Status 'approved'. `sendApprovedDrafts` (Engine-Cron) holt sie und sendet.
  * Optionaler `text` übernimmt eine letzte Bearbeitung vor der Freigabe.
  */
-export function approveDraft(id: number, text?: string, quelle: "mensch" | "auto" = "mensch"): boolean {
+// „sammel“ (2026-10-27) = „Alle genehmigen“-Knopf: ungelesen freigegeben → wie „auto“ streng geprüft,
+// KEIN Lernsignal und KEIN Vertrauen (sonst würde der Bot aus ungelesenen Freigaben Autonomie ableiten).
+export function approveDraft(id: number, text?: string, quelle: "mensch" | "auto" | "sammel" = "mensch"): boolean {
   const d = getDraft(id);
   if (!d || d.status === "sent" || d.phase === "approach") return false;
   if (["first", "followup", "reaktivierung", "event"].includes(d.kind) && d.contact_id) {
@@ -713,7 +715,7 @@ export async function sendApprovedDrafts(limit = 10): Promise<number> {
   const rows = db.prepare(
     `SELECT d.id FROM drafts d LEFT JOIN contacts c ON c.id=d.contact_id
       WHERE d.status='approved'
-        AND (COALESCE(d.freigabe_quelle,'mensch')<>'auto' OR d.kind NOT IN ('first','followup','reaktivierung')
+        AND (COALESCE(d.freigabe_quelle,'mensch') NOT IN ('auto','sammel') OR d.kind NOT IN ('first','followup','reaktivierung')
              OR (c.id IS NOT NULL AND ${zgBedingung("c")}))
       ORDER BY d.created_at LIMIT ?`,
   ).all(limit) as { id: number }[];
@@ -827,7 +829,7 @@ export async function sendDraft(id: number): Promise<{ ok: boolean; reason?: str
         d.thread_url, d.draft, d.kind === "event" ? "campaign" : "message",
         // Automatisch freigegeben = streng; von Sinan freigegeben = nur prüfen, wenn der Kontakt
         // einer Zielgruppe angehört (dann muss das Profil passen). Einladungen sind ein Sonderweg.
-        d.kind === "event" ? "aus" : d.freigabe_quelle === "auto" ? "streng" : "wenn_zielgruppe",
+        d.kind === "event" ? "aus" : d.freigabe_quelle === "auto" || d.freigabe_quelle === "sammel" ? "streng" : "wenn_zielgruppe",
         d.kind === "followup" ? { art: "nachfass", stufe: d.sequence_stage ?? followupStufe(d.thread_url, d.id) }
           : d.kind === "event" ? undefined : { art: "erst" },
       );

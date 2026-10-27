@@ -94,7 +94,9 @@ export function interessenFokus(p: PsychProfile): string[] {
 }
 
 /** Phasen, in denen das Angebot konkret werden darf. Davor wäre es ein Kaltpitch. */
-const ANGEBOTS_PHASEN: Stage[] = ["bedarf", "validierung", "call_angebot", "nummer", "termin"];
+// Seit 2026-10-27 erst ab dem Angebots-Zustand: davor ist ein Angebot im Validator verboten, also
+// bekommt die KI es auch nicht vorgelegt (vorher stand es schon in „bedarf“ im Prompt → zu früher Pitch).
+const ANGEBOTS_PHASEN: Stage[] = ["call_angebot", "nummer", "termin"];
 
 const stateBlock = (stage: Stage): string => {
   const d = STAGE_DEF[stage];
@@ -126,9 +128,12 @@ export function buildReplyPrompt(inp: ReplyPromptInput): string {
   // SANFT die Brücke zum konkreten nächsten Schritt (dein Angebot) bauen – erst der Bezug, noch
   // KEIN Hard-Pitch. Ein Gedanke pro Nachricht. In der Angebots-Phase selbst wird konkret angeboten.
   const warm = inp.profile.careerInterest > 0.55 || inp.profile.trust > 0.6;
+  // Die Brücke selbst nennt das Angebot erst im Angebots-Zustand; davor nur Vorbereitung (Erfahrung, Verständnis).
   const bruecke =
-    warm && ["bedarf", "vertrauen", "validierung", "call_angebot"].includes(inp.stage)
-      ? "\n# Jetzt: Brücke zum Angebot bauen\nDie Person zeigt klares Interesse/Passung. Steuere in DIESER oder der nächsten Nachricht sanft Richtung deines konkreten Angebots (siehe Abschnitt Dein Angebot oben): erst der ehrliche Bezug (etwa: genau dafür hab ich was, das dir wirklich weiterhilft) und dein Warum – noch KEIN Druck, kein Verkaufston. Ein Schritt nach dem anderen."
+    warm && inp.stage === "call_angebot"
+      ? "\n# Jetzt: Brücke zum Angebot bauen\nDie Person zeigt klares Interesse/Passung. Steuere sanft Richtung deines konkreten Angebots (siehe Welches Angebot? oben): erst der ehrliche Bezug (etwa: genau dafür hab ich was, das dir wirklich weiterhilft) und dein Warum – noch KEIN Druck, kein Verkaufston. Ein Schritt nach dem anderen."
+      : warm && ["bedarf", "vertrauen", "validierung"].includes(inp.stage)
+      ? "\n# Jetzt: Vertrauen aufbauen, noch KEIN Angebot\nDie Person öffnet sich. Zeig, dass du das Thema aus eigener Erfahrung kennst, und versteh genauer, was sie bewegt. Nenne in dieser Phase KEIN Angebot (keine Analyse, kein Gespräch, keinen Termin) – das kommt erst, wenn das Vertrauen wirklich da ist."
       : "";
   const angebot = inp.angebot && ANGEBOTS_PHASEN.includes(inp.stage) ? `\n\n${inp.angebot}` : "";
   return `${inp.persona}

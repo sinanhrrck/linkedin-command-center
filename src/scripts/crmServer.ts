@@ -44,7 +44,7 @@ import { backfillConversationMemories, backfillDraftContexts } from "../modules/
 import { config } from "../config.js";
 import { angebotFuerCockpit, speichereAngebot, kiAngebotsVorschlaege, kiAngebotSchaerfen } from "../modules/angebot.js";
 import { followupPlan, speichereFollowupPlan } from "../modules/playbook.js";
-import { approveMany, autoFreigabeStand, speichereAutoFreigabe } from "../modules/freigabe.js";
+import { approveMany, autoFreigabeStand, sammelFreigabe, speichereAutoFreigabe } from "../modules/freigabe.js";
 import { variantenStatistik } from "../modules/varianten.js";
 import { frageAssistent } from "../modules/assistent.js";
 import { kiCoach } from "../modules/coach.js";
@@ -1157,6 +1157,21 @@ const server = createServer((req, res) => {
     return;
   }
   // SAMMEL-FREIGABE: jeder Entwurf einzeln durch approveDraft (Kontextprüfung bleibt).
+  // SAMMELFREIGABE (2026-10-27): „Alle Erstnachrichten“ bzw. „Alle Antworten“ genehmigen, nur was alle
+  // Prüfungen besteht. Erst Vorschau (ausfuehren=false), dann Ausführung.
+  if (url.pathname === "/api/drafts/alle" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const b = JSON.parse(body || "{}");
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...sammelFreigabe(b.gruppe, b.ausfuehren === true) }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
   if (url.pathname === "/api/drafts/bulk" && req.method === "POST") {
     let body = "";
     req.on("data", (c) => (body += c));

@@ -36,9 +36,24 @@ import type { Aktion } from "../state.js";
 const NUMMER_FRAGE = /(deine|eine|die)\s+(telefon)?nummer|telefonnummer|handynummer|ruf(e|st)?\s+(dich|ich)|schick.{0,12}nummer|gib mir\s+.{0,12}nummer|whats\s?app/i;
 const CALL_ANBIETEN = /(lass uns\s+.{0,20}(telefonier|call|kurz sprechen|quatschen)|kurz\s+(telefonier|sprechen|quatschen)|hättest du\s+.{0,20}(zeit|lust).{0,20}(call|telefon|sprechen)|wollen wir\s+.{0,20}(telefonier|sprechen)|magst du\s+.{0,20}telefonier)/i;
 const TERMIN_MUSTER = /(passt (dir|es)\s+.{0,30}uhr|dann machen wir\s+.{0,20}(fest|aus)|termin\s+.{0,15}(fix|bestätig|steht)|wir sagen\s+.{0,15}uhr|(montag|dienstag|mittwoch|donnerstag|freitag|morgen)\s+um\s+\d)/i;
+/**
+ * ANGEBOT IM TEXT (2026-10-27, Sinan: „der Bot pitcht zu schnell … das darf nicht an Nachrichten
+ * festgemacht werden, sondern am Stand des Leads“). Vorher erkannte `call_anbieten` nur „lass uns
+ * telefonieren“ – ein Angebot der Potenzialanalyse, eines kostenlosen Gesprächs oder ein Buchungslink
+ * rutschte in JEDER Phase durch. Jetzt zählt jedes Angebot als `call_anbieten` und ist damit überall
+ * verboten, wo der Lead-Stand es noch nicht hergibt (siehe STAGE_DEF: erst ab „call_angebot“).
+ */
+export const ANGEBOT_MUSTER = /(potenzial-?analyse|potentialanalyse|\b(die|eine|meine|unsere|so eine|diese)\s+analyse\b|\banalyse\s+(machen|ausfüllen|ausfuellen|anschauen|testen)|auswertungs(gespräch|gespraech|termin)|kostenlose[nms]?\s+(gespräch|gespraech|termin|analyse|check|beratung|call|telefonat)|beratungs(gespräch|gespraech|termin)|gehalts-?check|karriere-?check|zugangscode|buchungslink|calendly|termin\s+(aus)?(machen|vereinbaren|finden|buchen))/i;
+
+const ANGEBOT_ODER_CALL = new RegExp(`${CALL_ANBIETEN.source}|${ANGEBOT_MUSTER.source}`, "i");
+/** Enthält der Text ein Angebot (Analyse, Gespräch, Termin, Telefonat, Buchungslink)? */
+export const enthaeltAngebot = (text: string) => ANGEBOT_ODER_CALL.test(text);
+/** Darf in dieser Phase angeboten werden? Einzige Quelle: STAGE_DEF (Lead-Stand), nie eine Nachrichtenzahl. */
+export const angebotErlaubt = (stage: Stage) => !STAGE_DEF[stage].verboten.includes("call_anbieten");
+
 const AKTIONS_MUSTER: Partial<Record<Aktion, RegExp>> = {
   nummer_fragen: NUMMER_FRAGE,
-  call_anbieten: CALL_ANBIETEN,
+  call_anbieten: ANGEBOT_ODER_CALL,
   termin_bestaetigen: TERMIN_MUSTER,
   frage_stellen: /\?/,
 };

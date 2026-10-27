@@ -10,6 +10,7 @@ import { recordCrmStage } from "./crmStages.js";
 import { extrahiereProfilFakten, speichereProfilFakten } from "./profilFakten.js";
 import { zielgruppenPruefung } from "./zielgruppen.js";
 import { pruefeTermin, type Nachricht } from "./termine.js";
+import { protokolliereVersand } from "./versandProtokoll.js";
 
 /** Whitespace/Unsichtbares normalisieren, damit Soll/Ist-Vergleich fair ist. */
 function normText(s: string): string {
@@ -702,6 +703,7 @@ export async function sendMessage(profileUrl: string, text: string, typ: "messag
       // Compose im Hauptbereich gehört dieser Person. Robuster Haupt-Bereich-Weg + text-basierte
       // Namensprüfung (statt der kaputten Fenster-/Klassen-Erkennung, an der Follow-ups hingen).
       await tippenUndSenden(page, text, empfaenger, true, false, () => { versandVersucht = true; }, verlaufsregel);
+      protokolliereVersand({ art: typ === "campaign" ? "kampagne" : verlaufsregel?.art === "nachfass" ? "nachfassung" : verlaufsregel?.art === "erst" ? "erstnachricht" : "nachricht", zielUrl: profileUrl, empfaenger, text });
 
       db.prepare(
         "UPDATE contacts SET status='messaged', messaged_at=datetime('now') WHERE profile_url = ?",
@@ -771,6 +773,7 @@ export async function sendThreadReply(threadUrl: string, text: string, empfaenge
     // urlVerbuergt=true: die geprüfte Thread-URL (oben) bürgt bereits für den Empfänger – falls der
     // h2-Kopf mal nicht lesbar ist, NICHT fälschlich abbrechen (das hatte hier alles blockiert).
       await tippenUndSenden(page, text, empfaenger, true, true, () => { versandVersucht = true; });
+      protokolliereVersand({ art: "antwort", zielUrl: threadUrl, empfaenger, text });
       // Für die Termin-Erkennung: der Chat ist offen, die eigene Antwort steht schon drin.
       verlaufNachVersand = await page.locator(SEL.threadItem).evaluateAll((els) => els.map((el) => ({
         sender: "",

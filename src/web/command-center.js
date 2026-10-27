@@ -243,6 +243,7 @@ function renderToday() {
   renderTopStatus();
   renderAusrichtung();
   renderAecZiel();
+  renderVersandHeute();
   renderTodayKpis();
   renderDecisions();
 }
@@ -2419,3 +2420,37 @@ $("aec-ziel").addEventListener("click", async (ev) => {
   if (art === "abhaken") { $("aec-ziel").querySelector(".aec-mehr").open = true; return $("aec-liste").scrollIntoView({ block: "center", behavior: "smooth" }); }
   if (art === "netzwerk") { try { await post("/api/netzwerk", {}); toast("Netzwerk wird eingelesen. Die Entwürfe kommen gleich zur Freigabe."); } catch (error) { toast(error.message); } }
 });
+
+/**
+ * SAMMELFREIGABE (2026-10-27): zwei getrennte Knöpfe. Erst Vorschau vom Server (was besteht alle
+ * Prüfungen, was bleibt mit welchem Grund liegen), dann eine Bestätigung, dann Freigabe. Gesendet wird
+ * wie immer von der Engine über den Governor; Sammelfreigaben zählen nicht als Vertrauen.
+ */
+async function sammelFreigeben(gruppe) {
+  const was = gruppe === "erst" ? "Erstnachrichten" : "Antworten";
+  try {
+    const v = await post("/api/drafts/alle", { gruppe, ausfuehren: false });
+    if (!v.anzahl && !v.liegen.length) return toast(`Keine offenen ${was}.`);
+    const gruende = {};
+    for (const l of v.liegen) gruende[l.grund] = (gruende[l.grund] || 0) + 1;
+    const liegenText = Object.entries(gruende).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([g, n]) => `• ${n}× ${g}`).join("\n");
+    if (!v.anzahl) return alert(`Keine ${was} können gesammelt freigegeben werden. ${v.liegen.length} bleiben zur Einzelprüfung:\n\n${liegenText}`);
+    const frage = `${v.anzahl} ${was} genehmigen?\n\nSie bestehen alle Prüfungen und werden von der Engine sicher gedrosselt verschickt.` +
+      (v.liegen.length ? `\n\n${v.liegen.length} bleiben zur Einzelprüfung liegen:\n${liegenText}` : "");
+    if (!confirm(frage)) return;
+    const r = await post("/api/drafts/alle", { gruppe, ausfuehren: true });
+    toast(`${r.freigegeben} ${was} genehmigt.${r.liegen.length ? ` ${r.liegen.length} warten auf deine Einzelprüfung.` : ""}`);
+    await load();
+  } catch (error) { toast(error.message); }
+}
+$("alle-erst").addEventListener("click", () => sammelFreigeben("erst"));
+$("alle-antworten").addEventListener("click", () => sammelFreigeben("antworten"));
+
+/** Versandprotokoll (2026-10-27): was heute nachweislich rausging, mit Empfänger und vollem Text. */
+const VERSAND_ART = { erstnachricht: "Erstnachricht", nachfassung: "Nachfassung", antwort: "Antwort", kampagne: "Einladung", nachricht: "Nachricht" };
+function renderVersandHeute() {
+  const v = state.versandHeute; if (!v || !$("versand-liste")) return;
+  $("versand-zahl").textContent = v.eintraege.length || "";
+  $("versand-zusammen").textContent = Object.entries(v.zaehler).map(([a, n]) => `${n} ${VERSAND_ART[a] || a}`).join(" · ") || "noch nichts";
+  $("versand-liste").innerHTML = v.eintraege.length ? v.eintraege.map((e) => `<article class="versand-eintrag"><header><b>${esc(e.empfaenger || "?")}</b><span>${esc(VERSAND_ART[e.art] || e.art)} · ${esc(new Date(e.at.replace(" ", "T") + "Z").toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }))} Uhr</span>${e.ziel_url ? `<a href="${esc(e.ziel_url)}" target="_blank" rel="noopener">öffnen ↗</a>` : ""}</header><p>${esc(e.text)}</p></article>`).join("") : `<p class="muted">Heute ist noch keine Nachricht rausgegangen.</p>`;
+}

@@ -653,3 +653,17 @@ CREATE TABLE IF NOT EXISTS aec_zusagen (
   status_at   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_aec_zusagen_monat ON aec_zusagen(monat, status);
+
+-- VERSANDPROTOKOLL (2026-10-27, Sinan: „keine Übersicht“): jede Direktnachricht, die NACHWEISLICH raus ist
+-- (Feld geleert + im Verlauf), mit Empfänger und vollem Text. Geschrieben in outreach.ts direkt nach dem
+-- belegten Versand. `actions` bleibt das Safety-Protokoll (ohne Text), das hier ist die Lesefassung.
+CREATE TABLE IF NOT EXISTS versand_protokoll (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  at          TEXT NOT NULL DEFAULT (datetime('now')),
+  art         TEXT NOT NULL,          -- erstnachricht | nachfassung | antwort | kampagne | nachricht
+  ziel_url    TEXT,
+  empfaenger  TEXT,
+  contact_id  INTEGER,
+  text        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_versand_protokoll_at ON versand_protokoll(at);

@@ -12,6 +12,7 @@ import { stillstandGrund, type Stillstand } from "./engineWatch.js";
 import { analyseAlsText, letzteAnalyse, type WochenAnalyse } from "./kiAnalyse.js";
 import { terminLoeschen } from "./termine.js";
 import { setAusrichtung } from "./ausrichtung.js";
+import type { VersandEintrag } from "./versandProtokoll.js";
 import { aecStand, aecStandText, aecZusageFuerThread, monatName, setzeAecStatus, setzeMonatsziel, type AecStand, type AecZusage } from "./aecZiel.js";
 
 const aecKnoepfe = (id: number) => new InlineKeyboard().text("✅ Durchgeführt", `aec_ok:${id}`).text("❌ Nicht erschienen", `aec_no:${id}`);
@@ -347,9 +348,23 @@ export function startTelegram() {
    * zu schauen. Zum Kontakt wird der Klarname aus dem CRM nachgeschlagen, die nackte
    * Profil-URL sagt nichts.
    */
+  // VERSANDPROTOKOLL (2026-10-27): jede nachweislich gesendete Nachricht mit Empfänger und vollem Text,
+  // damit Sinan ohne Cockpit sieht, was der Bot gerade wem geschrieben hat.
+  events.on("versand:gesendet", (v: VersandEintrag) => {
+    if (!bot || !config.telegram.chatId) return;
+    const art = { erstnachricht: "✉️ Erstnachricht", nachfassung: "🔁 Nachfassung", antwort: "💬 Antwort", kampagne: "📣 Einladung", nachricht: "✉️ Nachricht" }[v.art] ?? "✉️ Nachricht";
+    const heute = governor.snapshot();
+    bot.api.sendMessage(config.telegram.chatId,
+      `${art} an ${v.empfaenger || "?"}:\n\n${v.text}\n\nheute: ${heute.message.today}/${heute.message.effectiveCap} kalte Nachrichten`,
+      v.ziel_url ? { reply_markup: new InlineKeyboard().url(v.art === "antwort" ? "💬 Chat öffnen" : "👤 Profil öffnen", v.ziel_url), link_preview_options: { is_disabled: true } } : undefined,
+    ).catch(() => {});
+  });
+
   events.on("action:done", (a: { type: string; target: string | null }) => {
     if (!bot || !config.telegram.chatId) return;
     if (a.type === "like") return; // Likes laufen autonom + häufig -> nicht einzeln pushen (Spam)
+    // Direktnachrichten meldet „versand:gesendet“ MIT Text (Versandprotokoll) – hier nicht doppelt.
+    if (a.type === "message" || a.type === "reply" || a.type === "campaign") return;
     const wer = a.target ? nameFuerZiel(a.target) : "";
     const heute = governor.snapshot();
     const zeile = AKTIONS_TEXT[a.type] ?? `▫️ ${a.type}`;
