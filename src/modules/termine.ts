@@ -1,3 +1,4 @@
+import { erfasseAecZusage } from "./aecZiel.js";
 import { createHash, randomBytes } from "node:crypto";
 import { db, getState, setState } from "../db/index.js";
 import { config } from "../config.js";
@@ -298,6 +299,12 @@ export async function verarbeiteBefund(ctx: { threadUrl: string; participant: st
     throw err;
   }
   if (kontakt) recordCrmStage(kontakt.id, "meeting", "bot");
+  // AEC-MONATSZIEL: ein Termin der Art „AEC …“ ist eine AEC-Zusage – unabhängig von der Ausrichtung.
+  // Dieselbe Person zählt nur einmal, auch wenn der Agent sie schon gezählt hat.
+  if (/\baec\b/i.test(art.name)) {
+    try { erfasseAecZusage({ contactId: kontakt?.id ?? null, threadUrl: ctx.threadUrl, teilnehmer: name, quelle: "kalender" }); }
+    catch (err) { console.error("[aec] Zusage nicht gezählt:", (err as Error).message); }
+  }
   events.emit("termin:eingetragen", { id, titel, start, verschoben: false, threadUrl: ctx.threadUrl });
   console.info(`[termine] eingetragen: ${titel} am ${start}`);
   return "eingetragen";

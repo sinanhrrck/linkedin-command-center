@@ -630,3 +630,26 @@ CREATE TABLE IF NOT EXISTS sim_regeln (
   quelle_key   TEXT -- link:<runId>:<n> beim Import, sonst NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sim_regeln_status ON sim_regeln(status, bereich);
+
+-- AEC-MONATSZIEL (2026-10-27, Sinan: „das Ding muss ein AEC-Beast werden … Monatsziel eingeben, darauf
+-- hinarbeiten“). Gezählt werden ZUSAGEN zur Potenzialanalyse; „durchgeführt“/„nicht erschienen“ setzt Sinan.
+-- Eine Person zählt genau einmal (schluessel = contact:<id> | thread:<url> | manuell:<name>), egal aus welcher
+-- Quelle die Zusage kommt. `monat` (YYYY-MM, lokale Zeit) wird beim Schreiben eingefroren.
+CREATE TABLE IF NOT EXISTS aec_ziele (
+  monat      TEXT PRIMARY KEY,
+  ziel       INTEGER NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS aec_zusagen (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  schluessel  TEXT UNIQUE NOT NULL,
+  contact_id  INTEGER,
+  thread_url  TEXT,
+  teilnehmer  TEXT,
+  quelle      TEXT NOT NULL,                       -- agent | kalender | manuell
+  monat       TEXT NOT NULL,
+  zugesagt_at TEXT NOT NULL DEFAULT (datetime('now')),
+  status      TEXT NOT NULL DEFAULT 'zugesagt',    -- zugesagt | durchgefuehrt | nicht_erschienen | storniert
+  status_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_aec_zusagen_monat ON aec_zusagen(monat, status);

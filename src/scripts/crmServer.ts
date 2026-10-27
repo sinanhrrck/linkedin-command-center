@@ -52,6 +52,7 @@ import { kiWochenanalyse, letzteAnalyse } from "../modules/kiAnalyse.js";
 import { bericht, type BerichtArt } from "../modules/berichte.js";
 import { anmeldungOk, istServerModus, logZeitzone, pruefeServerStartbedingungen, serverErststart } from "../core/serverMode.js";
 import { istAusrichtung, setAusrichtung } from "../modules/ausrichtung.js";
+import { aecStand, erfasseAecZusage, setzeAecStatus, setzeMonatsziel } from "../modules/aecZiel.js";
 import { starteSimulation, simAntwort, beendeSimulation, regelEntscheiden, simChat, trainingUebersicht, importiereTrainings } from "../modules/training.js";
 
 // Server-Modus: ohne DASHBOARD_TOKEN gar nicht erst starten (siehe core/serverMode.ts).
@@ -752,6 +753,25 @@ const server = createServer((req, res) => {
 
   // NOT-AUS: mit EINEM Klick jeden Versand blockieren (ohne die Engine zu stoppen). Setzt das
   // Flag, das der Governor VOR jeder sendenden Aktion prüft. Wirkt sofort für alle Sendewege.
+  // AEC-MONATSZIEL (2026-10-27): Ziel setzen, Zusage von Hand eintragen, Status setzen (modules/aecZiel.ts).
+  if (url.pathname === "/api/aec" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const b = JSON.parse(body || "{}");
+        if (b.action === "ziel") setzeMonatsziel(b.ziel);
+        else if (b.action === "status") setzeAecStatus(Number(b.id), b.status);
+        else if (b.action === "zusage") erfasseAecZusage({ teilnehmer: String(b.name ?? "").slice(0, 80), quelle: "manuell" });
+        else throw new Error("Unbekannte Aktion.");
+        res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, aec: aecStand() }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, reason: String((e as Error).message || e) }));
+      }
+    });
+    return;
+  }
+
   // AUSRICHTUNG (2026-10-23): Standard ↔ AEC. Nur ein State-Flag, wirkt ab dem nächsten Agent-Tick
   // auch auf laufende Gespräche; zurückschalten stellt alles exakt wieder her (modules/ausrichtung.ts).
   if (url.pathname === "/api/ausrichtung" && req.method === "POST") {

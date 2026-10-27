@@ -32,7 +32,7 @@ const JOBS = {
   drafts: ["Postfach prüfen", "Antworten und Entwürfe vorbereiten"], sendApproved: ["Freigaben versenden", "Genehmigte Nachrichten sicher zustellen"],
   feed: ["Neue Kontakte suchen", "Gespeicherte Quellen weiter durchsuchen"], campaign: ["Kampagnen fortsetzen", "Zielgruppe und Event-Einladungen bearbeiten"],
   content: ["Inhalte vorbereiten", "Neue Beitragsideen erstellen"], post: ["Beiträge prüfen", "Fällige Beiträge veröffentlichen"],
-  followup: ["Follow-ups vorbereiten", "Offene Gespräche freundlich nachfassen"], agent: ["Gespräche prüfen", "Neue Antworten einordnen"],
+  followup: ["Follow-ups vorbereiten", "Offene Gespräche freundlich nachfassen"], aec: ["AEC-Ziel steuern", "Stand melden, Netzwerk bei Rückstand anstoßen"], agent: ["Gespräche prüfen", "Neue Antworten einordnen"],
   netzwerk: ["Netzwerk prüfen", "Bestehende Verbindungen einordnen"], offene: ["Offene Antworten prüfen", "Liegengebliebene Gespräche erkennen"],
   comment: ["Beiträge prüfen", "Passende Interaktionen vorbereiten"], pitch: ["Chancen prüfen", "Gesprächsmöglichkeiten einordnen"],
   wiederbeleben: ["Kontakte reaktivieren", "Eingeschlafene Gespräche prüfen"], reichweite: ["Reichweite pflegen", "Passende Beiträge und Kontakte prüfen"],
@@ -242,6 +242,7 @@ function renderToday() {
   renderQuick();
   renderTopStatus();
   renderAusrichtung();
+  renderAecZiel();
   renderTodayKpis();
   renderDecisions();
 }
@@ -2374,3 +2375,47 @@ $("training-datei").addEventListener("change", () => trainingSchritt(async () =>
   toast(i.vorschlaege ? `${i.vorschlaege} neue Vorschläge zur Freigabe.` : "Nichts Neues in dieser Datei.");
   await ladeTraining();
 }));
+
+/**
+ * AEC-MONATSZIEL (2026-10-27): Stand, Hochrechnung und größter Hebel auf „Heute“. Daten aus
+ * /api/state (dashboard.aecZiel = aecStand()). Zusagen zählt der Bot, „durchgeführt“ setzt Sinan.
+ */
+const AEC_STATUS = { erreicht: "Ziel erreicht", auf_kurs: "Auf Kurs", knapp: "Knapp", zurueck: "Hinter dem Ziel", offen: "Noch zu früh", kein_ziel: "Kein Ziel" };
+const AEC_MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+const AEC_HEBEL_KNOPF = { ausrichtung: "Auf AEC umstellen", entwuerfe: "Jetzt prüfen", netzwerk: "Netzwerk anschreiben", abhaken: "Abhaken" };
+const AEC_ZUSTAND = { zugesagt: "zugesagt", durchgefuehrt: "durchgeführt", nicht_erschienen: "nicht erschienen" };
+function renderAecZiel() {
+  const a = state.aecZiel; const box = $("aec-ziel"); if (!box || !a) return;
+  $("aec-monat").textContent = `AEC-Monatsziel · ${AEC_MONATE[Number(a.monat.slice(5, 7)) - 1]}`;
+  $("aec-ist").textContent = a.zusagen;
+  $("aec-soll").textContent = a.ziel ? `von ${a.ziel} Zusagen` : "Zusagen · noch kein Ziel gesetzt";
+  const chip = $("aec-status"); chip.className = `aec-chip ${a.status}`; chip.textContent = AEC_STATUS[a.status] || "";
+  $("aec-balken").style.width = `${a.ziel ? Math.min(100, Math.round(a.zusagen / a.ziel * 100)) : 0}%`;
+  const marke = $("aec-hoch-marke");
+  if (a.ziel && a.hochrechnung !== null) { marke.style.display = "block"; marke.style.left = `${Math.min(100, Math.round(a.hochrechnung / a.ziel * 100))}%`; marke.title = `Hochrechnung: ${a.hochrechnung}`; } else marke.style.display = "none";
+  const teile = [];
+  if (a.hochrechnung !== null) teile.push(`Hochrechnung bis Monatsende: ${a.hochrechnung}`);
+  if (a.ziel && a.status !== "erreicht" && a.zusagenProTag !== null) teile.push(`nötig: ${String(a.zusagenProTag).replace(".", ",")} pro Werktag (${a.werktage.rest} übrig)`);
+  if (a.quote.jeZusage) teile.push(`1 Zusage je ${a.quote.jeZusage} Erstnachrichten${a.quote.quelle === "termine" ? " (geschätzt aus Terminen)" : ""}`);
+  if (a.durchgefuehrt || a.nichtErschienen) teile.push(`durchgeführt ${a.durchgefuehrt} · nicht erschienen ${a.nichtErschienen}`);
+  $("aec-zeile").textContent = teile.join(" · ");
+  $("aec-hebel").innerHTML = a.hebel.slice(0, 4).map((h) => `<li><span>${esc(h.text)}</span>${h.aktion ? `<button type="button" data-aec-hebel="${h.aktion}">${AEC_HEBEL_KNOPF[h.aktion]}</button>` : ""}</li>`).join("");
+  if (document.activeElement !== $("aec-ziel-eingabe")) $("aec-ziel-eingabe").value = a.ziel || "";
+  $("aec-liste").innerHTML = a.liste.length ? a.liste.map((z) => `<div class="aec-eintrag"><div><b>${esc(z.teilnehmer || "Ohne Namen")}</b><small>${esc(relativeTime(z.zugesagt_at))} · ${z.quelle === "agent" ? "vom Bot" : z.quelle === "kalender" ? "aus dem Kalender" : "von Hand"}</small></div><span class="aec-st ${z.status}">${AEC_ZUSTAND[z.status] || z.status}</span><span class="aec-knoepfe">${z.status === "zugesagt" ? `<button type="button" data-aec-status="durchgefuehrt" data-id="${z.id}" title="Auswertung durchgeführt">✓</button><button type="button" data-aec-status="nicht_erschienen" data-id="${z.id}" title="Nicht erschienen">✕</button>` : `<button type="button" data-aec-status="zugesagt" data-id="${z.id}" title="Zurücksetzen">↺</button>`}</span></div>`).join("") : `<p class="muted">Noch keine Zusage in diesem Monat.</p>`;
+}
+async function aecAktion(daten, meldung) {
+  try { const r = await post("/api/aec", daten); state.aecZiel = r.aec; renderAecZiel(); toast(meldung); }
+  catch (error) { toast(error.message); }
+}
+$("aec-ziel-form").addEventListener("submit", (ev) => { ev.preventDefault(); aecAktion({ action: "ziel", ziel: Number($("aec-ziel-eingabe").value) }, "Monatsziel gespeichert."); });
+$("aec-manuell-form").addEventListener("submit", (ev) => { ev.preventDefault(); const name = $("aec-manuell-name").value.trim(); if (!name) return; $("aec-manuell-name").value = ""; aecAktion({ action: "zusage", name }, "Zusage eingetragen."); });
+$("aec-ziel").addEventListener("click", async (ev) => {
+  const st = ev.target.closest("[data-aec-status]");
+  if (st) return aecAktion({ action: "status", id: Number(st.dataset.id), status: st.dataset.aecStatus }, st.dataset.aecStatus === "durchgefuehrt" ? "Als durchgeführt markiert." : st.dataset.aecStatus === "nicht_erschienen" ? "Als nicht erschienen markiert." : "Zurückgesetzt.");
+  const h = ev.target.closest("[data-aec-hebel]"); if (!h) return;
+  const art = h.dataset.aecHebel;
+  if (art === "ausrichtung") return setzeAusrichtung("aec");
+  if (art === "entwuerfe") return $("quick-open").click();
+  if (art === "abhaken") { $("aec-ziel").querySelector(".aec-mehr").open = true; return $("aec-liste").scrollIntoView({ block: "center", behavior: "smooth" }); }
+  if (art === "netzwerk") { try { await post("/api/netzwerk", {}); toast("Netzwerk wird eingelesen. Die Entwürfe kommen gleich zur Freigabe."); } catch (error) { toast(error.message); } }
+});

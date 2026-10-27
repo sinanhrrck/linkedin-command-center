@@ -17,6 +17,7 @@ import { recordCrmStage } from "../../modules/crmStages.js";
 import { db, getAgentMode } from "../../db/index.js";
 import { events } from "../../core/events.js";
 import { gespraechsKontext, aecAktiv } from "../../modules/ausrichtung.js";
+import { erfasseAecZusage } from "../../modules/aecZiel.js";
 import { GovernorBlocked } from "../../core/safetyGovernor.js";
 import { analyzeLlm, replyLlm } from "./llmKanaele.js";
 import { SqliteConversationRepository } from "../infra/sqliteConversationRepository.js";
@@ -202,6 +203,12 @@ export async function agentTick(max = 25): Promise<{ verarbeitet: number; gesend
         if (crmContactId) {
           recordCrmStage(crmContactId, "qualified", "agent");
           recordCrmStage(crmContactId, "meeting", "agent");
+        }
+        // AEC-MONATSZIEL: bei Ausrichtung AEC ist die Zusage eine Zusage zur Potenzialanalyse. VOR
+        // „lead:booked“ zählen, damit die Telegram-Meldung den neuen Stand schon kennt. Nie den Agenten stören.
+        if (aecAktiv()) {
+          try { erfasseAecZusage({ contactId: crmContactId, threadUrl: t.threadUrl, teilnehmer: t.participant, quelle: "agent" }); }
+          catch (err) { console.error("[aec] Zusage nicht gezählt:", (err as Error).message); }
         }
         events.emit("lead:booked", { participant: t.participant, contact: e.kontakt, threadUrl: t.threadUrl });
         repo.recordOutcome({ threadUrl: t.threadUrl, teilnehmer: t.participant, ergebnis: "gebucht", letzterState: e.conversation.stage, nachrichten: t.messages.length, trust: e.conversation.scores.trust, interest: e.conversation.scores.interest });

@@ -47,6 +47,7 @@ import { jobRunPermission, recordJobFailure, recordJobSuccess } from "./core/job
 import { JobTimeoutError, JOB_TIMEOUT_MS, DEFAULT_JOB_TIMEOUT_MS, runWithJobTimeout } from "./core/jobTimeout.js";
 import { istServerModus, logZeitzone, serverErststart } from "./core/serverMode.js";
 import { pruefeSitzungBeimStart } from "./modules/sitzungsCheck.js";
+import { aecSteuerung } from "./modules/aecZiel.js";
 
 // Beginn der Geschäftszeit (config.safety.workingHours.start). Alle Morgen-Jobs hängen daran,
 // damit „ab 7 Uhr“ nicht nur im Governor, sondern auch in den Cron-Zeiten gilt.
@@ -475,6 +476,12 @@ cron.schedule("*/2 * * * *", () =>
   }, 85),
 );
 cron.schedule(`5 ${START_STUNDE} * * *`, () => einzeln("offene", () => offeneAntwortenScan(25), 80));
+
+// AEC-MONATSZIEL (2026-10-27): werktags morgens Stand per Telegram + Steuerung, mittags nur Steuerung.
+// Die Steuerung stößt höchstens die Netzwerk-Reaktivierung an (→ Entwürfe zur Freigabe), nie mehr Tempo.
+const aecSteuern = () => { const r = aecSteuerung(); if (r.angestossen) console.info(`[aec] ${r.grund}`); };
+cron.schedule(`12 ${START_STUNDE} * * 1-5`, () => einzeln("aec", async () => { events.emit("aec:morgen", {}); aecSteuern(); }, 10));
+cron.schedule("12 13 * * 1-5", () => einzeln("aec", async () => aecSteuern(), 10));
 
 // PITCH Stufe 2 auf Knopfdruck: Dashboard setzt "pitch_now"={id,idee} → der Loop generiert aus dem
 // gewählten Ansatz die Nachricht (neuer 'message'-Entwurf zur zweiten Freigabe). Nur LLM, kein Browser.

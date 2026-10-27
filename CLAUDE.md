@@ -158,6 +158,28 @@ braucht den Governor NICHT.
   ACHTUNG bei langen Seiten: der In-App-Browser-Pane paintet weit unten nach Scroll teils
   nicht (Artefakt) — DOM/oberer Bereich sind maßgeblich, nicht der Leerscreenshot.
 
+## UPDATE 2026-10-27 — AEC-Monatsziel (`modules/aecZiel.ts`)
+Sinans Vorgabe: „das Ding muss ein AEC-Beast werden … Monatsziel eingeben, darauf hinarbeiten“. Seine Wahl:
+das Ziel zählt ZUSAGEN; „durchgeführt“ läuft als zweite Zahl mit (von Hand); Ziel steuert mit Prognose + Hebel.
+- **Zählen:** Tabelle `aec_zusagen`, eine Zeile je PERSON (Schlüssel `contact:<id>` | `thread:<url>` |
+  `manuell:<name>`, Abgleich auch über thread_url/contact_id), Monat beim Schreiben eingefroren, fehlende
+  Zuordnung wird nachgetragen. Quellen: agentRunner bei `gebucht` UND `aecAktiv()` (VOR `lead:booked`, damit
+  Telegram den Stand kennt), termine.ts bei neuem Termin mit Art /\baec\b/i (unabhängig von der Ausrichtung),
+  Cockpit von Hand. Status zugesagt/durchgefuehrt/nicht_erschienen/storniert über Cockpit oder Telegram-Knöpfe.
+- **Ziel:** `aec_ziele` je Monat; ohne Eintrag gilt das zuletzt gesetzte.
+- **Stand/Hochrechnung** (`aecStand`): Werktage Mo–Fr (DMs nur werktags); ab 5 vergangenen Werktagen eigenes
+  Monatstempo, davor Quote „1 Zusage je N Erstnachrichten“ (60 Tage, `messaged`-Events; bis 3 AEC-Zusagen
+  existieren, ersatzweise CRM-`meeting`). Nötige Erstnachrichten/Tag vs. `governor.snapshot().message.effectiveCap`.
+- **Hebel:** Ausrichtung nicht AEC, wartende Entwürfe, Gespräche in Angebotsphasen, Grenze erreicht (Klartext:
+  mehr geht nur über Quote/Netzwerk), unberührte Verbindungen, Zusagen > 7 Tage ohne Haken.
+- **Steuerung** (`aecSteuerung`, Cron werktags START_STUNDE:12 + 13:12 in `einzeln("aec")`): NUR wenn Ziel nicht
+  auf Kurs und unberührte Verbindungen existieren → `netzwerk_now` (höchstens alle 3 Tage, state
+  `aec_netzwerk_at`). Hebt KEIN Limit an, ändert keine Automatik-/Freigabe-Einstellung. Morgens Event
+  `aec:morgen` → Telegram-Stand (nur mit Ziel oder Zusagen).
+- **Bedienung:** Karte `#aec-ziel` oben auf „Heute“, `POST /api/aec` (ziel|status|zusage), `dashboard.aecZiel`,
+  Telegram `/aecziel <n>`, `/aecstand`, Knöpfe `aec_ok:<id>`/`aec_no:<id>` (in „TERMIN!“ bzw. Kalender-Zusage).
+- Tests: `src/core/aecZiel.test.ts` (5).
+
 ## UPDATE 2026-10-23 (2) — Training: Chats simulieren, bewerten, Regeln freigeben (`modules/training.ts`)
 Sinans Vorgabe: Seite, auf der jeder Chats simulieren und danach Feedback geben kann, damit der Bot
 besser wird. Entscheidungen: im Cockpit (Team mit Dashboard-Passwort), Feedback am Chat-Ende, Regeln

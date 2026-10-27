@@ -12,6 +12,9 @@ import { stillstandGrund, type Stillstand } from "./engineWatch.js";
 import { analyseAlsText, letzteAnalyse, type WochenAnalyse } from "./kiAnalyse.js";
 import { terminLoeschen } from "./termine.js";
 import { setAusrichtung } from "./ausrichtung.js";
+import { aecStand, aecStandText, aecZusageFuerThread, monatName, setzeAecStatus, setzeMonatsziel, type AecStand, type AecZusage } from "./aecZiel.js";
+
+const aecKnoepfe = (id: number) => new InlineKeyboard().text("✅ Durchgeführt", `aec_ok:${id}`).text("❌ Nicht erschienen", `aec_no:${id}`);
 
 /**
  * Telegram-Steuerung: Entwürfe freigeben/senden, offene Nachrichten sehen, Tages-Status.
@@ -179,7 +182,7 @@ export function startTelegram() {
   bot.command("start", (ctx) =>
     ctx.reply(
       `👋 LinkedIn Command Center verbunden.\nDeine Chat-ID: ${ctx.chat.id}\n\n` +
-        `/status – Tages-Status & Zahlen\n/warum – warum geht gerade nichts raus?\n/tag – Tagesbericht · /woche – Wochenbericht · /vorwoche\n/entwuerfe – offene Nachrichten freigeben\n/leads – Hot Leads (haben geantwortet)\n/pause – Outreach anhalten\n/resume – fortsetzen\n/aec – alle Gespräche nur zur Potenzialanalyse · /standard – zurück`,
+        `/status – Tages-Status & Zahlen\n/warum – warum geht gerade nichts raus?\n/tag – Tagesbericht · /woche – Wochenbericht · /vorwoche\n/entwuerfe – offene Nachrichten freigeben\n/leads – Hot Leads (haben geantwortet)\n/pause – Outreach anhalten\n/resume – fortsetzen\n/aec – alle Gespräche nur zur Potenzialanalyse · /standard – zurück\n/aecziel 20 – Monatsziel setzen · /aecstand – Stand`,
     ),
   );
 
@@ -601,15 +604,50 @@ export function startTelegram() {
   // Autopilot-Handoff: KI hat einen Termin klargemacht → Kontakt sofort pushen.
   events.on("lead:booked", (l: { participant: string; contact: string | null; threadUrl: string }) => {
     if (!bot || !config.telegram.chatId) return;
+    // AEC-MONATSZIEL: wurde die Zusage gerade gezählt, steht der Stand in DERSELBEN Meldung (keine zweite).
+    const aec = aecZusageFuerThread(l.threadUrl);
+    const s = aec ? aecStand() : null;
     bot.api
       .sendMessage(
         config.telegram.chatId,
         `🎯 TERMIN! ${l.participant} ist bereit für ein Gespräch.\n` +
           `${l.contact ? `📞 Kontakt: ${l.contact}\n` : "📞 Noch keine Nummer genannt – im Chat nachfragen.\n"}` +
-          `💬 Chat: ${l.threadUrl}\n\nAb hier übernimmst du. 🤝`,
+          `💬 Chat: ${l.threadUrl}\n\nAb hier übernimmst du. 🤝` +
+          (s ? `\n\nAEC-Zusage Nr. ${s.zusagen}${s.ziel ? ` von ${s.ziel}` : ""} im ${monatName(s.monat)}.` : ""),
+        aec ? { reply_markup: aecKnoepfe(aec.id) } : undefined,
       )
       .catch(() => {});
   });
+  // Zusagen aus dem Kalender (Termin der Art „AEC …“) melden; Agent-Zusagen stehen schon in „TERMIN!“.
+  events.on("aec:zusage", (e: { zusage: AecZusage; stand: AecStand }) => {
+    if (!bot || !config.telegram.chatId || e.zusage.quelle !== "kalender") return;
+    bot.api.sendMessage(config.telegram.chatId,
+      `🎯 AEC-Zusage Nr. ${e.stand.zusagen}${e.stand.ziel ? ` von ${e.stand.ziel}` : ""}: ${e.zusage.teilnehmer ?? "?"} (aus dem Kalendereintrag).`,
+      { reply_markup: aecKnoepfe(e.zusage.id) }).catch(() => {});
+  });
+  events.on("aec:morgen", () => {
+    if (!bot || !config.telegram.chatId) return;
+    const st = aecStand();
+    if (!st.ziel && !st.zusagen) return; // ohne Ziel und ohne Zusagen kein tägliches Rauschen
+    bot.api.sendMessage(config.telegram.chatId, aecStandText(st)).catch(() => {});
+  });
+  bot.callbackQuery(/^aec_(ok|no):(\d+)$/, async (ctx) => {
+    if (!allowed(ctx.chat?.id)) return ctx.answerCallbackQuery("Nicht erlaubt.");
+    const status = ctx.match[1] === "ok" ? "durchgefuehrt" : "nicht_erschienen";
+    try {
+      const z = setzeAecStatus(Number(ctx.match[2]), status);
+      await ctx.answerCallbackQuery(status === "durchgefuehrt" ? "Als durchgeführt markiert." : "Als nicht erschienen markiert.");
+      await ctx.reply(`${status === "durchgefuehrt" ? "✅" : "❌"} ${z.teilnehmer ?? "AEC"}: ${status === "durchgefuehrt" ? "Auswertung durchgeführt" : "nicht erschienen"}.`);
+    } catch (err) { await ctx.answerCallbackQuery((err as Error).message.slice(0, 180)); }
+  });
+  bot.command("aecziel", (ctx) => {
+    if (!allowed(ctx.chat.id)) return;
+    const arg = String(ctx.match ?? "").trim();
+    if (!arg) return ctx.reply(aecStandText());
+    try { const n = setzeMonatsziel(arg); ctx.reply(`🎯 Monatsziel gesetzt: ${n} AEC-Zusagen.\n\n${aecStandText()}`); }
+    catch (err) { ctx.reply((err as Error).message); }
+  });
+  bot.command("aecstand", (ctx) => { if (allowed(ctx.chat.id)) ctx.reply(aecStandText()); });
 
   /**
    * WOCHEN-BILANZ automatisch. Sinans Ansage: "sowas muss automatisch passieren, ich will

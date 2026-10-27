@@ -31,6 +31,24 @@
     <section class="view active" id="view-today">
       <section id="blockaden" class="blockaden hidden"></section>
       <section id="goal-alerts" class="goal-alerts hidden" aria-live="polite"></section>
+      <section id="aec-ziel" class="aec-ziel" aria-labelledby="aec-titel">
+        <div class="aec-kopf">
+          <div><span class="eyebrow" id="aec-monat">AEC-Monatsziel</span><h3 id="aec-titel">AEC-Zusagen</h3></div>
+          <span id="aec-status" class="aec-chip"></span>
+        </div>
+        <div class="aec-zahlen"><b id="aec-ist">0</b><span id="aec-soll">von –</span></div>
+        <div class="aec-balken" aria-hidden="true"><i id="aec-balken"></i><em id="aec-hoch-marke"></em></div>
+        <p id="aec-zeile" class="aec-zeile"></p>
+        <ul id="aec-hebel" class="aec-hebel"></ul>
+        <details class="aec-mehr">
+          <summary>Zusagen diesen Monat, Ziel ändern, von Hand eintragen</summary>
+          <div class="aec-formen">
+            <form id="aec-ziel-form" class="aec-form"><label for="aec-ziel-eingabe">Monatsziel (AEC-Zusagen)</label><input id="aec-ziel-eingabe" type="number" min="1" max="500" inputmode="numeric" placeholder="z. B. 20"><button type="submit">Ziel speichern</button></form>
+            <form id="aec-manuell-form" class="aec-form"><label for="aec-manuell-name">Zusage von Hand eintragen</label><input id="aec-manuell-name" maxlength="80" placeholder="Vor- und Nachname"><button type="submit">Eintragen</button></form>
+          </div>
+          <div id="aec-liste" class="aec-liste"></div>
+        </details>
+      </section>
       <div id="today-kpis" class="today-kpis" aria-label="Kennzahlen heute"></div>
       <section class="decisions" aria-labelledby="decisions-title">
         <div class="section-head"><div><h3 id="decisions-title">Deine Entscheidungen <span id="decisions-count" class="count-chip"></span></h3><p class="muted">Wichtigstes zuerst. Ein Klick öffnet den Entwurf.</p></div><div class="head-side"><button id="scan-offene" type="button" title="Geht alle Chats durch, auch alte, und legt für jeden offenen Fall einen Entwurf zur Prüfung an. Dauert einige Minuten. Es wird nichts gesendet.">Postfach durchsuchen</button><button id="quick-open" type="button" class="primary" title="Alle offenen Entwürfe als Liste, mehrere auf einmal genehmigen">Alle schnell prüfen</button></div></div>
